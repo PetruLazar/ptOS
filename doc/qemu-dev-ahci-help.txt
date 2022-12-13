@@ -1,0 +1,12 @@
+ich9-ahci options:
+  acpi-index=<uint32>    -  (default: 0)
+  addr=<int32>           - Slot and optional function number, example: 06.0 or 06 (default: -1)
+  ahci-idp[0]=<child<memory-region>>
+  ahci[0]=<child<memory-region>>
+  failover_pair_id=<str>
+  multifunction=<bool>   - on/off (default: false)
+  rombar=<uint32>        -  (default: 1)
+  romfile=<str>
+  romsize=<uint32>       -  (default: 4294967295)
+  x-pcie-extcap-init=<bool> - on/off (default: true)
+  x-pcie-lnksta-dllla=<bool> - on/off (default: true)

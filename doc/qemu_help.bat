@@ -1,0 +1,1 @@
+D:\qemu\qemu-system-x86_64 -device nvme,help > qemu-dev-nvme-help.txt

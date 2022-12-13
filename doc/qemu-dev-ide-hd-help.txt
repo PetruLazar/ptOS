@@ -1,0 +1,26 @@
+ide-hd options:
+  backend_defaults=<OnOffAuto> - on/off/auto (default: "auto")
+  bios-chs-trans=<BiosAtaTranslation> - Logical CHS translation algorithm, auto/none/lba/large/rechs (default: "auto")
+  bootindex=<int32>
+  cyls=<uint32>          -  (default: 0)
+  discard_granularity=<size> -  (default: 4294967295)
+  drive=<str>            - Node name or ID of a block device to use as a backend
+  heads=<uint32>         -  (default: 0)
+  lcyls=<uint32>         -  (default: 0)
+  lheads=<uint32>        -  (default: 0)
+  logical_block_size=<size> - A power of two between 512 B and 2 MiB (default: 0)
+  lsecs=<uint32>         -  (default: 0)
+  min_io_size=<size>     -  (default: 0)
+  model=<str>
+  opt_io_size=<size>     -  (default: 0)
+  physical_block_size=<size> - A power of two between 512 B and 2 MiB (default: 0)
+  rerror=<BlockdevOnError> - Error handling policy, report/ignore/enospc/stop/auto (default: "auto")
+  rotation_rate=<uint16> -  (default: 0)
+  secs=<uint32>          -  (default: 0)
+  serial=<str>
+  share-rw=<bool>        -  (default: false)
+  unit=<uint32>          -  (default: 4294967295)
+  ver=<str>
+  werror=<BlockdevOnError> - Error handling policy, report/ignore/enospc/stop/auto (default: "auto")
+  write-cache=<OnOffAuto> - on/off/auto (default: "auto")
+  wwn=<uint64>           -  (default: 0)
