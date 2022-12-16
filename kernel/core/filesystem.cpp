@@ -1,7 +1,6 @@
 #include "filesystem.h"
 #include "../utils/string.h"
 #include "../drivers/disk.h"
-#include "../utils/string.h"
 #include "sys.h"
 
 using namespace Disk;
@@ -9,9 +8,6 @@ using namespace std;
 
 namespace Filesystem
 {
-	// part chs start - chs end
-	//  00 21 00 - 0e 38 01
-	//	sec 0x20 - sec 0x799 (maybe it has to be 0x800?)
 	template <typename T>
 	using Unalg = UnalignedField<T>;
 
@@ -23,7 +19,7 @@ namespace Filesystem
 		char letter;
 
 		virtual void formatPartition() = 0;
-		virtual void listDirectoryEntries(const std::string &path) = 0;
+		virtual DirectoryIterator *listDirectoryEntries(const std::string &path) = 0;
 		virtual void removeDirectory(const std::string &path) = 0;
 		virtual void createDirectory(const std::string &path, const std::string &name) = 0;
 	};
@@ -91,7 +87,6 @@ namespace Filesystem
 			uint trailSignature;
 		};
 
-		//...
 		class FileAttributes
 		{
 			byte mask;
@@ -114,62 +109,13 @@ namespace Filesystem
 
 			inline bool isAny(byte attributes) { return mask & attributes; }
 			inline bool isAll(byte attributes) { return (~mask & attributes) == 0; }
-			inline bool isReadOnly() { return mask & readOnly; }
-			inline bool isHidden() { return mask & hidden; }
-			inline bool isSystemFile() { return mask & system; }
-			inline bool isVolumeId() { return mask & volume_id; }
-			inline bool isDirectory() { return mask & directory; }
-			inline bool isArchive() { return mask & archive; }
-			inline bool isLongFilename() { return mask & longName; }
 
-			inline void setReadOnly(bool value)
+			inline void set(byte bitSelect, bool value)
 			{
 				if (value)
-					mask |= readOnly;
+					mask |= bitSelect;
 				else
-					mask &= ~readOnly;
-			}
-			inline void setHidden(bool value)
-			{
-				if (value)
-					mask |= hidden;
-				else
-					mask &= ~hidden;
-			}
-			inline void setSystemFile(bool value)
-			{
-				if (value)
-					mask |= system;
-				else
-					mask &= ~system;
-			}
-			inline void setVolumeId(bool value)
-			{
-				if (value)
-					mask |= volume_id;
-				else
-					mask &= ~volume_id;
-			}
-			inline void setDirectory(bool value)
-			{
-				if (value)
-					mask |= directory;
-				else
-					mask &= ~directory;
-			}
-			inline void setArchive(bool value)
-			{
-				if (value)
-					mask |= archive;
-				else
-					mask &= ~archive;
-			}
-			inline void setLongFilename(bool value)
-			{
-				if (value)
-					mask |= longName;
-				else
-					mask &= ~longName;
+					mask &= ~bitSelect;
 			}
 
 			inline fileAttributes get() { return (fileAttributes)mask; }
@@ -192,7 +138,7 @@ namespace Filesystem
 
 			inline string getString()
 			{
-				if (attributes.isVolumeId())
+				if (attributes.isAny(FileAttributes::volume_id))
 				{
 					string name(filename, 11);
 					ull pos = 11;
@@ -252,9 +198,119 @@ namespace Filesystem
 			LongFilenameEntry longFileNameEntry;
 			UnknownDirEntry unknown;
 		};
-		/*constexpr ull testConst = sizeof(DirectoryEntry),
-					  testConst2 = sizeof(LongFilenameEntry);*/
 
+		class DirectoryIterator : public Filesystem::DirectoryIterator
+		{
+			byte *directoryData;
+			UnknownDirEntry *currentIterator;
+			class LongNameBuffer
+			{
+				vector<bool> longNameOrderFlags;
+				string16 *contents;
+
+			public:
+				LongNameBuffer() : contents(new string16), longNameOrderFlags(16, false) {}
+				~LongNameBuffer() { delete contents; }
+
+				void clear()
+				{
+					for (uint i = 0; i < 16; i++)
+						longNameOrderFlags[i] = false;
+					contents->erase();
+				}
+				void insert(const string16 &segm, byte order)
+				{
+					uint index = 0;
+					for (byte i = 0; i < order; i++)
+						if (longNameOrderFlags[i])
+							index++;
+					contents->insert(segm, index * 13);
+				}
+				string16 *getContents() { return contents; }
+
+				bool empty() { return contents->at(0) == 0; }
+			} longNameBuffer;
+
+		public:
+			inline DirectoryIterator(byte *directoryData) : directoryData(directoryData), currentIterator((UnknownDirEntry *)directoryData), longNameBuffer()
+			{
+				if (currentIterator != nullptr)
+				{
+					--currentIterator;
+					advance();
+				}
+			}
+			~DirectoryIterator() { delete[] directoryData; }
+
+			void advance()
+			{
+				if (currentIterator == nullptr)
+					return;
+				longNameBuffer.clear();
+
+				while (true)
+				{
+					++currentIterator;
+					if (currentIterator->unused1[0] == 0x00)
+					{
+						// end of directory reached
+						currentIterator = nullptr;
+						return;
+					}
+					if (currentIterator->unused1[0] == 0xe5)
+						// entry not used
+						continue;
+					if (currentIterator->attributes == FileAttributes::longName)
+					{
+						// long filename entry
+						LongFilenameEntry &entry = *(LongFilenameEntry *)currentIterator;
+						string16 segm = entry.getString();
+						longNameBuffer.insert(segm, entry.order & 0xf);
+						continue;
+					}
+					// standard entry
+					Standard83Entry &entry = *(Standard83Entry *)currentIterator;
+					if (entry.attributes.isAny(FileAttributes::volume_id))
+						// volume id, not a file
+						continue;
+					// apply long name if long name buffer is not empty
+					if (longNameBuffer.empty())
+					{
+						// cout << "Debug:"
+						//  build the string16 name from the short name
+						string16 segm;
+						if (entry.attributes.isAny(FileAttributes::directory))
+						{
+							// this is a directory, no extension
+							for (byte i = 0; i < 11; i++)
+								if (entry.filename[i] != ' ')
+									segm += entry.filename[i];
+								else
+									break;
+						}
+						else
+						{
+							// this is a file, has extension
+							for (byte i = 0; i < 8; i++)
+								if (entry.filename[i] != ' ')
+									segm += entry.filename[i];
+								else
+									break;
+							segm += '.';
+							for (byte i = 8; i < 11; i++)
+								if (entry.filename[i] != ' ')
+									segm += entry.filename[i];
+								else
+									break;
+						}
+						longNameBuffer.insert(segm, 0);
+					}
+					return;
+				}
+			}
+			bool finished() { return currentIterator == nullptr; }
+			string16 getString() { return *longNameBuffer.getContents(); }
+		};
 		class Partition : public Filesystem::Partition
 		{
 		public:
@@ -265,90 +321,17 @@ namespace Filesystem
 				rootDirCluster;
 			byte fatCount, sectorsPerCluster;
 
-			virtual void formatPartition() {}
-			virtual void listDirectoryEntries(const std::string &path)
+			virtual void formatPartition()
+			{
+			}
+			virtual DirectoryIterator *listDirectoryEntries(const std::string &path)
 			{
 				// load the cluster/clusters
 				ull bufferSize = 512 * sectorsPerCluster, entryLen = bufferSize / sizeof(DirectoryEntry);
 				byte *buffer = new byte[bufferSize];
 				Disk::accessATAdrive(accessDir::read, disk, dataSectorOffset + rootDirCluster * sectorsPerCluster, sectorsPerCluster, buffer);
 
-				// examine them
-				DirectoryEntry *entryBuffer = (DirectoryEntry *)buffer;
-				uint i;
-				// ull fileCount = 0;
-				string16 longNameBuffer;
-				bool longNameFlags[16];
-				for (i = 0; i < 16; i++)
-					longNameFlags[i] = false;
-				i = 0;
-				while (i < entryLen)
-				{
-					DirectoryEntry *rawEntry = entryBuffer + i;
-					if (rawEntry->unknown.unused1[0] == 0x00) // no more files or directory
-					{
-						// cout << "File count: " << fileCount << '\n';
-						delete[] buffer;
-						return;
-					}
-					else if (rawEntry->unknown.unused1[0] != 0xe5)
-					{
-						// do something
-						if (rawEntry->unknown.attributes == FileAttributes::longName)
-						{
-							// long filename
-							LongFilenameEntry &entry = rawEntry->longFileNameEntry;
-							string16 str = entry.getString();
-							byte order = entry.order & 0xf, // if entry.order & 0x40, this is the last entry
-								insertAt = 0;
-							for (byte k = 0; k < order; k++)
-								if (longNameFlags[k])
-									insertAt++;
-							longNameBuffer.insert(str, insertAt * 13);
-						}
-						else
-						{
-							// regular entry
-							Standard83Entry &entry = rawEntry->standard83entry;
-							// fileCount++;
-							if (entry.attributes == FileAttributes::volume_id)
-							{
-								cout << "Volume id: \"" << entry.getString() << "\"\n";
-							}
-							else
-							{
-								if (entry.attributes.isDirectory())
-								{
-									cout << (entry.attributes.isHidden() ? "Hidden directory: " : "Directory: ");
-									if (longNameBuffer.length() != 0)
-									{
-										cout << longNameBuffer;
-										longNameBuffer.erase();
-									}
-									else
-										cout << entry.getString();
-									cout << " (" << ostream::base::bin << (uint)entry.attributes.get() << ostream::base::dec << ")\n";
-								}
-								else
-								{
-									cout << (entry.attributes.isHidden() ? "Hidden file: " : "File: ");
-									if (longNameBuffer.length() != 0)
-									{
-										cout << longNameBuffer;
-										longNameBuffer.erase();
-									}
-									else
-										cout << entry.getString();
-									cout << " (" << ostream::base::bin << (uint)entry.attributes.get() << ostream::base::dec << ")\n";
-								}
-							}
-						}
-					}
-					i++;
-				}
-
-				cout << "Directory bigger than a cluster: Multi-cluster files are not implemented yet!\n";
-				System::blueScreen();
+				return new DirectoryIterator(buffer);
 			}
 			virtual void removeDirectory(const std::string &path) {}
 			virtual void createDirectory(const std::string &path, const std::string &name) {}
@@ -448,12 +431,12 @@ namespace Filesystem
 			tryLoadPartition(disk, partitions[i]);
 	}
 
-	void listDirectoryEntries(const string &path)
+	DirectoryIterator *listDirectoryEntries(const string &path)
 	{
 		char drive = toLower(path[0]);
 
 		for (auto &part : *partitions)
 			if (part->letter == drive)
-				part->listDirectoryEntries(path);
+				return part->listDirectoryEntries(path);
 	}
 }
