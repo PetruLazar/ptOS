@@ -319,16 +319,15 @@ namespace Disk
 		byte deviceCount = 0;
 
 		for (int i = 0; i < 2; i++)
-			for (int rj = 0; rj < 2; rj++)
+			for (int j = 0; j < 2; j++)
 			{
 				byte err;
 				IDEtype type = IDEtype::unknown;
 				Device &dev = devices[deviceCount];
 
 				dev.reserved = 0;
-				int j = -rj + 1;
+				// int j = -rj + 1;
 				// int j = rj;
-				// writeReg(i, ATAreg::hddevsel, 0xa0 | (j << 4));
 				writeReg(i, ATAreg::hddevsel, 0xa0 | (j << 4));
 				// sleep(1)
 				sleep1ms(i);
@@ -405,31 +404,22 @@ namespace Disk
 				}
 				dev.model[40] = 0;
 
-				/*cout
-					<< "Detected:\n   channel: " << ostream::base::hex << dev.channel
-					<< "\n   drive: " << dev.drive
-					<< "\n   type: " << deviceTypes[(byte)type]
-					<< "\n   signature: " << dev.signature
-					<< "\n   capabilities: " << dev.capabilities
-					<< "\n   command sets: " << dev.commandSets
-					<< "\n   max lba: " << getIdField(identificationSpace, IDfield::maxLba)
-					<< "\n   max lba ext: " << getIdField(identificationSpace, IDfield::maxLbaExt)
-					<< "\n   size: " << dev.size
-					<< "\n   model: " << dev.model << ostream::base::dec << '\n';
-				System::pause();*/
-
 				// read sector 0 and tell the filesystem about the volumes present
-				byte *bootsector = new byte[512];
-				if (byte err = accessATAdrive(accessDir::read, deviceCount, 0, 1, bootsector) == 0)
+				if (dev.type == IDEtype::PATA || dev.type == IDEtype::SATA)
 				{
-					Filesystem::detectPartitions(dev, bootsector);
-				}
-				else
-				{
-					// error: err
-				}
+					byte *bootsector = new byte[512];
+					if (byte err = accessATAdrive(accessDir::read, deviceCount, 0, 1, bootsector) == 0)
+					{
+						Filesystem::detectPartitions(dev, bootsector);
+					}
+					else
+					{
+						// error: err
+						displayError(deviceCount, err);
+					}
 
-				delete[] bootsector;
+					delete[] bootsector;
+				}
 
 				deviceCount++;
 			}
@@ -513,6 +503,8 @@ namespace Disk
 	}*/
 	byte accessATAdrive(accessDir dir, byte drive, uint lba, byte numsects, void *buffer_)
 	{
+		// cout << "Accessing drive " << drive << ", lba " << lba << ", " << numsects << " sectors\n";
+
 		Device &dev = devices[drive];
 		accessMode mode;
 		bool dma;
@@ -571,6 +563,7 @@ namespace Disk
 		if (mode == accessMode::lba48)
 		{
 			// to be tested, do not use
+			cout << "Warning! LBA48 used!\n";
 			writeReg(channel, ATAreg::seccount1, 0);
 			writeReg(channel, ATAreg::lba3, data[3]);
 			writeReg(channel, ATAreg::lba4, data[4]);
@@ -634,15 +627,23 @@ namespace Disk
 		else
 		{
 			if (dir == accessDir::read)
+			{
 				// pio read
+				// int testvar = 0;
 				for (int s = 0; s < numsects; s++)
 				{
 					if (err = polling(channel, true))
+					{
+						// cout << "Throwing error " << err << '\n';
 						return err;
+					}
 					for (int i = 0; i < words; i++)
 						buffer[i] = readRegW(channel, ATAreg::data);
 					buffer += words;
+					// testvar++;
 				}
+				// cout << "Actually read " << testvar << " sectors\n";
+			}
 			else
 			{
 				// pio write
