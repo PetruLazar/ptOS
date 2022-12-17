@@ -148,8 +148,53 @@ extern void main()
 		case Keyboard::KeyEvent::KeyCode::alpha0:
 		case Keyboard::KeyEvent::KeyCode::numpad_0:
 		{
-			
-			Filesystem::listDirectoryEntries("C");
+			/*ull len = 1000;
+			bool *ptr = new bool[len];
+			vector<bool> vec(len, false);
+			for (ull i = 0; i < len; i++)
+			{
+				bool val = Random::get() & 1;
+				// bool val = true;
+				vec[i] = val;
+				ptr[i] = val;
+			}
+
+			// check vectors
+			bool correct = true;
+			for (ull i = 0; i < len; i++)
+			{
+				cout << "ptr[" << i << "] = " << ptr[i] << "    vec[" << i << "] = " << vec[i] << "   ->";
+				if (ptr[i] != vec[i])
+				{
+					cout << " different\n";
+					correct = false;
+					break;
+				}
+				else
+					cout << " ok\n";
+			}
+			cout << "Size: " << vec.getSize() << '\n'
+				 << (correct ? "test passed" : "test failed") << '\n';
+
+			delete[] ptr;
+			break;*/
+
+			auto list = Filesystem::GetDirectoryIterator(u"C:/FOLDER1/FOLDER3");
+			// auto list = Filesystem::GetDirectoryIterator(u"C:/");
+
+			if (list == nullptr)
+			{
+				cout << "Iterator was nullptr\n";
+				break;
+			}
+
+			while (!list->finished())
+			{
+				cout << list->getString() << '\n';
+				list->advance();
+			}
+
+			delete list;
 		}
 		break;
 		case Keyboard::KeyEvent::KeyCode::alpha1:
@@ -211,11 +256,23 @@ extern void main()
 		break;
 		case Keyboard::KeyEvent::KeyCode::alpha4:
 		case Keyboard::KeyEvent::KeyCode::numpad_4:
-			Filesystem::listDirectoryEntries("C");
-			break;
+		{
+			// test
+		}
+		break;
 		case Keyboard::KeyEvent::KeyCode::alpha5:
 		case Keyboard::KeyEvent::KeyCode::numpad_5:
 		{
+			ull len;
+			byte *contents;
+			if (Filesystem::ReadFile(u"C:/FOLDER1/FOLDER3/FILE5.TXT", contents, len))
+			{
+				// DisplyMemoryBlock()
+				cout << "Size of file: " << len << " bytes\n";
+				string str((char *)contents, len);
+				cout << str << '\n';
+				delete[] contents;
+			}
 		}
 		break;
 		case Keyboard::KeyEvent::KeyCode::alpha6:

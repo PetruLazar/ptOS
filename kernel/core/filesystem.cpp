@@ -18,10 +18,15 @@ namespace Filesystem
 		byte disk;
 		char letter;
 
-		virtual void formatPartition() = 0;
-		virtual DirectoryIterator *listDirectoryEntries(const std::string &path) = 0;
-		virtual void removeDirectory(const std::string &path) = 0;
-		virtual void createDirectory(const std::string &path, const std::string &name) = 0;
+		// virtual void formatPartition() = 0;
+
+		virtual void CreateFile(string16 &path) = 0;
+		virtual bool ReadFile(string16 &path, byte *&contents, ull &length) = 0;
+		virtual void WriteFile(string16 &path, byte *contents, ull length) = 0;
+
+		virtual DirectoryIterator *GetDirectoryIterator(string16 &path) = 0;
+		virtual void RemoveDirectory(string16 &path) = 0;
+		virtual void CreateDirectory(string16 &path, string16 &name) = 0;
 	};
 
 	vector<Partition *> *partitions;
@@ -81,7 +86,7 @@ namespace Filesystem
 			uint leadSignature;
 			byte reserved[480];
 			uint midSignature,
-				lastFreeClusterCount,
+				freeClusterCount,
 				clusterStartHint;
 			byte reserved2[12];
 			uint trailSignature;
@@ -162,6 +167,10 @@ namespace Filesystem
 				name += '.';
 				name.append(filename + 8, 3);
 				return name;
+			}
+			inline uint getFirstCluster()
+			{
+				return firstClusterHigh << 16 | firstClusterLow;
 			}
 		};
 		class LongFilenameEntry
@@ -310,6 +319,7 @@ namespace Filesystem
 			}
 			bool finished() { return currentIterator == nullptr; }
 			string16 getString() { return *longNameBuffer.getContents(); }
+			Standard83Entry *getEntry() { return (Standard83Entry *)currentIterator; }
 		};
 		class Partition : public Filesystem::Partition
 		{
@@ -321,20 +331,159 @@ namespace Filesystem
 				rootDirCluster;
 			byte fatCount, sectorsPerCluster;
 
-			virtual void formatPartition()
+			// fsInfo
+			uint freeClusterCount;
+			uint freeClusterStart;
+			uint AllocateCluster()
 			{
+				// decrease freeClusterCount
+				// update fats
+				// update freeClusterStart
 			}
-			virtual DirectoryIterator *listDirectoryEntries(const std::string &path)
+			void DeallocateCluster(uint clusterNr)
 			{
+				// increase freeClusterCount
+				// update fats
+				// update freeClusterStart
+			}
+
+			uint *fat;
+
+			static constexpr uint freeCluster = 0,
+								  lastCluster = 0x0FFFFFF8,
+								  badCluster = 0x0FFFFFF7;
+
+			ull ClusterToLba(uint cluster)
+			{
+				return dataSectorOffset + cluster * sectorsPerCluster;
+			}
+
+			// virtual void formatPartition() {}
+
+			void ReadClusterChain(uint startCluster, byte *&buffer, ull &length)
+			{
+				// read a single cluster, multi-cluster reading not implemented yet
+				/*length = 512 * sectorsPerCluster;
+				buffer = new byte[length];
+				if (byte err = accessATAdrive(accessDir::read, disk, ClusterToLba(startCluster), sectorsPerCluster, buffer))
+				{
+					displayError(disk, err);
+					delete[] buffer;
+					buffer = nullptr;
+				}
+				// DisplyMemoryBlock(buffer, 256);
+				// System::pause(false);
+				return;*/
+
+				// determine how many clusters the file/directory occupies
+				ull clusterLen = 1;
+				uint next = fat[startCluster];
+				while (next < lastCluster)
+				{
+					next = fat[next];
+					clusterLen++;
+				}
+
+				// actually read all the clusters
+				length = 512 * sectorsPerCluster * clusterLen;
+				buffer = new byte[length];
+				byte *current = buffer;
+				for (next = startCluster; next < lastCluster; next = fat[next])
+				{
+					accessATAdrive(accessDir::read, disk, ClusterToLba(next), sectorsPerCluster, current);
+					current += 512 * sectorsPerCluster;
+				}
+				// cout << "Read " << clusterLen << " clusters\n";
+			}
+
+			void CreateFile(string16 &path) override {}
+			bool ReadFile(string16 &path, byte *&contents, ull &length) override
+			{
+				// find the last separator in the path
+				ull slash = path.lastOf('/');
+				if (slash == string16::npos)
+					return false;
+
+				// separate parent directory path from filename
+				string16 dirPath(path.data(), slash + 1);
+				path.erase(0, slash + 1);
+
+				// traverse the directory to find the file
+				auto it = GetDirectoryIterator(dirPath);
+				while (!it->finished())
+				{
+					if (it->getString() == path)
+					{
+						// file found
+						auto entry = it->getEntry();
+						ReadClusterChain(entry->getFirstCluster(), contents, length);
+						length = it->getEntry()->fileSize;
+						delete it;
+						return true;
+					}
+					it->advance();
+				}
+
+				delete it;
+				return false;
+			}
+			void WriteFile(string16 &path, byte *contents, ull length) override {}
+
+			DirectoryIterator *GetDirectoryIterator(string16 &path) override
+			{
+				if (path[0] != '/')
+				{
+					return nullptr;
+				}
+
+				path.erase(0); // erase the slash at the beginning
+				if (path[path.length() - 1] == '/')
+					path.pop_back(); // erase the slash at the end if there is one
+
+				// analyse path
+				string16 part;
+				ull bufferSize;
+				byte *buffer;
+				ReadClusterChain(rootDirCluster, buffer, bufferSize);
+				while (path.length() > 0)
+				{
+					ull slash = path.firstOf('/');
+					if (slash != string16::npos)
+					{
+						// slash found
+						part.assign(path.data(), slash);
+						path.erase(0, slash + 1);
+					}
+					else
+					{
+						// slash not found
+						part.assign(path);
+						path.erase();
+					}
+
+					DirectoryIterator iterator(buffer);
+					bool cont = false;
+					while (!iterator.finished())
+					{
+						if (iterator.getString() == part)
+						{
+							ReadClusterChain(iterator.getEntry()->getFirstCluster(), buffer, bufferSize);
+							cont = true;
+							break;
+						}
+						iterator.advance();
+					}
+					if (cont)
+						continue;
+					return nullptr;
+				}
+
 				// load the cluster/clusters
-				ull bufferSize = 512 * sectorsPerCluster, entryLen = bufferSize / sizeof(DirectoryEntry);
-				byte *buffer = new byte[bufferSize];
-				Disk::accessATAdrive(accessDir::read, disk, dataSectorOffset + rootDirCluster * sectorsPerCluster, sectorsPerCluster, buffer);
 
 				return new DirectoryIterator(buffer);
 			}
-			virtual void removeDirectory(const std::string &path) {}
-			virtual void createDirectory(const std::string &path, const std::string &name) {}
+			void RemoveDirectory(std::string16 &path) override {}
+			virtual void CreateDirectory(std::string16 &path, std::string16 &name) override {}
 		};
 
 		bool tryLoadPartition(const Device &disk, MBRpartitionEntry &part)
@@ -368,6 +517,8 @@ namespace Filesystem
 			}
 
 			// do something
+			cout << "Last known free cluster count: " << fsInfo.freeClusterCount << "\n"
+				 << "Hint for first free cluster: " << fsInfo.clusterStartHint << '\n';
 			FAT32::Partition *ptr = new FAT32::Partition;
 
 			// data about the partition
@@ -383,6 +534,36 @@ namespace Filesystem
 			ptr->sectorsPerCluster = bpm.sectorsPerCluster;
 			ptr->rootDirCluster = ebr.rootDirClusterNr;
 			ptr->dataSectorOffset = ptr->fatOffset + bpm.nrOfFATs * ebr.sectorsPerFAT - 2 * bpm.sectorsPerCluster;
+
+			ptr->freeClusterCount = fsInfo.freeClusterCount;
+			ptr->freeClusterStart = fsInfo.clusterStartHint;
+
+			// load the whole fat in memory (just one for now)
+			byte *buffer = new byte[512 * ptr->sectorsPerFAT];
+			// cout << "Sectors per FAT: " << ptr->sectorsPerFAT << ", drive " << ptr->disk << '\n';
+			ull fatSectorsRead = 0;
+			uint sectorsToRead = ptr->sectorsPerFAT;
+			while (sectorsToRead > 0xff)
+			{
+				if (byte err = accessATAdrive(accessDir::read, ptr->disk, ptr->fatOffset + fatSectorsRead, 0xff, buffer + fatSectorsRead * 512))
+				{
+					Disk::displayError(ptr->disk, err);
+					delete[] fsInfoSector;
+					delete[] bootRecord;
+					return false;
+				}
+
+				sectorsToRead -= 0xff;
+				fatSectorsRead += 0xff;
+			}
+			if (byte err = accessATAdrive(accessDir::read, ptr->disk, ptr->fatOffset + fatSectorsRead, sectorsToRead, buffer + fatSectorsRead * 512))
+			{
+				Disk::displayError(ptr->disk, err);
+				delete[] fsInfoSector;
+				delete[] bootRecord;
+				return false;
+			}
+			ptr->fat = (uint *)buffer;
 
 			partitions->push_back(ptr);
 
@@ -431,12 +612,37 @@ namespace Filesystem
 			tryLoadPartition(disk, partitions[i]);
 	}
 
-	DirectoryIterator *listDirectoryEntries(const string &path)
+	bool ReadFile(const string16 &path, byte *&contents, ull &length)
 	{
-		char drive = toLower(path[0]);
+		string16 path_copy = path;
+		if (path_copy.length() > 1 && path_copy[1] != ':')
+		{
+			// path does not contain a drive letter
+			return false;
+		}
+		char drive = toLower(path_copy[0]);
+		path_copy.erase(0, 2);
 
 		for (auto &part : *partitions)
 			if (part->letter == drive)
-				return part->listDirectoryEntries(path);
+				return part->ReadFile(path_copy, contents, length);
+		return false;
+	}
+
+	DirectoryIterator *GetDirectoryIterator(const string16 &path)
+	{
+		string16 path_copy = path;
+		if (path_copy.length() > 1 && path_copy[1] != ':')
+		{
+			// path does not contain a drive letter
+			return nullptr;
+		}
+		char drive = toLower(path_copy[0]);
+		path_copy.erase(0, 2);
+
+		for (auto &part : *partitions)
+			if (part->letter == drive)
+				return part->GetDirectoryIterator(path_copy);
+		return nullptr;
 	}
 }

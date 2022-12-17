@@ -20,7 +20,12 @@ namespace Filesystem
 	void detectPartitions(const Disk::Device &disk, byte *bootsector);
 
 	void formatPartition(char driveLetter);
-	DirectoryIterator *listDirectoryEntries(const std::string &path);
-	void removeDirectory(const std::string &path);
-	void CreateDirectory(const std::string &path, const std::string &name);
+
+	void CreateFile(const std::string16 &path);
+	bool ReadFile(const std::string16 &path, byte *&contents, ull &length);
+	void WriteFile(const std::string16 &path, byte *contents, ull length);
+
+	DirectoryIterator *GetDirectoryIterator(const std::string16 &path);
+	void RemoveDirectory(const std::string16 &path);
+	void CreateDirectory(const std::string16 &path, const std::string16 &name);
 }
