@@ -137,7 +137,7 @@ namespace std
 		inline void erase(ull pos, ull len)
 		{
 			for (ull i = pos + len; i <= length(); i++)
-				at(i - pos) = at(i);
+				at(i - len) = at(i);
 			base::resize(base::size - len);
 		}
 		inline int compare(const T *ptr, ull len) const
