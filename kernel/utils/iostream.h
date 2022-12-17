@@ -150,3 +150,8 @@ void inline displayMemoryRow(byte *block)
 	std::cout << '\n'
 			  << std::ostream::base::dec;
 }
+void inline DisplyMemoryBlock(byte *block, ull len)
+{
+	for (ull i = 0; i < len; i += 0x10)
+		displayMemoryRow(block + i);
+}
