@@ -26,12 +26,32 @@ void dwordToHexString(char *str, dword value);
 void qwordToBinString(char *str, qword value);
 void qwordToHexString(char *str, qword value);
 
-inline ullong strlen(const char *str)
+inline ull strlen(const char *str)
 {
-	ullong len = 0;
+	ull len = 0;
 	for (; *str; str++)
 		len++;
 	return len;
+}
+inline const char *strchr(const char *str, char ch)
+{
+	while (*str)
+	{
+		if (*str == ch)
+			return str;
+		str++;
+	}
+	return nullptr;
+}
+inline char *strchr(char *str, char ch)
+{
+	while (*str)
+	{
+		if (*str == ch)
+			return str;
+		str++;
+	}
+	return nullptr;
 }
 
 inline char toLower(char ch)
