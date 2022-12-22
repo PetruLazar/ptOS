@@ -271,11 +271,11 @@ extern "C" void exceptionHandler(registers_t &regs, qword int_no, qword err_no)
 		displayMemoryRow((byte *)regs.rip);
 		cout << "Accessing address: " << (void *)getCR2() << '\n';
 
-		for (qword *rbp = (qword *)regs.rbp; rbp; rbp = (qword *)rbp[0])
-		{
-			cout << "\nCaller Stack frame: " << (void *)rbp[0]
-				 << "   Return address: " << (void *)rbp[1] << " (file offset: " << (void *)(rbp[1] - 0x8000 + 0x200) << ")\n";
-		}
+		// for (qword *rbp = (qword *)regs.rbp; rbp; rbp = (qword *)rbp[0])
+		// {
+		// 	cout << "\nCaller Stack frame: " << (void *)rbp[0]
+		// 		 << "   Return address: " << (void *)rbp[1] << " (file offset: " << (void *)(rbp[1] - 0x8000 + 0x200) << ")\n";
+		// }
 
 		System::blueScreen();
 	}
