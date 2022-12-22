@@ -4,7 +4,7 @@
 global memcpy
 memcpy:
 mov rcx, rdx
-rep stosb
+rep movsb
 ret
 ; optimize using alignment maybe?
 ; ; test if src and dest have the same aligment
@@ -40,7 +40,7 @@ lea rsi, [rsi+rcx-1]
 dec rdi
 std
 execute:
-rep stosb
+rep movsb
 ret
 ; optimize this one too using aligment maybe? and also the next one?
 
