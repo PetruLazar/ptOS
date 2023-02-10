@@ -306,7 +306,8 @@ namespace std
 			tempBuffer[i] = (ch >> 8) ? '?' : (char)str[i];
 		}
 		tempBuffer[len] = 0;
-		cout << tempBuffer;
+		os << tempBuffer;
 		delete[] tempBuffer;
+		return os;
 	}
 }

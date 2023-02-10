@@ -5,13 +5,11 @@
 
 namespace std
 {
-	class istream
-	{
-		byte flags;
+	class istream;
+	class ostream;
 
-	public:
-		// input functions
-	};
+	extern istream cin;
+	extern ostream cout;
 
 	class ostream
 	{
@@ -127,9 +125,89 @@ namespace std
 		}
 	};
 
-	extern istream cin;
-	extern ostream cout;
+	class istream
+	{
+		byte flags;
 
+	public:
+		// input functions
+		inline istream &operator>>(char &ch) // read single char
+		{
+			do
+			{
+				ch = Keyboard::getKeyPressedEvent().getChar();
+			} while (ch == 0);
+			return *this;
+		}
+
+		inline istream &operator>>(char str[]) // read line
+		{
+			ull pos = 0;
+			while (true)
+			{
+				char ch;
+				operator>>(ch);
+				switch (ch)
+				{
+				case '\b': // delete one char
+					if (!pos)
+						break;
+					cout << "\b \b";
+					pos--;
+					break;
+				case '\r': // finish reading
+					str[pos] = 0;
+					cout << '\n';
+					return *this;
+				case 0:
+					break;
+				default:
+					cout << ch;
+					str[pos++] = ch;
+				}
+			}
+		}
+
+		inline istream &operator>>(uint &nr) // read unsigned
+		{
+			ull pos = 0;
+			nr = 0;
+			while (true)
+			{
+				char ch;
+				operator>>(ch);
+				switch (ch)
+				{
+				case '\b':
+					if (!pos)
+						break;
+					nr /= 10;
+					pos--;
+					cout << "\b \b";
+					break;
+				case '\r':
+					if (pos)
+					{
+						cout << '\n';
+						return *this;
+					}
+					break;
+				case 0:
+					break;
+				default:
+					if (ch >= '0' && ch <= '9')
+					{
+						pos++;
+						nr = nr * 10 + (ch - '0');
+						cout << ch;
+					}
+				}
+			}
+		}
+		// inline istream &operator>>(int &nr) // read signed
+		// {
+		// }
+	};
 }
 
 void inline displayMemoryByte(byte *address)
