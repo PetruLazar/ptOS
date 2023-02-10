@@ -124,6 +124,8 @@ char Keyboard::KeyEvent::getChar()
 			return "_+\b{}|:\"\r<>?"[d];
 		return "-=\b[]\\;'\r,./"[d];
 	}
+	case KeyCode::space:
+		return ' ';
 	}
 	return 0;
 }
@@ -166,7 +168,7 @@ Keyboard::KeyEvent::KeyCode scancodeToKeycodeMap[2][0x80]{
 		Keyboard::KeyEvent::KeyCode::bracketOpen,
 		Keyboard::KeyEvent::KeyCode::bracketClosed,
 		Keyboard::KeyEvent::KeyCode::enter,
-		Keyboard::KeyEvent::KeyCode::unknown, // '?',
+		Keyboard::KeyEvent::KeyCode::leftControl, // '?',
 		Keyboard::KeyEvent::KeyCode::A,
 		Keyboard::KeyEvent::KeyCode::S,
 
@@ -179,8 +181,8 @@ Keyboard::KeyEvent::KeyCode scancodeToKeycodeMap[2][0x80]{
 		Keyboard::KeyEvent::KeyCode::L,
 		Keyboard::KeyEvent::KeyCode::semicolon,
 		Keyboard::KeyEvent::KeyCode::singleQuote,
-		Keyboard::KeyEvent::KeyCode::unknown, // '`',
-		Keyboard::KeyEvent::KeyCode::unknown, // '?',
+		Keyboard::KeyEvent::KeyCode::unknown,	// '`',
+		Keyboard::KeyEvent::KeyCode::leftShift, // '?',
 		Keyboard::KeyEvent::KeyCode::backslash,
 		Keyboard::KeyEvent::KeyCode::Z,
 		Keyboard::KeyEvent::KeyCode::X,
@@ -193,16 +195,16 @@ Keyboard::KeyEvent::KeyCode scancodeToKeycodeMap[2][0x80]{
 		Keyboard::KeyEvent::KeyCode::comma,
 		Keyboard::KeyEvent::KeyCode::alpha_dot,
 		Keyboard::KeyEvent::KeyCode::slash,
-		Keyboard::KeyEvent::KeyCode::unknown, // '?',
-		Keyboard::KeyEvent::KeyCode::unknown, // '*',
-		Keyboard::KeyEvent::KeyCode::unknown, // '?',
-		Keyboard::KeyEvent::KeyCode::space,	  // ' ',
-		Keyboard::KeyEvent::KeyCode::unknown, // '?',
-		Keyboard::KeyEvent::KeyCode::unknown, // '?',
-		Keyboard::KeyEvent::KeyCode::unknown, // '?',
-		Keyboard::KeyEvent::KeyCode::unknown, // '?',
-		Keyboard::KeyEvent::KeyCode::unknown, // '?',
-		Keyboard::KeyEvent::KeyCode::unknown, // '?',
+		Keyboard::KeyEvent::KeyCode::rightControl, // '?',
+		Keyboard::KeyEvent::KeyCode::unknown,	   // '*',
+		Keyboard::KeyEvent::KeyCode::leftAlt,	   // '?',
+		Keyboard::KeyEvent::KeyCode::space,		   // ' ',
+		Keyboard::KeyEvent::KeyCode::capsLock,	   // '?',
+		Keyboard::KeyEvent::KeyCode::unknown,	   // '?',
+		Keyboard::KeyEvent::KeyCode::unknown,	   // '?',
+		Keyboard::KeyEvent::KeyCode::unknown,	   // '?',
+		Keyboard::KeyEvent::KeyCode::unknown,	   // '?',
+		Keyboard::KeyEvent::KeyCode::unknown,	   // '?',
 
 		/*0x40*/ Keyboard::KeyEvent::KeyCode::unknown, // '?',
 		Keyboard::KeyEvent::KeyCode::unknown,		   // '?',
@@ -450,11 +452,14 @@ void Keyboard::EventListener()
 			if (!checkFullQueue())
 			{
 				byte releasedFlag = scanCode & 0x80;
+				scanCode &= 0x7f;
 				KeyEvent::KeyCode key = scancodeToKeycodeMap[extendedScancode][scanCode];
 				key = KeyEvent::KeyCode((byte)key | releasedFlag);
 				KeyEvent event = KeyEvent(key, currModKeys);
 				insertEvent(event);
 
+				// cout << "DBG: " << extendedScancode << ' ' << scanCode << '\n';
+				// cout << "Key event " << (uint)event.getKeyCode() << '\n';
 				switch (event.getKeyCode())
 				{
 				case KeyEvent::KeyCode::leftShift:
@@ -476,10 +481,25 @@ void Keyboard::EventListener()
 					releasedFlag ? currModKeys.clearRightCtrl() : currModKeys.setRightCtrl();
 					break;
 				case KeyEvent::KeyCode::capsLock:
-					releasedFlag ? currModKeys.clearCapsLock() : currModKeys.setCapsLock();
+					if (!releasedFlag)
+					{
+						// to-do: turn the LED on or off
+						if (currModKeys.getCapsLock())
+							currModKeys.clearCapsLock();
+						else
+							currModKeys.setCapsLock();
+					}
 					break;
 				case KeyEvent::KeyCode::numlock:
-					releasedFlag ? currModKeys.clearNumLock() : currModKeys.setNumLock();
+					if (!releasedFlag)
+					{
+						// to-do: turn the LED on or off
+						if (currModKeys.getNumLock())
+							currModKeys.clearNumLock();
+						else
+							currModKeys.setNumLock();
+					}
+					break;
 				}
 			}
 			if (extendedScancode)
