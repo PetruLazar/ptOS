@@ -1,6 +1,6 @@
 #pragma once
-#include "../drivers/screen.h"
-#include "../drivers/keyboard.h"
+#include "../../drivers/screen.h"
+#include "../../drivers/keyboard.h"
 
 class Snake
 {

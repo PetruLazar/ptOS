@@ -1,7 +1,7 @@
 #include "snake.h"
-#include "../utils/time.h"
-#include "../utils/rand.h"
-#include "../core/mem.h"
+#include "../../utils/time.h"
+#include "../../utils/rand.h"
+#include "../../core/mem.h"
 
 enum class Direction : byte
 {

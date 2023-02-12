@@ -6,7 +6,8 @@
 #include "drivers/keyboard.h"
 #include "utils/iostream.h"
 #include "utils/time.h"
-#include "games/snake.h"
+#include "programs/games/snake.h"
+#include "programs/explorer.h"
 #include "utils/rand.h"
 #include "core/mem.h"
 #include "cpu/cpuid.h"
@@ -148,39 +149,11 @@ extern void main()
 		case Keyboard::KeyEvent::KeyCode::alpha0:
 		case Keyboard::KeyEvent::KeyCode::numpad_0:
 		{
-			/*ull len = 1000;
-			bool *ptr = new bool[len];
-			vector<bool> vec(len, false);
-			for (ull i = 0; i < len; i++)
-			{
-				bool val = Random::get() & 1;
-				// bool val = true;
-				vec[i] = val;
-				ptr[i] = val;
-			}
+			Explorer::Start();
+			break;
 
-			// check vectors
-			bool correct = true;
-			for (ull i = 0; i < len; i++)
-			{
-				cout << "ptr[" << i << "] = " << ptr[i] << "    vec[" << i << "] = " << vec[i] << "   ->";
-				if (ptr[i] != vec[i])
-				{
-					cout << " different\n";
-					correct = false;
-					break;
-				}
-				else
-					cout << " ok\n";
-			}
-			cout << "Size: " << vec.getSize() << '\n'
-				 << (correct ? "test passed" : "test failed") << '\n';
-
-			delete[] ptr;
-			break;*/
-
-			auto list = Filesystem::GetDirectoryIterator(u"C:/FOLDER1/FOLDER3");
-			// auto list = Filesystem::GetDirectoryIterator(u"C:/");
+			// Filesystem::DirectoryIterator *list = Filesystem::GetDirectoryIterator(u"C:/FOLDER1/FOLDER4");
+			Filesystem::DirectoryIterator *list = Filesystem::GetDirectoryIterator(u"C:/");
 
 			if (list == nullptr)
 			{
@@ -190,7 +163,7 @@ extern void main()
 
 			while (!list->finished())
 			{
-				cout << list->getString() << '\n';
+				cout << list->getString() << " (" << ostream::base::dec << list->getSize() << " bytes)\n";
 				list->advance();
 			}
 
@@ -216,6 +189,8 @@ extern void main()
 		case Keyboard::KeyEvent::KeyCode::alpha2:
 		case Keyboard::KeyEvent::KeyCode::numpad_2:
 		{
+			Filesystem::test();
+			break;
 			Disk::Device *dev = Disk::devices;
 			cout << dev[0].reserved << ' '
 				 << dev[1].reserved << ' '
@@ -229,7 +204,6 @@ extern void main()
 			bool first = true;
 			for (int i = 0; i < 4; i++)
 			{
-
 				Disk::Device &disk = Disk::devices[i];
 				if (disk.reserved)
 				{
@@ -257,15 +231,60 @@ extern void main()
 		case Keyboard::KeyEvent::KeyCode::alpha4:
 		case Keyboard::KeyEvent::KeyCode::numpad_4:
 		{
-			// test
+			ull len;
+			byte *contents;
+
+			// read before
+			if (Filesystem::ReadFile(u"C:/FOLDER1/FOLDER4/FILE7.TXT", contents, len))
+			{
+				string str((char *)contents, len);
+				cout << "Contents before:\n"
+					 << str << '\n';
+				delete[] contents;
+			}
+			else
+			{
+				cout << "Failed to read file\n";
+				break;
+			}
+
+			// write
+			{
+				string str = "These are the new contents of the file with the full path \"C:/FOLDER1/FOLDER4/FILE7.TXT\".\n"
+							 "It is intentionally longer than the initial contents, so that the function is properly tested.\n"
+							 "Also, it contains more lines than the initial file.\n\n"
+							 "Hello mom! ... and the rest of the world to... sure... why not...?\n";
+
+				if (!Filesystem::WriteFile(u"C:/FOLDER1/FOLDER4/FILE7.TXT", (byte *)str.data(), str.getSize()))
+				{
+					cout << "Failed to write to file\n";
+					break;
+				}
+			}
+
+			// read after
+			if (Filesystem::ReadFile(u"C:/FOLDER1/FOLDER4/FILE7.TXT", contents, len))
+			{
+				string str((char *)contents, len);
+				cout << "Contents after:\n"
+					 << str << '\n';
+				delete[] contents;
+			}
+			else
+			{
+				cout << "Failed to read file\n";
+				break;
+			}
 		}
 		break;
 		case Keyboard::KeyEvent::KeyCode::alpha5:
 		case Keyboard::KeyEvent::KeyCode::numpad_5:
 		{
+			// if (Filesystem::ReadFile(u"C:/aa b.txt", contents, len))
+
 			ull len;
 			byte *contents;
-			if (Filesystem::ReadFile(u"C:/FOLDER1/FOLDER3/FILE5.TXT", contents, len))
+			if (Filesystem::ReadFile(u"C:/New Text Document.txt", contents, len))
 			{
 				// DisplyMemoryBlock()
 				cout << "Size of file: " << len << " bytes\n";
@@ -273,10 +292,22 @@ extern void main()
 				cout << str << '\n';
 				delete[] contents;
 			}
+			else
+				cout << "Failed to read file\n";
 		}
 		break;
 		case Keyboard::KeyEvent::KeyCode::alpha6:
 		case Keyboard::KeyEvent::KeyCode::numpad_6:
+		{
+			string contents = "Might not seem like it, but this file is a big milestone for PTOS. This file has been entirely created and written to in the PTOS' FAT32 Filesystem Driver.";
+			cout << contents << '\n';
+
+			if (Filesystem::WriteFile(u"C:/New Text Document.txt", (byte *)contents.data(), contents.getSize()))
+				cout << "Write complete!\n";
+			else
+				cout << "Write failed!\n";
+		}
+		break;
 		case Keyboard::KeyEvent::KeyCode::alpha7:
 		case Keyboard::KeyEvent::KeyCode::numpad_7:
 		case Keyboard::KeyEvent::KeyCode::alpha8:
