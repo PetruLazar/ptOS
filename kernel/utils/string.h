@@ -310,4 +310,57 @@ namespace std
 		delete[] tempBuffer;
 		return os;
 	}
+
+	inline istream &operator>>(istream &os, string &str)
+	{
+		str.erase();
+		while (true)
+		{
+			char ch;
+			os >> ch;
+			switch (ch)
+			{
+			case '\b': // delete one char
+				if (str[0] == 0)
+					break;
+				cout << "\b \b";
+				str.pop_back();
+				break;
+			case '\r': // finish reading
+				cout << '\n';
+				return os;
+			case 0:
+				break;
+			default:
+				cout << ch;
+				str.push_back(ch);
+			}
+		}
+	}
+	inline istream &operator>>(istream &os, string16 &str)
+	{
+		str.erase();
+		while (true)
+		{
+			char ch;
+			os >> ch;
+			switch (ch)
+			{
+			case '\b': // delete one char
+				if (str[0] == 0)
+					break;
+				cout << "\b \b";
+				str.pop_back();
+				break;
+			case '\r': // finish reading
+				cout << '\n';
+				return os;
+			case 0:
+				break;
+			default:
+				cout << ch;
+				str.push_back(ch);
+			}
+		}
+	}
 }

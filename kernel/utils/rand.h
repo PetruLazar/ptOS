@@ -3,7 +3,7 @@
 class Random
 {
 public:
-	static void setSeed(int seed);
+	static void setSeed(unsigned int seed);
 
-	static int get();
+	static unsigned int get();
 };

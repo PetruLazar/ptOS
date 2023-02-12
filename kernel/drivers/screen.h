@@ -34,6 +34,7 @@ public:
 
 	static constexpr byte screenWidth = 80;
 	static constexpr byte screenHeight = 25;
+	static constexpr byte tabSize = 4;
 
 	static void Initialize();
 	static void Cleanup();

@@ -213,7 +213,16 @@ inline bool Memory::Heap::AllocatorEntry::Corrupted() { return magicCheckStart !
 inline bool Memory::Heap::AllocatorEntry::free()
 {
 	if (Corrupted())
+	{
+		cout << "Heap corruption detected while trying to deallocate " << getAllocatedBlock() << '\n';
+		cout << ostream::base::hex;
+		if (magicCheckStart != magicNumberStart)
+			cout << "Found start signature " << magicCheckStart << " instead of " << magicNumberStart << '\n';
+		if (magicCheckEnd() != magicNumberEnd)
+			cout << "Found end signature " << magicCheckEnd() << " instead of " << magicNumberEnd << '\n';
+		cout << ostream::base::dec;
 		return false;
+	}
 
 	magicCheckStart = 0;
 	magicCheckEnd() = 0;
@@ -287,7 +296,7 @@ void *Memory::Heap::Allocate(qword allocationSize)
 	}
 
 	// try after the last, if there is no space, return nullptr
-	if (fitsAllocation(lastAllocation->getSpaceAfter(), (byte *)(this + 1) + heapSize, allocationSize))
+	if (fitsAllocation(lastAllocation->getSpaceAfter(), (byte *)heapStart() + heapSize, allocationSize))
 	{
 		AllocatorEntry *obj = AllocatorEntry::build(lastAllocation->getSpaceAfter(), allocationSize, lastAllocation, nullptr);
 		lastAllocation->nextAllocation = obj;
@@ -302,9 +311,7 @@ inline void Memory::Heap::Deallocate(void *ptr)
 	AllocatorEntry *obj = (AllocatorEntry *)ptr - 1;
 	if (!obj->free())
 	{
-		cout << "Heap corruption detected while trying to deallocate " << ptr << '\n';
-		for (int i = -0x20; i < 0x50; i += 0x10)
-			displayMemoryRow((byte *)ptr + i);
+		DisplyMemoryBlock((byte *)obj, 0x100);
 		System::blueScreen();
 	}
 	if (obj == firstAllocation)

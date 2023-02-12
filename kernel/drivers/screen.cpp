@@ -128,8 +128,28 @@ void Screen::print(const char *msg)
 		}
 		break;
 		case '\b':
+		{
+			if (bufferCursor)
+			{
+				bufferCursor--;
+				screenCursor--;
+				if (screenCursor < 0)
+				{
+					screenCursor += screenWidth;
+					startInBuffer -= screenWidth;
+				}
+			}
+		}
+		break;
 		case '\t':
+		{
+			short delta = tabSize - (screenCursor % screenWidth) % tabSize;
+			bufferCursor += delta;
+			screenCursor += delta;
+		}
+		break;
 		case '\a':
+			break;
 		default:
 			buffer[bufferCursor++].character = msg[i];
 			screenCursor++;
@@ -175,8 +195,29 @@ void Screen::print(char ch)
 	}
 	break;
 	case '\b':
+	{
+		if (bufferCursor)
+		{
+			bufferCursor--;
+			screenCursor--;
+			if (screenCursor < 0)
+			{
+				screenCursor += screenWidth;
+				startInBuffer -= screenWidth;
+			}
+		}
+		bufferCursor--;
+	}
+	break;
 	case '\t':
+	{
+		short delta = tabSize - (screenCursor % screenWidth) % tabSize;
+		bufferCursor += delta;
+		screenCursor += delta;
+	}
+	break;
 	case '\a':
+		break;
 	default:
 		buffer[bufferCursor++].character = ch;
 		screenCursor++;
@@ -230,11 +271,22 @@ void Screen::print(const char *msg, short pos)
 		switch (msg[i])
 		{
 		case '\n':
-			pos += screenWidth;
-			pos -= pos % screenWidth;
+			pos += screenWidth - pos % screenWidth;
+			break;
+		case '\b':
+			pos--;
+			break;
+		case '\t':
+			pos += tabSize - pos % tabSize;
+		case '\a':
 			break;
 		default:
 			buffer[pos++].character = msg[i];
+		}
+		if (pos >= bufferSize)
+		{
+			makeSpaceInBuffer();
+			pos -= screenWidth;
 		}
 		if (pos >= screenSize)
 		{

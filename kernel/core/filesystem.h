@@ -10,22 +10,38 @@ namespace Filesystem
 	public:
 		virtual ~DirectoryIterator(){};
 
+		virtual void reset() = 0;
 		virtual void advance() = 0;
+		virtual void advance(uint count) = 0;
+		virtual void advanceTo(const std::string16 &entryName) = 0;
 		virtual bool finished() = 0;
+
 		virtual std::string16 getString() = 0;
+		virtual ull getSize() = 0;
+
+		virtual bool isDirectory() = 0;
+		virtual bool isFile() = 0;
 	};
 
 	// FAT32 filesystem
 	void Initialize();
+	void CleanUp();
 	void detectPartitions(const Disk::Device &disk, byte *bootsector);
 
 	void formatPartition(char driveLetter);
 
-	void CreateFile(const std::string16 &path);
+	bool CreateFile(const std::string16 &path, byte *contents = nullptr, ull length = 0);
+	bool RemoveFile(const std::string16 &path);
+
 	bool ReadFile(const std::string16 &path, byte *&contents, ull &length);
-	void WriteFile(const std::string16 &path, byte *contents, ull length);
+	bool WriteFile(const std::string16 &path, byte *contents, ull length);
 
 	DirectoryIterator *GetDirectoryIterator(const std::string16 &path);
-	void RemoveDirectory(const std::string16 &path);
-	void CreateDirectory(const std::string16 &path, const std::string16 &name);
+	bool RemoveDirectory(const std::string16 &path);
+	bool CreateDirectory(const std::string16 &path);
+
+	bool Copy(const string16 &src, const string16 &dest);
+	bool Move(const string16 &src, const string16 &dest);
+
+	void test();
 }

@@ -1,7 +1,6 @@
 #include "filesystem.h"
-#include "../utils/string.h"
-#include "../drivers/disk.h"
 #include "sys.h"
+#include "mem.h"
 
 using namespace Disk;
 using namespace std;
@@ -20,13 +19,15 @@ namespace Filesystem
 
 		// virtual void formatPartition() = 0;
 
-		virtual void CreateFile(string16 &path) = 0;
+		virtual bool CreateFile(string16 &path, byte *contents, ull length) = 0;
+		virtual bool RemoveFile(string16 &path) = 0;
+
 		virtual bool ReadFile(string16 &path, byte *&contents, ull &length) = 0;
-		virtual void WriteFile(string16 &path, byte *contents, ull length) = 0;
+		virtual bool WriteFile(string16 &path, byte *contents, ull length) = 0;
 
 		virtual DirectoryIterator *GetDirectoryIterator(string16 &path) = 0;
-		virtual void RemoveDirectory(string16 &path) = 0;
-		virtual void CreateDirectory(string16 &path, string16 &name) = 0;
+		virtual bool RemoveDirectory(string16 &path) = 0;
+		virtual bool CreateDirectory(string16 &path) = 0;
 	};
 
 	vector<Partition *> *partitions;
@@ -80,6 +81,146 @@ namespace Filesystem
 
 	namespace FAT32
 	{
+		static constexpr int maxShortFilenameSuffix = 100000; // the max value of a suffix for short filename entrie that have a corresponding long name, value not included
+
+		extern "C" byte FATchecksum(char shortName[11]);
+		inline ull shortFilenameLen(char shortFilename[11])
+		{
+			for (ull i = 0; i < 8; i++)
+				if (shortFilename[i] == ' ')
+					return i;
+			return 8;
+		}
+		string shortFilenameAsString(char shortFilename[11])
+		{
+			string filename;
+			for (int i = 0; i < 8; i++)
+			{
+				if (shortFilename[i] == ' ')
+					break;
+
+				filename += toLower((char)shortFilename[i]);
+			}
+			if (shortFilename[8] != ' ')
+			{
+				// has extension
+				filename += '.';
+				for (int i = 8; i < 11; i++)
+				{
+					if (shortFilename[i] == ' ')
+						break;
+
+					filename += toLower((char)shortFilename[i]);
+				}
+			}
+			return filename;
+		}
+		string16 shortFilenameAsString16(char shortFilename[11])
+		{
+			string16 filename;
+			for (int i = 0; i < 8; i++)
+			{
+				if (shortFilename[i] == ' ')
+					break;
+
+				filename += toLower((char)shortFilename[i]);
+			}
+			if (shortFilename[8] != ' ')
+			{
+				// has extension
+				filename += '.';
+				for (int i = 8; i < 11; i++)
+				{
+					if (shortFilename[i] == ' ')
+						break;
+
+					filename += toLower((char)shortFilename[i]);
+				}
+			}
+			return filename;
+		}
+		bool needsLongFilename(const string16 &filename)
+		{
+			ull len = filename.length();
+
+			ull dot = filename.lastOf(u'.');
+			if (dot == string16::npos)
+				dot = len;
+
+			if (dot > 8 || len - dot > 4) // filename or extension too long
+				return true;
+
+			for (ull i = 0; i < len; i++)
+			{
+				char16_t ch = filename[i];
+				if (ch & 0xff00 ||				// filename contains wide chars
+					ch == u' ' ||				// filename contains spaces
+					(ch >= u'A' && ch <= u'Z')) // filename contains uppercase letters
+					return true;
+			}
+			return false;
+		}
+		// returns wheather a long filename has to be used
+		void suffixShortFilename(char shortFilename[11], int suffix, ull shortFilenameLen)
+		{
+			char str[16];
+			lltos(str, suffix);
+			ull suffixLen = strlen(str);
+			{
+				ull shortFilenameLenLim = 7 - suffixLen;
+				if (shortFilenameLen > shortFilenameLenLim)
+					shortFilenameLen = shortFilenameLenLim;
+			}
+			shortFilename[shortFilenameLen++] = '~';
+			for (ull i = 0; i < suffixLen; i++)
+				shortFilename[shortFilenameLen + i] = str[i];
+		}
+		bool getShortFilename(const string16 &filename, char shortFilename[11])
+		{
+			bool needsLfn = needsLongFilename(filename);
+			ull len = filename.length();
+
+			ull dot = filename.lastOf(u'.');
+			if (dot == string16::npos)
+				dot = len;
+
+			int shorti = 0, shortlim = 8;
+			for (ull i = 0; i < dot; i++) // copy chars from the filename
+			{
+				char16_t wch = filename[i];
+				if (wch != ' ' &&				 // if not space
+					(unsigned short)wch <= 0xff) // if not wide char
+				{
+					shortFilename[shorti++] = toUpper((char)wch); // copy
+					if (shorti == shortlim)
+						break; // if short filename is full, break
+				}
+			}
+
+			// pad with spaces
+			while (shorti < 8)
+				shortFilename[shorti++] = ' ';
+
+			shortlim = 11;
+			for (ull i = dot + 1; i < len; i++) // copy chars from the extension
+			{
+				char16_t wch = filename[i];
+				if (wch != ' ' &&				 // if not space
+					(unsigned short)wch <= 0xff) // if not wide char
+				{
+					shortFilename[shorti++] = toUpper((char)wch); // copy
+					if (shorti == shortlim)
+						break; // if short filename is full, break
+				}
+			}
+
+			// pad with spaces
+			while (shorti < 11)
+				shortFilename[shorti++] = ' ';
+
+			return needsLfn;
+		}
+
 		class FSInfoStruct
 		{
 		public:
@@ -87,7 +228,7 @@ namespace Filesystem
 			byte reserved[480];
 			uint midSignature,
 				freeClusterCount,
-				clusterStartHint;
+				freeClusterStartHint;
 			byte reserved2[12];
 			uint trailSignature;
 		};
@@ -99,6 +240,8 @@ namespace Filesystem
 		public:
 			enum fileAttributes : byte
 			{
+				none = 0x0,
+
 				readOnly = 0x01,
 				hidden = 0x02,
 				system = 0x04,
@@ -143,44 +286,68 @@ namespace Filesystem
 
 			inline string getString()
 			{
-				if (attributes.isAny(FileAttributes::volume_id))
-				{
-					string name(filename, 11);
-					ull pos = 11;
-					while (name[--pos] == ' ')
-						name.pop_back();
-					return name;
-				}
-				if (attributes.isAny(FileAttributes::directory))
-				{
-					string name(filename, 11);
-					ull pos = name.firstOf(' ');
-					if (pos != string::npos)
-						name.resize(pos);
-					return name;
-				}
-				// else
-				string name(filename, 8);
-				ull pos = name.firstOf(' ');
-				if (pos != string::npos)
-					name.resize(pos);
-				name += '.';
-				name.append(filename + 8, 3);
-				return name;
+				return shortFilenameAsString(filename);
+			}
+			inline void setString(const char newFilename[11])
+			{
+				for (int i = 0; i < 11; i++)
+					filename[i] = newFilename[i];
 			}
 			inline uint getFirstCluster()
 			{
 				return firstClusterHigh << 16 | firstClusterLow;
 			}
+			inline void setFirstCluster(uint firstCluster)
+			{
+				firstClusterHigh = firstCluster >> 16;
+				firstClusterLow = firstCluster & 0xffff;
+			}
 		};
 		class LongFilenameEntry
 		{
+			inline char16_t getChar(ull index)
+			{
+				switch (index)
+				{
+				case 0:
+				case 1:
+				case 2:
+				case 3:
+				case 4:
+					return namePart1[index];
+				default:
+					return namePart2[index - 5];
+				case 11:
+				case 12:
+					return namePart3[index - 11];
+				}
+			}
+			inline void setChar(ull index, char16_t value)
+			{
+				switch (index)
+				{
+				case 0:
+				case 1:
+				case 2:
+				case 3:
+				case 4:
+					namePart1[index] = value;
+					break;
+				default:
+					namePart2[index - 5] = value;
+					break;
+				case 11:
+				case 12:
+					namePart3[index - 11] = value;
+				}
+			}
+
 		public:
 			byte order;
 			Unalg<char16_t> namePart1[5];
 			FileAttributes attributes;
 			byte longEntryType,
-				creationCheckSum;
+				shortNameChecksum;
 			char16_t namePart2[6];
 			word zero;
 			char16_t namePart3[2];
@@ -188,10 +355,24 @@ namespace Filesystem
 			inline string16 getString()
 			{
 				string16 str;
-				str.append((char16_t *)namePart1, 5);
-				str.append(namePart2, 6);
-				str.append(namePart3, 2);
+				for (ull i = 0; i < 13; i++)
+				{
+					char16_t ch = getChar(i);
+					if (ch == 0)
+						return str;
+					else
+						str += ch;
+				}
 				return str;
+			}
+			inline void setString(const string16 &name, int offset)
+			{
+				ull i = 0;
+				ull len = name.length() + 1;
+				while (i < 13 && offset < len) // copy as much as possible from the string
+					setChar(i++, name[offset++]);
+				while (i < 13) // pad with 0xffff if the entry is not full
+					setChar(i++, 0xffff);
 			}
 		};
 		class UnknownDirEntry
@@ -200,6 +381,10 @@ namespace Filesystem
 			byte unused1[11];
 			FileAttributes attributes;
 			byte unused2[20];
+
+			inline bool isUnused() { return unused1[0] == 0xe5; }
+			inline void setUnused() { unused1[0] = 0xe5; }
+			inline bool isEnd() { return unused1[0] == 0x00; }
 		};
 		union DirectoryEntry
 		{
@@ -208,6 +393,7 @@ namespace Filesystem
 			UnknownDirEntry unknown;
 		};
 
+		class Partition;
 		class DirectoryIterator : public Filesystem::DirectoryIterator
 		{
 			byte *directoryData;
@@ -239,40 +425,165 @@ namespace Filesystem
 
 				bool empty() { return contents->at(0) == 0; }
 			} longNameBuffer;
+			Partition *part;
+			ull length;
+			uint startCluster;
+
+			bool addClusters(ull count);
+
+			UnknownDirEntry *findFree(ull count)
+			{
+				if (directoryData == nullptr)
+					return nullptr;
+
+				// find unused entries
+				ull current = 0;
+				UnknownDirEntry *i;
+				for (i = (UnknownDirEntry *)directoryData; !i->isEnd(); i++)
+					if (i->isUnused())
+					{
+						if (++current == count)
+							return ++i - current;
+					}
+					else
+						current = 0;
+
+				// try to allocate after directory data has ended
+				ull offset = (byte *)i - directoryData;
+				if (offset + (count + 1) * sizeof(UnknownDirEntry) > length)
+				{
+					// not enough space, increase directory length by a cluster
+					if (!addClusters(1))
+						return nullptr; // no free clusters
+					i = (UnknownDirEntry *)(directoryData + offset);
+				}
+				// return the entries at the old end
+				auto newEnd = i + count;
+				newEnd->unused1[0] = 0x00; // mark the new end
+				return i;
+			}
+			bool checkShortFilename(const char shortFilename[11])
+			{
+				auto it = new DirectoryIterator(directoryData, part, startCluster, length);
+				while (!it->finished())
+				{
+					// compare short filename
+					bool eq = true;
+					for (int i = 0; i < 11; i++)
+						if (shortFilename[i] != it->getStdEntry()->filename[i])
+						{
+							eq = false;
+							break;
+						}
+					if (eq)
+					{
+						it->directoryData = nullptr; // so that deallocating the object will not erase the directoryData, still needed by this object
+						delete it;
+						return true;
+					}
+
+					it->advance();
+				}
+				it->directoryData = nullptr;
+				delete it;
+				return false;
+			}
+			bool checkFilename(const string16 &filename)
+			{
+				auto it = new DirectoryIterator(directoryData, part, startCluster, length);
+				while (!it->finished())
+				{
+					if (filename == it->getString())
+					{
+						it->directoryData = nullptr;
+						delete it;
+						return true;
+					}
+
+					it->advance();
+				}
+				it->directoryData = nullptr;
+				delete it;
+				return false;
+			}
+
+			Standard83Entry *createShortEntry(const char shortFilename[11])
+			{
+				// find space for the std entry
+				auto entry = findFree(1);
+				if (entry == nullptr)
+					return nullptr;
+				auto stdEntry = (Standard83Entry *)entry;
+
+				// put the short filename
+				stdEntry->setString(shortFilename);
+				stdEntry->reserved = 0;
+				stdEntry->attributes.set(FileAttributes::none);
+
+				// return the entry
+				return stdEntry;
+			}
 
 		public:
-			inline DirectoryIterator(byte *directoryData) : directoryData(directoryData), currentIterator((UnknownDirEntry *)directoryData), longNameBuffer()
+			inline DirectoryIterator(byte *directoryData, Partition *part, uint startCluster, ull length)
+				: directoryData(directoryData), currentIterator((UnknownDirEntry *)directoryData),
+				  longNameBuffer(), part(part), startCluster(startCluster), length(length)
 			{
-				if (currentIterator != nullptr)
+				if (currentIterator)
 				{
 					--currentIterator;
 					advance();
 				}
 			}
-			~DirectoryIterator() { delete[] directoryData; }
-
-			void advance()
+			inline DirectoryIterator(Partition *part, uint startCluster)
+				: directoryData(nullptr), currentIterator(nullptr),
+				  longNameBuffer(), part(part), startCluster(startCluster)
 			{
-				if (currentIterator == nullptr)
+				undo();
+				if (currentIterator)
+				{
+					--currentIterator;
+					advance();
+				}
+			}
+			~DirectoryIterator()
+			{
+				if (directoryData)
+					delete[] directoryData;
+			}
+
+			inline bool flush();
+			// re-read the directory from disk, undoing all the changes since the last flush
+			inline void undo();
+
+			void advance() override
+			{
+				if (finished())
 					return;
 				longNameBuffer.clear();
 
 				while (true)
 				{
 					++currentIterator;
-					if (currentIterator->unused1[0] == 0x00)
+					if (currentIterator->isEnd())
 					{
 						// end of directory reached
-						currentIterator = nullptr;
 						return;
 					}
-					if (currentIterator->unused1[0] == 0xe5)
+					if (currentIterator->isUnused())
 						// entry not used
 						continue;
+					ushort checksum;
 					if (currentIterator->attributes == FileAttributes::longName)
 					{
 						// long filename entry
 						LongFilenameEntry &entry = *(LongFilenameEntry *)currentIterator;
+
+						if (longNameBuffer.empty())
+							checksum = entry.shortNameChecksum;
+						else if (checksum != 0xffff && checksum != entry.shortNameChecksum)
+							checksum = 0xffff;
+
 						string16 segm = entry.getString();
 						longNameBuffer.insert(segm, entry.order & 0xf);
 						continue;
@@ -282,44 +593,125 @@ namespace Filesystem
 					if (entry.attributes.isAny(FileAttributes::volume_id))
 						// volume id, not a file
 						continue;
-					// apply long name if long name buffer is not empty
-					if (longNameBuffer.empty())
+
+					bool useShortFilename = false;
+					if (longNameBuffer.empty()) // no long filename
+						useShortFilename = true;
+					else if (checksum == 0xffff || checksum != FATchecksum(entry.filename)) // invalid checksum
 					{
-						// cout << "Debug:"
-						//  build the string16 name from the short name
-						string16 segm;
-						if (entry.attributes.isAny(FileAttributes::directory))
-						{
-							// this is a directory, no extension
-							for (byte i = 0; i < 11; i++)
-								if (entry.filename[i] != ' ')
-									segm += entry.filename[i];
-								else
-									break;
-						}
-						else
-						{
-							// this is a file, has extension
-							for (byte i = 0; i < 8; i++)
-								if (entry.filename[i] != ' ')
-									segm += entry.filename[i];
-								else
-									break;
-							segm += '.';
-							for (byte i = 8; i < 11; i++)
-								if (entry.filename[i] != ' ')
-									segm += entry.filename[i];
-								else
-									break;
-						}
-						longNameBuffer.insert(segm, 0);
+						longNameBuffer.clear();
+						useShortFilename = true;
 					}
+
+					if (useShortFilename)
+						//  build the string16 name from the short name
+						longNameBuffer.insert(shortFilenameAsString16(entry.filename), 0);
+
 					return;
 				}
 			}
-			bool finished() { return currentIterator == nullptr; }
-			string16 getString() { return *longNameBuffer.getContents(); }
-			Standard83Entry *getEntry() { return (Standard83Entry *)currentIterator; }
+			void advance(uint count) override
+			{
+				for (uint i = 0; i < count; i++)
+					advance();
+			}
+			void advanceTo(const string16 &entryName) override
+			{
+				while (!finished() && getString() != entryName)
+					advance();
+			}
+			bool finished() override { return currentIterator == nullptr || currentIterator->isEnd(); }
+			void reset() override
+			{
+				currentIterator = (UnknownDirEntry *)directoryData;
+				if (currentIterator != nullptr)
+				{
+					--currentIterator;
+					advance();
+				}
+			}
+
+			string16 getString() override { return *longNameBuffer.getContents(); }
+			Standard83Entry *getStdEntry() { return (Standard83Entry *)currentIterator; }
+			ull getSize() override { return getStdEntry()->fileSize; }
+
+			bool isDirectory() override { return getStdEntry()->attributes.isAny(FileAttributes::directory); }
+			bool isFile() override { return !getStdEntry()->attributes.isAny(FileAttributes::directory | FileAttributes::volume_id); }
+
+			Standard83Entry *createEntry(const string16 &entryName)
+			{
+				// ensure the name is unique
+				if (checkFilename(entryName))
+					return nullptr;
+
+				// get the short filename corresponding to the desired filename
+				char shortFilename[11];
+				bool needsLfn = getShortFilename(entryName, shortFilename);
+
+				if (needsLfn)
+				{
+					// the entry requires a long filename
+					// suffix the filename with a number to make it unique, or return nullptr if not possible
+					ull sfnlen = shortFilenameLen(shortFilename);
+					int suffix = 1;
+					while (true)
+					{
+						suffixShortFilename(shortFilename, suffix, sfnlen);
+						if (!checkShortFilename(shortFilename))
+							break;
+						suffix++;
+						if (suffix == maxShortFilenameSuffix)
+							return nullptr;
+					}
+
+					byte checksum = FATchecksum(shortFilename);
+
+					// find a space long enough for the entry and the long ilename
+					ull lfnCount = (entryName.length() - 1) / 13 + 1; // limit lfnCount to 0xf
+					if (lfnCount > 0xf)
+						return nullptr;
+					auto entries = findFree(lfnCount + 1);
+					if (entries == nullptr)
+						return nullptr;
+
+					// fill the long filename
+					for (ull i = lfnCount - 1; i < lfnCount; i--)
+					{
+						LongFilenameEntry *lfEntry = (LongFilenameEntry *)entries++;
+						lfEntry->attributes.set(FileAttributes::longName);
+						lfEntry->longEntryType = 0;
+						lfEntry->shortNameChecksum = checksum;
+						lfEntry->zero = 0;
+						byte order = i + 1;
+						lfEntry->order = ((order == lfnCount) ? (0x40 | order) : order);
+						lfEntry->setString(entryName, 13 * i);
+					}
+					// std entry
+					Standard83Entry *stdEntry = (Standard83Entry *)entries;
+					stdEntry->setString(shortFilename);
+					stdEntry->reserved = 0;
+					stdEntry->attributes = FileAttributes::none;
+					// return the entry
+					return stdEntry;
+				}
+				else
+					return createShortEntry(shortFilename);
+			}
+			void markUnused()
+			{
+				if (finished())
+					return;
+
+				auto preserveIterator = currentIterator--;
+				preserveIterator->setUnused();
+				while ((byte *)currentIterator >= directoryData && !currentIterator->isUnused() && currentIterator->attributes == FileAttributes::longName)
+					(currentIterator--)->setUnused();
+				currentIterator = preserveIterator;
+				// to do: move the entries that follow the deleted one, and maybe free up a cluster
+				advance();
+			}
+
+			friend Partition;
 		};
 		class Partition : public Filesystem::Partition
 		{
@@ -332,22 +724,94 @@ namespace Filesystem
 			byte fatCount, sectorsPerCluster;
 
 			// fsInfo
-			uint freeClusterCount;
-			uint freeClusterStart;
+			ull fsInfoSect;
+			FSInfoStruct *fsInfo;
+
+		private:
+			void flushFSInfo()
+			{
+				if (byte err = accessATAdrive(accessDir::write, disk, fsInfoSect, 1, fsInfo))
+				{
+					cout << "Error writing to disk!\n";
+					displayError(disk, err);
+				}
+			}
+
+		public:
 			uint AllocateCluster()
 			{
 				// decrease freeClusterCount
 				// update fats
 				// update freeClusterStart
+				if (fsInfo->freeClusterCount == 0)
+					return 0;
+				else
+					fsInfo->freeClusterCount--;
+				uint cluster = fsInfo->freeClusterStartHint;
+				while (getFatEntry(cluster))
+					cluster++;
+				fsInfo->freeClusterStartHint = cluster;
+				return cluster;
 			}
 			void DeallocateCluster(uint clusterNr)
 			{
 				// increase freeClusterCount
 				// update fats
 				// update freeClusterStart
+				updateFatEntry(clusterNr, 0);
+				fsInfo->freeClusterCount++;
+				if (clusterNr < fsInfo->freeClusterStartHint)
+					fsInfo->freeClusterStartHint = clusterNr;
+				flushFSInfo();
 			}
 
-			uint *fat;
+			// fat table info
+		private:
+			uint cachedFATSectorNr = -1;
+			uint *cachedFATSector = nullptr;
+			static constexpr ull FATentriesPerSector = 512 / sizeof(uint);
+
+			/// return the index within the loaded sector
+			uint loadFATSector(uint index)
+			{
+				ull sectorNr = index / FATentriesPerSector;
+				uint relIndex = index % FATentriesPerSector;
+				if (sectorNr == cachedFATSectorNr)
+					return relIndex;
+				if (cachedFATSector != nullptr)
+				{
+					// maybe flush it?
+					delete[] cachedFATSector;
+				}
+				cachedFATSector = (uint *)new byte[512];
+				if (byte err = accessATAdrive(accessDir::read, disk, fatOffset + sectorNr, 1, cachedFATSector))
+				{
+					delete[] cachedFATSector;
+					cachedFATSectorNr = -1;
+					cachedFATSector = nullptr;
+				}
+				cachedFATSectorNr = sectorNr;
+				return relIndex;
+			}
+			void writeCachedSector()
+			{
+				if (cachedFATSector)
+					for (uint i = 0; i < fatCount; i++)
+						accessATAdrive(accessDir::write, disk, fatOffset + i * sectorsPerFAT + cachedFATSectorNr, 1, cachedFATSector);
+			}
+
+		public:
+			uint getFatEntry(uint index)
+			{
+				index = loadFATSector(index);
+				return cachedFATSector[index] & 0x0fffffff; // ignore the highest 4 bits
+			}
+			void updateFatEntry(uint index, uint value)
+			{
+				index = loadFATSector(index);
+				cachedFATSector[index] = cachedFATSector[index] & 0xf0000000 | value & 0x0fffffff; // leave the highest 4 bits unchanged
+				writeCachedSector();
+			}
 
 			static constexpr uint freeCluster = 0,
 								  lastCluster = 0x0FFFFFF8,
@@ -360,74 +824,296 @@ namespace Filesystem
 
 			// virtual void formatPartition() {}
 
+			uint GetClusterChainLength(uint cluster)
+			{
+				uint clusterLen = 0;
+				for (; cluster < lastCluster; cluster = getFatEntry(cluster))
+					clusterLen++;
+				return clusterLen;
+			}
 			void ReadClusterChain(uint startCluster, byte *&buffer, ull &length)
 			{
-				// read a single cluster, multi-cluster reading not implemented yet
-				/*length = 512 * sectorsPerCluster;
-				buffer = new byte[length];
-				if (byte err = accessATAdrive(accessDir::read, disk, ClusterToLba(startCluster), sectorsPerCluster, buffer))
-				{
-					displayError(disk, err);
-					delete[] buffer;
-					buffer = nullptr;
-				}
-				// DisplyMemoryBlock(buffer, 256);
-				// System::pause(false);
-				return;*/
-
-				// determine how many clusters the file/directory occupies
-				ull clusterLen = 1;
-				uint next = fat[startCluster];
-				while (next < lastCluster)
-				{
-					next = fat[next];
-					clusterLen++;
-				}
-
 				// actually read all the clusters
-				length = 512 * sectorsPerCluster * clusterLen;
+				length = 512 * sectorsPerCluster * GetClusterChainLength(startCluster);
 				buffer = new byte[length];
 				byte *current = buffer;
-				for (next = startCluster; next < lastCluster; next = fat[next])
+				for (uint next = startCluster; next < lastCluster; next = getFatEntry(next))
 				{
 					accessATAdrive(accessDir::read, disk, ClusterToLba(next), sectorsPerCluster, current);
 					current += 512 * sectorsPerCluster;
 				}
 				// cout << "Read " << clusterLen << " clusters\n";
 			}
-
-			void CreateFile(string16 &path) override {}
-			bool ReadFile(string16 &path, byte *&contents, ull &length) override
+			void WriteCluster(uint cluster, byte *buffer, ull length)
 			{
-				// find the last separator in the path
+				ull clusterLen = 512 * sectorsPerCluster;
+				if (length < clusterLen)
+				{
+					// buffer smaller than a cluster, pad
+					byte *padded = new byte[clusterLen];
+					memcpy(padded, buffer, length);
+					if (byte err = accessATAdrive(accessDir::write, disk, ClusterToLba(cluster), sectorsPerCluster, padded))
+					{
+						cout << "Error writing to cluster " << cluster << '\n';
+						displayError(disk, err);
+					}
+					delete[] padded;
+					return;
+				}
+				if (byte err = accessATAdrive(accessDir::write, disk, ClusterToLba(cluster), sectorsPerCluster, buffer))
+				{
+					cout << "Error writing to cluster " << cluster << '\n';
+					displayError(disk, err);
+				}
+			}
+			bool WriteClusterChain(uint &startCluster, byte *buffer, ull length)
+			{
+				// cout << "Writing cluster chain (" << length << " bytes), starting at cluster " << startCluster << '\n';
+				ull clusterLen = 512 * sectorsPerCluster;
+				uint clusterChainLen = startCluster < 2 ? 0 : GetClusterChainLength(startCluster),
+					 neededClusterChainLen = length == 0 ? 0 : (length - 1) / clusterLen + 1;
+				// cout << "Cluster chain length: " << clusterChainLen << "\nNeeded cluster chain length: " << neededClusterChainLen << '\n';
+				if (clusterChainLen < neededClusterChainLen)
+				{
+					// cluster chain not long enough, allocate missing clusters and write
+					uint cluster = startCluster, prevCluster = 0;
+					neededClusterChainLen -= clusterChainLen;
+					if (neededClusterChainLen > fsInfo->freeClusterCount)
+						return false;
+					bool isFirstCluster = true;
+					while (clusterChainLen > 0)
+					{
+						WriteCluster(cluster, buffer, length);
+						buffer += clusterLen;
+						length -= clusterLen;
+						prevCluster = cluster;
+						cluster = getFatEntry(cluster);
+						clusterChainLen--;
+						isFirstCluster = false;
+					}
+					while (neededClusterChainLen > 0)
+					{
+						cluster = AllocateCluster();
+						if (isFirstCluster)
+						{
+							startCluster = cluster;
+							isFirstCluster = false;
+						}
+						WriteCluster(cluster, buffer, length);
+						buffer += clusterLen;
+						length -= clusterLen;
+						updateFatEntry(prevCluster, cluster);
+						prevCluster = cluster;
+						neededClusterChainLen--;
+					}
+					if (cluster)
+						updateFatEntry(cluster, lastCluster);
+					return true;
+				}
+				else
+				{
+					// cluster chain already long enough, write and deallocate surplus
+					uint cluster = startCluster, prevCluster = 0;
+					while (neededClusterChainLen > 0)
+					{
+						WriteCluster(cluster, buffer, length);
+						buffer += clusterLen;
+						length -= clusterLen;
+						prevCluster = cluster;
+						cluster = getFatEntry(cluster);
+						neededClusterChainLen--;
+					}
+					if (startCluster == 0)
+						return true;
+					updateFatEntry(prevCluster, lastCluster);
+					while (cluster < lastCluster)
+					{
+						prevCluster = cluster;
+						cluster = getFatEntry(cluster);
+						DeallocateCluster(prevCluster);
+						updateFatEntry(prevCluster, freeCluster);
+					}
+					return true;
+				}
+			}
+
+			inline void separateParentpathFromFilepath(string16 &path, string16 &filename)
+			{
 				ull slash = path.lastOf('/');
 				if (slash == string16::npos)
-					return false;
+				{
+					// no slash, all is filename
+					filename = path;
+					path.erase();
+					return;
+				}
+				ull filenameLen = path.length() - ++slash;
+				filename.assign(path.data() + slash, filenameLen);
+				path.erase(slash - 1, filenameLen + 1);
+			}
+			inline void getTopDirectoryPath(string16 &path, string16 &top)
+			{
+				ull slash = path.firstOf('/');
+				if (slash == string16::npos)
+				{
+					top.assign(path);
+					path.erase();
+				}
+				else
+				{
+					top.assign(path.data(), slash);
+					path.erase(0, slash + 1);
+				}
+			}
+			inline ull diskSizeFromByteSize(ull byteLength)
+			{
+				ull sectorLen = 512 * sectorsPerCluster;
+				ull rem = byteLength % sectorLen;
+				return rem == 0 ? byteLength : (byteLength - rem + sectorLen);
+			}
 
+			bool CreateFile(string16 &path, byte *contents, ull length) override
+			{
+				string16 filename;
+				separateParentpathFromFilepath(path, filename);
+				if (path.length() == 0)
+					path = u"/";
+
+				auto it = GetDirectoryIterator(path); // to do: if the directory is read-only, do not remove file
+				if (it == nullptr)
+					return false;
+				auto entry = it->createEntry(filename);
+				if (entry == nullptr || !it->flush())
+				{
+					// could not add new entry
+					delete it;
+					return false;
+				}
+				if (contents != nullptr && length > 0)
+				{
+					uint startCluster = 0;
+					if (!WriteClusterChain(startCluster, contents, length))
+					{
+						// failed to write, leave the entry in the directory though
+						delete it;
+						return false;
+					}
+					entry->setFirstCluster(startCluster);
+					it->flush();
+				}
+				delete it;
+				return true;
+			}
+			bool RemoveFile(string16 &path) override
+			{
+				string16 filename;
+				separateParentpathFromFilepath(path, filename);
+				if (path.length() == 0)
+					path = u"/";
+
+				auto it = GetDirectoryIterator(path); // to do: if the directory is read-only, do not remove file
+				if (it == nullptr)
+					return false;
+				it->advanceTo(filename);
+				if (it->finished())
+				{
+					// file not found
+					delete it;
+					return false;
+				}
+				Standard83Entry *entry = it->getStdEntry();
+				// check that the entry is not a directory or volume id
+				if (entry->attributes.isAny(FileAttributes::directory | FileAttributes::volume_id))
+				{
+					delete it;
+					return false;
+				}
+				//  deallocate all clusters
+				uint startCluster = it->getStdEntry()->getFirstCluster();
+				WriteClusterChain(startCluster, nullptr, 0);
+
+				// deletion from directory
+				it->markUnused();
+				it->flush();
+				delete it;
+				return true;
+			}
+
+			bool ReadFile(string16 &path, byte *&contents, ull &length) override
+			{
 				// separate parent directory path from filename
-				string16 dirPath(path.data(), slash + 1);
-				path.erase(0, slash + 1);
+				string16 filename;
+				separateParentpathFromFilepath(path, filename);
+				if (path.length() == 0)
+					path = u"/";
 
 				// traverse the directory to find the file
-				auto it = GetDirectoryIterator(dirPath);
-				while (!it->finished())
+				auto it = GetDirectoryIterator(path);
+				if (it == nullptr)
+					return false;
+				it->advanceTo(filename);
+				if (it->finished())
 				{
-					if (it->getString() == path)
-					{
-						// file found
-						auto entry = it->getEntry();
-						ReadClusterChain(entry->getFirstCluster(), contents, length);
-						length = it->getEntry()->fileSize;
-						delete it;
-						return true;
-					}
-					it->advance();
+					// file not found
+					delete it;
+					return false;
+				}
+				auto entry = it->getStdEntry();
+
+				// check that the entry is a file
+				if (entry->attributes.isAny(FileAttributes::directory | FileAttributes::volume_id))
+				{
+					delete it;
+					return false;
 				}
 
+				uint firstCluster = entry->getFirstCluster();
+				if (firstCluster > 1)
+					ReadClusterChain(firstCluster, contents, length);
+				else
+					contents = nullptr;
+				length = it->getStdEntry()->fileSize;
 				delete it;
-				return false;
+				return true;
 			}
-			void WriteFile(string16 &path, byte *contents, ull length) override {}
+			bool WriteFile(string16 &path, byte *contents, ull length) override
+			{
+				string16 filename;
+				separateParentpathFromFilepath(path, filename);
+				if (path.length() == 0)
+					path = u"/";
+
+				auto it = GetDirectoryIterator(path);
+				if (it == nullptr)
+					return false;
+				it->advanceTo(filename);
+
+				if (it->finished())
+				{
+					// file not found
+					// to-do: file not found, create it
+					delete it;
+					return false;
+				}
+				auto entry = it->getStdEntry();
+				// make sure the entry is a file
+				if (entry->attributes.isAny(FileAttributes::directory | FileAttributes::fileAttributes::volume_id | FileAttributes::readOnly))
+				{
+					delete it;
+					return false;
+				}
+
+				uint firstCluster = entry->getFirstCluster();
+				bool success = WriteClusterChain(firstCluster, contents, length);
+				entry->setFirstCluster(firstCluster);
+				if (success)
+				{
+					entry->fileSize = length;
+					it->flush();
+				}
+				delete it;
+				return success;
+			}
 
 			DirectoryIterator *GetDirectoryIterator(string16 &path) override
 			{
@@ -442,49 +1128,158 @@ namespace Filesystem
 
 				// analyse path
 				string16 part;
-				ull bufferSize;
-				byte *buffer;
-				ReadClusterChain(rootDirCluster, buffer, bufferSize);
+				uint cluster = rootDirCluster;
 				while (path.length() > 0)
 				{
-					ull slash = path.firstOf('/');
-					if (slash != string16::npos)
-					{
-						// slash found
-						part.assign(path.data(), slash);
-						path.erase(0, slash + 1);
-					}
-					else
-					{
-						// slash not found
-						part.assign(path);
-						path.erase();
-					}
+					getTopDirectoryPath(path, part);
 
-					DirectoryIterator iterator(buffer);
-					bool cont = false;
-					while (!iterator.finished())
+					DirectoryIterator iterator(this, cluster);
+					iterator.advanceTo(part);
+					if (iterator.finished())
+						return nullptr;
+					Standard83Entry *entry = iterator.getStdEntry();
+					if (!entry->attributes.isAny(FileAttributes::directory))
+						return nullptr;
+					cluster = entry->getFirstCluster();
+				}
+				return new DirectoryIterator(this, cluster);
+			}
+			bool RemoveDirectory(std::string16 &path) override
+			{
+				if (path[path.length() - 1] == '/')
+					path.pop_back();
+
+				string16 dirname;
+				separateParentpathFromFilepath(path, dirname);
+				if (dirname == u"." || dirname == u"..")
+					return false; // cannot delete "." and ".."
+				if (path.length() == 0)
+					path = u"/";
+
+				auto it = GetDirectoryIterator(path);
+				if (it == nullptr)
+					return false;
+
+				it->advanceTo(dirname);
+				if (it->finished())
+				{
+					// file not found
+					delete it;
+					return false;
+				}
+				auto entry = it->getStdEntry();
+				// check if the entry is a directory and if the directory is empty
+				if (!entry->attributes.isAny(FileAttributes::directory))
+				{
+					delete it;
+					return false;
+				}
+				uint startCluster = entry->getFirstCluster();
+				DirectoryIterator subDir(this, startCluster);
+				while (!subDir.finished())
+				{
+					string16 subEntry = subDir.getString();
+					if (subEntry != u"." && subEntry != u"..")
 					{
-						if (iterator.getString() == part)
-						{
-							ReadClusterChain(iterator.getEntry()->getFirstCluster(), buffer, bufferSize);
-							cont = true;
-							break;
-						}
-						iterator.advance();
+						delete it;
+						return false;
 					}
-					if (cont)
-						continue;
-					return nullptr;
+					subDir.advance();
 				}
 
-				// load the cluster/clusters
-
-				return new DirectoryIterator(buffer);
+				// remove the directory
+				WriteClusterChain(startCluster, nullptr, 0);
+				it->markUnused();
+				it->flush();
+				delete it;
+				return true;
 			}
-			void RemoveDirectory(std::string16 &path) override {}
-			virtual void CreateDirectory(std::string16 &path, std::string16 &name) override {}
+			bool CreateDirectory(std::string16 &path) override
+			{
+				// the last char could be a slash for directories
+				if (path[path.length() - 1] == '/')
+					path.pop_back();
+
+				string16 dirname;
+				separateParentpathFromFilepath(path, dirname);
+				if (path.length() == 0)
+					path = u"/";
+
+				auto it = GetDirectoryIterator(path);
+				if (it == nullptr) // check that the iterator is valid
+					return false;
+				auto entry = it->createEntry(dirname);
+				if (entry == nullptr || !it->flush())
+				{
+					// could not add new entry
+					delete it;
+					return false;
+				}
+				entry->attributes = FileAttributes::directory;
+				entry->fileSize = 0;
+
+				// allocate a cluster for the directory data
+				ull dirDataLen = 3 * sizeof(UnknownDirEntry);
+				UnknownDirEntry *dirData = new UnknownDirEntry[3];
+				dirData[0].unused1[0] = 0;
+				uint startCluster = 0;
+				if (!WriteClusterChain(startCluster, (byte *)dirData, dirDataLen))
+				{
+					// could not write directory data: delete the added entry and cleanup allocated data
+					delete[] dirData;
+					it->reset();
+					it->advanceTo(dirname);
+					it->markUnused();
+					it->flush();
+					delete it;
+					return false;
+				}
+				// create the initial directory entries ("." and "..")
+				cout << "DBG: " << startCluster << '\n';
+				DirectoryIterator subDir((byte *)dirData, this, startCluster, dirDataLen);
+
+				auto itself = subDir.createShortEntry(".          ");
+				itself->attributes = FileAttributes::directory;
+				itself->setFirstCluster(startCluster);
+				itself->fileSize = 0;
+
+				auto parent = subDir.createShortEntry("..         ");
+				parent->attributes = FileAttributes::directory;
+				parent->setFirstCluster(it->startCluster);
+				parent->fileSize = 0;
+
+				entry->setFirstCluster(startCluster);
+				subDir.flush();
+				it->flush();
+				delete it;
+				return true;
+			}
 		};
+
+		inline bool DirectoryIterator::flush() { return part->WriteClusterChain(startCluster, directoryData, length); }
+		inline void DirectoryIterator::undo()
+		{
+			ull offset = (byte *)currentIterator - directoryData;
+			if (directoryData)
+				delete[] directoryData;
+			part->ReadClusterChain(startCluster, directoryData, length);
+			currentIterator = (UnknownDirEntry *)(directoryData + offset);
+		}
+		inline bool DirectoryIterator::addClusters(ull count)
+		{
+			if (part->fsInfo->freeClusterCount < count)
+				return false;
+
+			ull newLength = length + 512 * part->sectorsPerCluster * count,
+				currentIteratorOffset = (byte *)currentIterator - directoryData;
+			byte *newDirectoryData = new byte[newLength];
+			memcpy(newDirectoryData, directoryData, length);
+			delete[] directoryData;
+			directoryData = newDirectoryData;
+			currentIterator = (UnknownDirEntry *)(directoryData + currentIteratorOffset);
+			length = newLength;
+			return true;
+		}
 
 		bool tryLoadPartition(const Device &disk, MBRpartitionEntry &part)
 		{
@@ -517,8 +1312,6 @@ namespace Filesystem
 			}
 
 			// do something
-			cout << "Last known free cluster count: " << fsInfo.freeClusterCount << "\n"
-				 << "Hint for first free cluster: " << fsInfo.clusterStartHint << '\n';
 			FAT32::Partition *ptr = new FAT32::Partition;
 
 			// data about the partition
@@ -535,39 +1328,11 @@ namespace Filesystem
 			ptr->rootDirCluster = ebr.rootDirClusterNr;
 			ptr->dataSectorOffset = ptr->fatOffset + bpm.nrOfFATs * ebr.sectorsPerFAT - 2 * bpm.sectorsPerCluster;
 
-			ptr->freeClusterCount = fsInfo.freeClusterCount;
-			ptr->freeClusterStart = fsInfo.clusterStartHint;
-
-			// load the whole fat in memory (just one for now)
-			byte *buffer = new byte[512 * ptr->sectorsPerFAT];
-			// cout << "Sectors per FAT: " << ptr->sectorsPerFAT << ", drive " << ptr->disk << '\n';
-			ull fatSectorsRead = 0;
-			uint sectorsToRead = ptr->sectorsPerFAT;
-			while (sectorsToRead > 0xff)
-			{
-				if (byte err = accessATAdrive(accessDir::read, ptr->disk, ptr->fatOffset + fatSectorsRead, 0xff, buffer + fatSectorsRead * 512))
-				{
-					Disk::displayError(ptr->disk, err);
-					delete[] fsInfoSector;
-					delete[] bootRecord;
-					return false;
-				}
-
-				sectorsToRead -= 0xff;
-				fatSectorsRead += 0xff;
-			}
-			if (byte err = accessATAdrive(accessDir::read, ptr->disk, ptr->fatOffset + fatSectorsRead, sectorsToRead, buffer + fatSectorsRead * 512))
-			{
-				Disk::displayError(ptr->disk, err);
-				delete[] fsInfoSector;
-				delete[] bootRecord;
-				return false;
-			}
-			ptr->fat = (uint *)buffer;
+			ptr->fsInfoSect = part.lbaStart + ebr.FSinfoSectNr;
+			ptr->fsInfo = (FSInfoStruct *)fsInfoSector;
 
 			partitions->push_back(ptr);
 
-			delete[] fsInfoSector;
 			delete[] bootRecord;
 			return true;
 		}
@@ -576,6 +1341,10 @@ namespace Filesystem
 	void Initialize()
 	{
 		partitions = new vector<Partition *>();
+	}
+	void CleanUp()
+	{
+		// nothing for now
 	}
 	bool intersectPartition(const MBRpartitionEntry &part1, const MBRpartitionEntry &part2)
 	{
@@ -612,37 +1381,111 @@ namespace Filesystem
 			tryLoadPartition(disk, partitions[i]);
 	}
 
-	bool ReadFile(const string16 &path, byte *&contents, ull &length)
+	Partition *getPartition(char letter)
 	{
-		string16 path_copy = path;
-		if (path_copy.length() > 1 && path_copy[1] != ':')
-		{
+		for (auto &part : *partitions)
+			if (part->letter == letter)
+				return part;
+		return nullptr;
+	}
+
+	bool CreateFile(const string16 &path, byte *contents, ull length)
+	{
+		if (path.length() > 1 && path[1] != ':')
 			// path does not contain a drive letter
 			return false;
-		}
-		char drive = toLower(path_copy[0]);
-		path_copy.erase(0, 2);
 
-		for (auto &part : *partitions)
-			if (part->letter == drive)
-				return part->ReadFile(path_copy, contents, length);
-		return false;
+		auto part = getPartition(toLower(path[0]));
+		if (part == nullptr)
+			return false;
+
+		string16 path_copy(path.data() + 2);
+		return part->CreateFile(path_copy, contents, length);
+	}
+	bool RemoveFile(const string16 &path)
+	{
+		if (path.length() > 1 && path[1] != ':')
+			return false;
+
+		auto part = getPartition(toLower(path[0]));
+		if (part == nullptr)
+			return false;
+
+		string16 path_copy(path.data() + 2);
+		return part->RemoveFile(path_copy);
+	}
+
+	bool ReadFile(const string16 &path, byte *&contents, ull &length)
+	{
+		if (path.length() > 1 && path[1] != ':')
+			return false;
+
+		auto part = getPartition(toLower(path[0]));
+		if (part == nullptr)
+			return false;
+
+		string16 path_copy(path.data() + 2);
+		return part->ReadFile(path_copy, contents, length);
+	}
+	bool WriteFile(const string16 &path, byte *contents, ull length)
+	{
+		if (path.length() > 1 && path[1] != ':')
+			return false;
+
+		auto part = getPartition(toLower(path[0]));
+		if (part == nullptr)
+			return false;
+
+		string16 path_copy(path.data() + 2);
+		return part->WriteFile(path_copy, contents, length);
 	}
 
 	DirectoryIterator *GetDirectoryIterator(const string16 &path)
 	{
-		string16 path_copy = path;
-		if (path_copy.length() > 1 && path_copy[1] != ':')
-		{
-			// path does not contain a drive letter
+		if (path.length() > 1 && path[1] != ':')
 			return nullptr;
-		}
-		char drive = toLower(path_copy[0]);
-		path_copy.erase(0, 2);
 
-		for (auto &part : *partitions)
-			if (part->letter == drive)
-				return part->GetDirectoryIterator(path_copy);
-		return nullptr;
+		auto part = getPartition(toLower(path[0]));
+		if (part == nullptr)
+			return nullptr;
+
+		string16 path_copy(path.data() + 2);
+		return part->GetDirectoryIterator(path_copy);
+	}
+	bool RemoveDirectory(const string16 &path)
+	{
+		if (path.length() > 1 && path[1] != ':')
+			return false;
+
+		auto part = getPartition(toLower(path[0]));
+		if (part == nullptr)
+			return false;
+
+		string16 path_copy(path.data() + 2);
+		return part->RemoveDirectory(path_copy);
+	}
+	bool CreateDirectory(const string16 &path)
+	{
+		if (path.length() > 1 && path[1] != ':')
+			return false;
+
+		auto part = getPartition(toLower(path[0]));
+		if (part == nullptr)
+			return false;
+
+		string16 path_copy(path.data() + 2);
+		return part->CreateDirectory(path_copy);
+	}
+
+	bool Copy(const string16 &src, const string16 &dest)
+	{
+	}
+	bool Move(const string16 &src, const string16 &dest)
+	{
+	}
+
+	const char *boolToString(bool value) { return value ? "true" : "false"; }
+	void test()
+	{
 	}
 }
