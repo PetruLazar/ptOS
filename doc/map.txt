@@ -1,10 +1,18 @@
-0x1000	-> 0x4fff	- paging 				//before memory initialization
-0x1000	-> 0x1fff	- idt					//after memory initialization
-0x2000	-> 0x2fff	- gdt					//after memory initialization
-	  0x5000		- memory map entry count
+during boot before memory initialization:
+0x1000	-> 0x4fff	- paging
+     0x5000		- memory map entry count
 0x5018	->  ????	- memory map
- ????	<- 0x8000	- bootloader stack
-0x8000	-> 0x20000	- kernel
- ????	<- 0x50000	- kernel stack
+ ????	<- 0x8000	- stack
+0x8000 -> 0x20000	- kernel
 0xa0000	-> 0xbffff	- hardware mapped
 0xc0000	->  ????	- rom, hardware mapped, shadow ram
+
+after memory initialization:
+0x1000	-> 0x1fff	- idt
+0x2000	-> 0x2fff	- gdt
+	  0x5000		- memory map entry count
+0x5018	->  ????	- memory map
+0x8000	-> 0x20000	- kernel
+ ????	<- 0x50000	- kernel stack
+
+after moving some structures to the heap:
