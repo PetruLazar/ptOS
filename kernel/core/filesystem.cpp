@@ -1235,7 +1235,6 @@ namespace Filesystem
 					return false;
 				}
 				// create the initial directory entries ("." and "..")
-				cout << "DBG: " << startCluster << '\n';
 				DirectoryIterator subDir((byte *)dirData, this, startCluster, dirDataLen);
 
 				auto itself = subDir.createShortEntry(".          ");
@@ -1477,15 +1476,10 @@ namespace Filesystem
 		return part->CreateDirectory(path_copy);
 	}
 
-	bool Copy(const string16 &src, const string16 &dest)
-	{
-	}
 	bool Move(const string16 &src, const string16 &dest)
 	{
 	}
-
-	const char *boolToString(bool value) { return value ? "true" : "false"; }
-	void test()
+	bool Copy(const string16 &src, const string16 &dest)
 	{
 	}
 }

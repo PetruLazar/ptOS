@@ -15,7 +15,8 @@
 #include "drivers/pci.h"
 #include "core/filesystem.h"
 #include "core/sys.h"
-
+#include "utils/math.h"
+#include "core/paging.h"
 using namespace std;
 
 #define QEMU
@@ -25,21 +26,6 @@ void delay()
 {
 	for (int i = 0; i < waitTime; i++)
 		;
-}
-
-class Test
-{
-	ull x, y;
-
-public:
-	Test() { cout << "+\n"; }
-	Test(const Test &t) { cout << "+\n"; }
-	Test(Test &&t) { cout << "+\n"; }
-	~Test() { cout << "-\n"; }
-};
-Test test()
-{
-	return Test();
 }
 
 // calling convention: 	rdi, rsi, rdx, rcx, r8, r9, stack...
@@ -173,29 +159,61 @@ extern void main()
 		case Keyboard::KeyEvent::KeyCode::alpha1:
 		case Keyboard::KeyEvent::KeyCode::numpad_1:
 		{
-			byte *buffer = new byte[512], err;
-			for (int i = 0; i < 512; i++)
-				buffer[i] = Random::get() & 0xff;
-			if (err = Disk::accessATAdrive(Disk::accessDir::read, 0, 0x0, 1, buffer))
+			basic_string<byte *> allocations;
+			for (int i = 0; i < 100; i++)
 			{
-				Disk::displayError(0, err);
-				break;
+				switch (Random::get() % 3)
+				{
+				case 0:
+				case 2:
+				{
+					ull size = Random::get() % 10000 + 1;
+					byte *block = (byte *)Memory::Allocate(size, 0x1000);
+					allocations.push_back(block);
+					cout << "Allocated " << size << " bytes at " << block << '\n';
+					break;
+				}
+				case 1:
+				{
+					ull len = allocations.length();
+					if (!len)
+					{
+						cout << "No allocations to delete\n";
+						break;
+					}
+					ull index = Random::get() % len;
+					byte *block = allocations[index];
+					delete[] block;
+					allocations.erase(index);
+					cout << "Deallocated block at " << block << '\n';
+					break;
+				}
+				}
+
+				System::pause(false);
 			}
-			for (int i = 0; i < 512; i += 16)
-				displayMemoryRow(buffer + i);
-			delete[] buffer;
+
+			for (auto &block : allocations)
+			{
+				delete[] block;
+				cout << "Deallocated block at " << block << '\n';
+			}
+
+			cout << '\n';
 		}
 		break;
 		case Keyboard::KeyEvent::KeyCode::alpha2:
 		case Keyboard::KeyEvent::KeyCode::numpad_2:
 		{
-			Filesystem::test();
-			break;
-			Disk::Device *dev = Disk::devices;
-			cout << dev[0].reserved << ' '
-				 << dev[1].reserved << ' '
-				 << dev[2].reserved << ' '
-				 << dev[3].reserved << '\n';
+			while (true)
+			{
+				uint nr, align;
+				cin >> nr;
+				if (!nr)
+					break;
+				cin >> align;
+				cout << "result: " << alignValueUpwards(nr, align) << '\n';
+			}
 		}
 		break;
 		case Keyboard::KeyEvent::KeyCode::alpha3:
@@ -299,13 +317,13 @@ extern void main()
 		case Keyboard::KeyEvent::KeyCode::alpha6:
 		case Keyboard::KeyEvent::KeyCode::numpad_6:
 		{
-			string contents = "Might not seem like it, but this file is a big milestone for PTOS. This file has been entirely created and written to in the PTOS' FAT32 Filesystem Driver.";
-			cout << contents << '\n';
+			// string contents = "Might not seem like it, but this file is a big milestone for PTOS. This file has been entirely created and written to in the PTOS' FAT32 Filesystem Driver.";
+			// cout << contents << '\n';
 
-			if (Filesystem::WriteFile(u"C:/New Text Document.txt", (byte *)contents.data(), contents.getSize()))
-				cout << "Write complete!\n";
-			else
-				cout << "Write failed!\n";
+			// if (Filesystem::WriteFile(u"C:/New Text Document.txt", (byte *)contents.data(), contents.getSize()))
+			// 	cout << "Write complete!\n";
+			// else
+			// 	cout << "Write failed!\n";
 		}
 		break;
 		case Keyboard::KeyEvent::KeyCode::alpha7:

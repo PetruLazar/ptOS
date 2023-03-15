@@ -73,9 +73,8 @@ public:
 		qword heapSize;
 		AllocatorEntry *firstAllocation, *lastAllocation;
 
+		inline bool fitsAllocation(void *&start, void *end, qword allocationSize, ull alignment);
 		inline void *heapStart();
-		inline bool fitsAllocation(void *start, void *end, qword allocationSize);
-
 		static Heap *selected;
 
 	public:
@@ -85,15 +84,17 @@ public:
 		inline qword getSize();
 		inline ull getAllocationCount();
 
-		void *Allocate(qword allocationSize);
+		void *Allocate(qword allocationSize, ull alignment);
 		inline void Deallocate(void *ptr);
 
-		inline static void *AllocateFromSelected(qword allocationSize);
+		inline static void *AllocateFromSelected(qword allocationSize, ull alignment);
 		inline static void DeallocateFromSelected(void *ptr);
 		inline static void DeallocateFromSelected(void *ptr, ull size);
 
 		static ull getAllocationCountFromSelected();
 	};
+
+	static void *Allocate(ull size, ull alignment);
 };
 
 void *malloc(ull size);
@@ -106,6 +107,7 @@ extern "C" void memset(void *ptr, ull len, byte val);
 
 void *operator new(size_t size);
 void *operator new[](size_t size);
+void operator delete(void *ptr);
 void operator delete(void *ptr, size_t size);
 void operator delete[](void *ptr);
 void operator delete[](void *ptr, size_t size);

@@ -3,6 +3,7 @@
 #include "paging.h"
 #include "../cpu/idt.h"
 #include "sys.h"
+#include "../utils/math.h"
 
 using namespace std;
 
@@ -152,10 +153,6 @@ void Memory::DisplayMap()
 	}
 	cout << '\n';
 }
-qword ceilIntegerDivide(qword a, qword b)
-{
-	return a == 0 ? 0 : (a - 1) / b + 1;
-}
 void Memory::Initialize()
 {
 	// return;
@@ -173,8 +170,9 @@ void Memory::Initialize()
 	pml4->clearAll();
 
 	// identity map the first 2MB of ram
-	pml4->mapRegion(nextFree, 0x1000, 0x1000, 0x200000 - 0x1000);
-	setCR3(pml4);
+	// pml4->mapRegion(nextFree, 0x1000, 0x1000, 0x200000 - 0x1000);
+	pml4->mapRegion(nextFree, 0, 0, 0x200000);
+	pml4->setAsCurrent();
 
 	// identity map the rest of the ram region
 	sqword leftToMap = (sqword)entry.base_address + entry.length - 0x200000;
@@ -237,7 +235,19 @@ inline bool Memory::Heap::AllocatorEntry::free()
 }
 
 inline void *Memory::Heap::heapStart() { return (void *)(this + 1); }
-inline bool Memory::Heap::fitsAllocation(void *start, void *end, qword allocationSize) { return (byte *)end - (byte *)start >= allocationSize + AllocatorEntry::maintenanceSize; }
+// allocationSize is assumed to be a multiple of alignment
+inline bool Memory::Heap::fitsAllocation(void *&start, void *end, qword allocationSize, ull alignment)
+{
+	ull alignedStart = alignValueUpwards((ull)start + AllocatorEntry::headerSize, alignment) - AllocatorEntry::headerSize;
+	// from "if ((ull)end - alignedStart >= allocationSize + AllocatorEntry::maintenanceSize)",
+	//		rearrange so that there are no subtractions, since there are only unsigned numbers
+	if ((ull)end >= allocationSize + AllocatorEntry::maintenanceSize + alignedStart)
+	{
+		start = (void *)alignedStart;
+		return true;
+	}
+	return false;
+}
 
 inline void Memory::Heap::selectHeap(Heap *heap) { selected = heap; }
 inline Memory::Heap *Memory::Heap::build(void *address, qword size)
@@ -258,26 +268,28 @@ inline ull Memory::Heap::getAllocationCount()
 }
 
 Memory::Heap *Memory::Heap::selected = nullptr;
-void *Memory::Heap::Allocate(qword allocationSize)
+void *Memory::Heap::Allocate(qword allocationSize, ull alignment)
 {
-	// todo: align the allocations on a 16 byte boundary
-	allocationSize = ((allocationSize + 0x3) & (~(qword)0xf)) + 0xc;
+	allocationSize = alignValueUpwards(allocationSize, alignment);
+	void *alignedStart;
 
 	// if there is no allocation, try to begin filling the heap
 	if (!firstAllocation)
 	{
-		if (AllocatorEntry::maintenanceSize > heapSize)
+		alignedStart = heapStart();
+		if (!fitsAllocation(alignedStart, (byte *)alignedStart + heapSize, allocationSize, alignment))
 			return nullptr;
-		AllocatorEntry *obj = AllocatorEntry::build(heapStart(), allocationSize, nullptr, nullptr);
+		AllocatorEntry *obj = AllocatorEntry::build(alignedStart, allocationSize, nullptr, nullptr);
 		firstAllocation = obj;
 		lastAllocation = obj;
 		return obj->getAllocatedBlock();
 	}
 
 	// try before the first
-	if (fitsAllocation(heapStart(), firstAllocation, allocationSize))
+	alignedStart = heapStart();
+	if (fitsAllocation(alignedStart, firstAllocation, allocationSize, alignment))
 	{
-		AllocatorEntry *obj = AllocatorEntry::build(heapStart(), allocationSize, nullptr, firstAllocation);
+		AllocatorEntry *obj = AllocatorEntry::build(alignedStart, allocationSize, nullptr, firstAllocation);
 		firstAllocation->prevAllocation = obj;
 		firstAllocation = obj;
 		return obj->getAllocatedBlock();
@@ -286,9 +298,10 @@ void *Memory::Heap::Allocate(qword allocationSize)
 	// try inbetween all the entries
 	for (AllocatorEntry *i = firstAllocation; i != lastAllocation; i = i->nextAllocation)
 	{
-		if (fitsAllocation(i->getSpaceAfter(), i->nextAllocation, allocationSize))
+		alignedStart = i->getSpaceAfter();
+		if (fitsAllocation(alignedStart, i->nextAllocation, allocationSize, alignment))
 		{
-			AllocatorEntry *obj = AllocatorEntry::build(i->getSpaceAfter(), allocationSize, i, i->nextAllocation);
+			AllocatorEntry *obj = AllocatorEntry::build(alignedStart, allocationSize, i, i->nextAllocation);
 			i->nextAllocation = obj;
 			obj->nextAllocation->prevAllocation = obj;
 			return obj->getAllocatedBlock();
@@ -296,9 +309,10 @@ void *Memory::Heap::Allocate(qword allocationSize)
 	}
 
 	// try after the last, if there is no space, return nullptr
-	if (fitsAllocation(lastAllocation->getSpaceAfter(), (byte *)heapStart() + heapSize, allocationSize))
+	alignedStart = lastAllocation->getSpaceAfter();
+	if (fitsAllocation(alignedStart, (byte *)heapStart() + heapSize, allocationSize, alignment))
 	{
-		AllocatorEntry *obj = AllocatorEntry::build(lastAllocation->getSpaceAfter(), allocationSize, lastAllocation, nullptr);
+		AllocatorEntry *obj = AllocatorEntry::build(alignedStart, allocationSize, lastAllocation, nullptr);
 		lastAllocation->nextAllocation = obj;
 		lastAllocation = obj;
 		return obj->getAllocatedBlock();
@@ -320,12 +334,12 @@ inline void Memory::Heap::Deallocate(void *ptr)
 		lastAllocation = obj->prevAllocation;
 }
 
-inline void *Memory::Heap::AllocateFromSelected(qword allocationSize)
+inline void *Memory::Heap::AllocateFromSelected(qword allocationSize, ull alignment)
 {
 #ifdef ALLOC_DBG_MSG
 	cout << "Allocating " << allocationSize << " bytes\n";
 #endif
-	return selected ? selected->Allocate(allocationSize) : nullptr;
+	return selected ? selected->Allocate(allocationSize, alignment) : nullptr;
 }
 inline void Memory::Heap::DeallocateFromSelected(void *ptr)
 {
@@ -346,10 +360,12 @@ ull Memory::Heap::getAllocationCountFromSelected()
 	return selected->getAllocationCount();
 }
 
-void *malloc(ull size) { return Memory::Heap::AllocateFromSelected(size); }
+void *Memory::Allocate(ull size, ull alignment) { return Heap::AllocateFromSelected(size, alignment); }
+
+void *malloc(ull size) { return Memory::Heap::AllocateFromSelected(size, 0x10); }
 void *calloc(ull size)
 {
-	int *ptr = (int *)Memory::Heap::AllocateFromSelected(size);
+	int *ptr = (int *)Memory::Heap::AllocateFromSelected(size, 0x10);
 	size >>= 2;
 	for (ull i = 0; i < size; i++)
 		ptr[i] = 0;
@@ -357,8 +373,9 @@ void *calloc(ull size)
 }
 void free(void *block) { Memory::Heap::DeallocateFromSelected(block); }
 
-void *operator new(size_t size) { return Memory::Heap::AllocateFromSelected(size); }
-void *operator new[](size_t size) { return Memory::Heap::AllocateFromSelected(size); }
+void *operator new(size_t size) { return Memory::Heap::AllocateFromSelected(size, 0x10); }
+void *operator new[](size_t size) { return Memory::Heap::AllocateFromSelected(size, 0x10); }
+void operator delete(void *ptr) { Memory::Heap::DeallocateFromSelected(ptr); }
 void operator delete(void *ptr, size_t size) { Memory::Heap::DeallocateFromSelected(ptr, size); }
 void operator delete[](void *ptr) { Memory::Heap::DeallocateFromSelected(ptr); }
 void operator delete[](void *ptr, size_t size) { Memory::Heap::DeallocateFromSelected(ptr); }

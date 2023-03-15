@@ -5,6 +5,18 @@
 
 namespace Filesystem
 {
+	enum class result
+	{
+		success,
+		fileDoesNotExist,
+		invalidPath,
+		notADirectory,
+		notAFile,
+		directoryNotEmpty,
+		partitionFull,
+		fileIsReadOnly,
+	};
+
 	class DirectoryIterator
 	{
 	public:
@@ -40,8 +52,6 @@ namespace Filesystem
 	bool RemoveDirectory(const std::string16 &path);
 	bool CreateDirectory(const std::string16 &path);
 
-	bool Copy(const string16 &src, const string16 &dest);
-	bool Move(const string16 &src, const string16 &dest);
-
-	void test();
+	bool Move(const std::string16 &src, const std::string16 &dest);
+	bool Copy(const std::string16 &src, const std::string16 &dest);
 }

@@ -74,8 +74,14 @@ public:
 
 class PageDirectoryEntry : public PageEntry
 {
+	static constexpr qword pageSizeBit = 1 << 7;
+
 public:
 	PageTable *getTable() { return (PageTable *)getAddress(); }
+
+	inline void setPageSize(bool big) { big ? value |= pageSizeBit : value &= ~pageSizeBit; }
+
+	inline bool isPageBig() { return value & pageSizeBit; }
 };
 class PageDirectory
 {
@@ -102,8 +108,14 @@ public:
 
 class PageDirectoryPointerTableEntry : public PageEntry
 {
+	static constexpr qword pageSizeBit = 1 << 7;
+
 public:
 	PageDirectory *getTable() { return (PageDirectory *)getAddress(); }
+
+	inline void setPageSize(bool big) { big ? value |= pageSizeBit : value &= ~pageSizeBit; }
+
+	inline bool isPageBig() { return value & pageSizeBit; }
 };
 class PageDirectoryPointerTable
 {
@@ -157,6 +169,9 @@ public:
 
 	void mapRegion(qword &freeSpace, qword virtualAddress, qword physicalAddress, qword len);
 	void unmapRegion(qword virtualAddress, qword len);
+
+	static PageMapLevel4 &getCurrent();
+	void setAsCurrent();
 };
 
-extern "C" void setCR3(PageMapLevel4 *pml4_ptr);
+void PagingTest();
