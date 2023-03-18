@@ -6,71 +6,29 @@
 interruptNr: db 0
 errCode: dq 0
 
-isr_common:
-; save regs
-push rbp
-push gs
-push fs
-push r9
-push r8
-push rsi
-push rdi
-push rdx
-push rcx
-push rax
+global kernelPaging
+kernelPaging:
+dq 0
 
+isr_common:
+call pushCpuState
 ; call c++ handler
 lea rdi, [rsp]
 movzx rsi, byte [interruptNr]
 mov rdx, [errCode]
 call exceptionHandler
-
-; restore regs
-pop rax
-pop rcx
-pop rdx
-pop rdi
-pop rsi
-pop r8
-pop r9
-pop fs
-pop gs
-pop rbp
-
+call popCpuState
 sti
 iretq
 
 irq_common:
-;save regs
-push rbp
-push gs
-push fs
-push r9
-push r8
-push rsi
-push rdi
-push rdx
-push rcx
-push rax
-
+call pushCpuState
 ;call c++ handler
 lea rdi, [rsp]
 movzx rsi, byte [interruptNr]
 xor rdx, rdx
 call irqHandler
-
-;restore regs
-pop rax
-pop rcx
-pop rdx
-pop rdi
-pop rsi
-pop r8
-pop r9
-pop fs
-pop gs
-pop rbp
-
+call popCpuState
 sti
 iretq
 
@@ -255,34 +213,11 @@ ret
 
 isr_30:
 cli
-; save regs
-push rbp
-push gs
-push fs
-push r9
-push r8
-push rsi
-push rdi
-push rdx
-push rcx
-push rax
-
+call pushCpuState
 ; call c++ handler
 lea rdi, [rsp]
 call os_serviceHandler
-
-;restore regs
-pop rax
-pop rcx
-pop rdx
-pop rdi
-pop rsi
-pop r8
-pop r9
-pop fs
-pop gs
-pop rbp
-
+call popCpuState
 sti
 iretq
 
@@ -432,4 +367,41 @@ global enableInterrupts
 global getCR2
 getCR2:
 mov rax, cr2
+ret
+
+pushCpuState:
+push rbp
+lea rbp, [rsp + 8]
+push gs
+push fs
+push r9
+push r8
+push rsi
+push rdi
+push rdx
+push rcx
+push rbx
+push rax
+mov rax, [rbp]
+mov rdi, cr3
+mov [rbp], rdi
+mov rdi, [kernelPaging]
+mov cr3, rdi
+jmp rax
+
+popCpuState:
+pop rbp ; return address
+pop rax
+pop rbx
+pop rcx
+pop rdx
+pop rdi
+pop rsi
+pop r8
+pop r9
+pop fs
+pop gs
+xchg rbp, [rsp + 8] ; ret addr <=> stack cr3
+mov cr3, rbp
+pop rbp
 ret

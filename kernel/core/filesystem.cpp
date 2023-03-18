@@ -835,7 +835,8 @@ namespace Filesystem
 			{
 				// actually read all the clusters
 				length = 512 * sectorsPerCluster * GetClusterChainLength(startCluster);
-				buffer = new byte[length];
+				buffer = (byte *)Memory::Allocate(length, 0x1000);
+				// buffer = new byte[length];
 				byte *current = buffer;
 				for (uint next = startCluster; next < lastCluster; next = getFatEntry(next))
 				{

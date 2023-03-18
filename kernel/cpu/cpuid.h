@@ -1,5 +1,5 @@
 #pragma once
-#include "../utils/types.h"
+#include "../../libc/types.h"
 
 inline void cpuid(dword code, dword &eax, dword &ebx, dword &ecx, dword &edx)
 {

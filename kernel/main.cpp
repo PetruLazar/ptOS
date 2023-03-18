@@ -6,9 +6,7 @@
 #include "drivers/keyboard.h"
 #include "utils/iostream.h"
 #include "utils/time.h"
-#include "programs/games/snake.h"
-#include "programs/explorer.h"
-#include "utils/rand.h"
+// #include "../libc/rand.h"
 #include "core/mem.h"
 #include "cpu/cpuid.h"
 #include "cpu/gdt.h"
@@ -57,7 +55,7 @@ extern void main()
 
 	// makesyscall();
 
-	Random::setSeed(clock() & 0xffffffff);
+	// Random::setSeed(clock() & 0xffffffff);
 
 	Filesystem::Initialize();
 	PCI::InitializeDevices();
@@ -86,8 +84,40 @@ extern void main()
 			asm("int $0x30");
 			break;
 		case Keyboard::KeyEvent::KeyCode::S:
-			Snake::Play();
-			break;
+		{
+			byte *content;
+			ull len;
+			if (!Filesystem::ReadFile(u"C:/snake/snake.bin", content, len))
+			{
+				cout << "Could not read file\n";
+				break;
+			}
+			byte *pageSpace = (byte *)Memory::Allocate(0x7000, 0x1000);
+			PageMapLevel4 *paging = (PageMapLevel4 *)pageSpace;
+			paging->clearAll();
+			qword freeSpace = (qword)(paging + 0x1);
+			paging->mapRegion(freeSpace, 0x1000, 0x1000, 0x4f000);									// page kernel and stack
+			paging->mapRegion(freeSpace, 0x100000, (qword)content, alignValueUpwards(len, 0x1000)); // page loaded code
+
+			if (freeSpace > (qword)(pageSpace + 0x7000))
+			{
+				cout << "Ran out of space for the paging structure.\n";
+				delete[] pageSpace;
+				delete[] content;
+				break;
+			}
+			PageMapLevel4 &kernelPaging = PageMapLevel4::getCurrent(); // get current kernel paging
+			paging->setAsCurrent();									   // apply program paging
+
+			voidf prog = (voidf)(0x100000);
+			prog();						 // call the loaded code
+			kernelPaging.setAsCurrent(); // back to the original paging
+
+			// clean-up
+			delete[] pageSpace;
+			delete[] content;
+		}
+		break;
 		case Keyboard::KeyEvent::KeyCode::arrowUp:
 			Screen::scrollUp();
 			break;
@@ -135,7 +165,8 @@ extern void main()
 		case Keyboard::KeyEvent::KeyCode::alpha0:
 		case Keyboard::KeyEvent::KeyCode::numpad_0:
 		{
-			Explorer::Start();
+			// Explorer::Start();
+			cout << "The file explorer is not currently available...\n";
 			break;
 
 			// Filesystem::DirectoryIterator *list = Filesystem::GetDirectoryIterator(u"C:/FOLDER1/FOLDER4");
@@ -159,7 +190,8 @@ extern void main()
 		case Keyboard::KeyEvent::KeyCode::alpha1:
 		case Keyboard::KeyEvent::KeyCode::numpad_1:
 		{
-			basic_string<byte *> allocations;
+			break;
+			/*basic_string<byte *> allocations;
 			for (int i = 0; i < 100; i++)
 			{
 				switch (Random::get() % 3)
@@ -199,7 +231,7 @@ extern void main()
 				cout << "Deallocated block at " << block << '\n';
 			}
 
-			cout << '\n';
+			cout << '\n'; */
 		}
 		break;
 		case Keyboard::KeyEvent::KeyCode::alpha2:

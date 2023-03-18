@@ -4,8 +4,11 @@
 #include "../utils/string.h"
 #include "../utils/iostream.h"
 #include "../core/sys.h"
+#include "../core/paging.h"
 
 using namespace std;
+
+extern PageMapLevel4 *kernelPaging;
 
 extern "C" void isr_0();
 extern "C" void isr_1();
@@ -182,6 +185,8 @@ void IDT::Initialize()
 	// init pic
 	irqOffset = 0x20;
 	PIC::Initialize(irqOffset);
+
+	kernelPaging = &PageMapLevel4::getCurrent();
 }
 
 const char *exceptionMessages[0x20] =
@@ -218,13 +223,6 @@ const char *exceptionMessages[0x20] =
 		"VMM communication exception",
 		"Security exception",
 		"Reserved",
-};
-
-struct registers_t
-{
-	qword rax, rcx, rdx, rdi, rsi, r8, r9,
-		fs, gs, rbp,
-		rip, cs, rflags, rsp, ss;
 };
 
 extern "C" qword getCR2();
@@ -304,33 +302,6 @@ extern "C" void irqHandler(registers_t &regs, qword irq_no, bool spurious)
 	if (irqHandlers[irq_no])
 		irqHandlers[irq_no]();
 	PIC::EndOfInterrupt(irq_no);
-}
-
-extern "C" qword getRSP();
-extern "C" qword getRBP();
-extern "C" void os_serviceHandler(registers_t &regs)
-{
-	qword currRsp = getRBP();
-	cout << "Breakpoint reached\n";
-	bool keepGoing = true;
-	enableInterrupts();
-	while (keepGoing)
-	{
-		switch (Keyboard::getKeyPressedEvent().getKeyCode())
-		{
-		case Keyboard::KeyEvent::KeyCode::C:
-			keepGoing = false;
-			break;
-		case Keyboard::KeyEvent::KeyCode::S:
-			constexpr int bytesPerRow = 16;
-			// for (byte *i = (byte *)regs.rsp; i <= (byte *)regs.rbp; i += bytesPerRow)
-			for (byte *i = (byte *)currRsp; i <= (byte *)regs.rbp; i += bytesPerRow)
-				displayMemoryRow(i);
-			cout << "RBP: " << (void *)regs.rbp << "   RSP: " << (void *)regs.rsp << "   Current RSP: " << (void *)currRsp << '\n';
-			break;
-		}
-	}
-	disableInterrupts();
 }
 
 void IDT::registerIrqHandler(byte irq_no, voidf handler)

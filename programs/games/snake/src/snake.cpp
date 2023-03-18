@@ -1,7 +1,13 @@
-#include "snake.h"
-#include "../../utils/time.h"
-#include "../../utils/rand.h"
-#include "../../core/mem.h"
+#include "../../../../libc/syscall.h"
+#include "../../../../libc/rand.h"
+
+struct Vector2b
+{
+	byte x, y;
+};
+
+static constexpr byte screenWidth = 80;
+static constexpr byte screenHeight = 25;
 
 enum class Direction : byte
 {
@@ -23,11 +29,23 @@ enum class Cell : byte
 
 Direction currentDirection = Direction::right;
 // Cell arena[Screen::screenHeight][Screen::screenWidth];
-Cell **arena = nullptr;
-Vector2b snakeHead(0, 0), snakeTail(0, 0);
+// Cell **arena = nullptr;
+Cell arena[screenHeight][screenWidth];
+Vector2b snakeHead, snakeTail;
 bool gameOver = false;
 
-void Snake::Build()
+void spawnApple()
+{
+	byte x, y;
+	do
+	{
+		uint r = (uint)Random::get();
+		x = r % screenWidth;
+		y = r / screenWidth % screenHeight;
+	} while (arena[y][x] != Cell::air);
+	arena[y][x] = Cell::apple;
+}
+void Build()
 {
 	for (byte x = 0; x < 80; x++)
 	{
@@ -53,7 +71,7 @@ void Snake::Build()
 
 	currentDirection = Direction::right;
 }
-void Snake::Redraw()
+void Redraw()
 {
 	// Screen::paint(Vector2b(0, 0), Vector2b(79, 24), Screen::Cell::Color(Screen::Cell::Color::black));
 	for (byte x = 0; x < 80; x++)
@@ -62,28 +80,17 @@ void Snake::Redraw()
 			switch (arena[y][x])
 			{
 			case Cell::air:
-				Screen::paint(y, x, Screen::Cell::Color::black);
+				syscall_screen_paint(y, x, Color::black);
 				break;
 			case Cell::apple:
-				Screen::paint(y, x, Screen::Cell::Color::red);
+				syscall_screen_paint(y, x, Color::red);
 				break;
 			default:
-				Screen::paint(y, x, Screen::Cell::Color::green);
+				syscall_screen_paint(y, x, Color::green);
 			}
 		}
 }
-void Snake::spawnApple()
-{
-	byte x, y;
-	do
-	{
-		uint r = (uint)Random::get();
-		x = r % Screen::screenWidth;
-		y = r / Screen::screenWidth % Screen::screenHeight;
-	} while (arena[y][x] != Cell::air);
-	arena[y][x] = Cell::apple;
-}
-void Snake::Cycle()
+void Cycle()
 {
 	// work on old position
 	// update position and wrap around
@@ -97,24 +104,24 @@ void Snake::Cycle()
 		arena[snakeHead.y][snakeHead.x] = Cell::snakeUp;
 		snakeHead.y--;
 		if (snakeHead.y == 0xff)
-			snakeHead.y = Screen::screenHeight - 1;
+			snakeHead.y = screenHeight - 1;
 		break;
 	case Direction::down:
 		arena[snakeHead.y][snakeHead.x] = Cell::snakeDown;
 		snakeHead.y++;
-		if (snakeHead.y == Screen::screenHeight)
+		if (snakeHead.y == screenHeight)
 			snakeHead.y = 0;
 		break;
 	case Direction::left:
 		arena[snakeHead.y][snakeHead.x] = Cell::snakeLeft;
 		snakeHead.x--;
 		if (snakeHead.x == 0xff)
-			snakeHead.x = Screen::screenWidth - 1;
+			snakeHead.x = screenWidth - 1;
 		break;
 	case Direction::right:
 		arena[snakeHead.y][snakeHead.x] = Cell::snakeRight;
 		snakeHead.x++;
-		if (snakeHead.x == Screen::screenWidth)
+		if (snakeHead.x == screenWidth)
 			snakeHead.x = 0;
 		break;
 	}
@@ -141,23 +148,23 @@ void Snake::Cycle()
 		{
 		case Cell::snakeDown:
 			snakeTail.y++;
-			if (snakeTail.y == Screen::screenHeight)
+			if (snakeTail.y == screenHeight)
 				snakeTail.y = 0;
 			break;
 		case Cell::snakeLeft:
 			snakeTail.x--;
 			if (snakeTail.x == 0xff)
-				snakeTail.x = Screen::screenWidth - 1;
+				snakeTail.x = screenWidth - 1;
 			break;
 		case Cell::snakeRight:
 			snakeTail.x++;
-			if (snakeTail.x == Screen::screenWidth)
+			if (snakeTail.x == screenWidth)
 				snakeTail.x = 0;
 			break;
 		case Cell::snakeUp:
 			snakeTail.y--;
 			if (snakeTail.y == 0xff)
-				snakeTail.y = Screen::screenHeight - 1;
+				snakeTail.y = screenHeight - 1;
 			break;
 		}
 	}
@@ -166,72 +173,72 @@ void Snake::Cycle()
 qword lastCycle = 0;
 constexpr qword timeDiffCount = 0x3;
 
-void Snake::Play()
+extern "C" void main()
 {
 	// inits
-	Screen::clear();
-	Screen::Cursor::disable();
-	arena = new Cell *[Screen::screenHeight];
-	for (byte i = 0; i < Screen::screenHeight; i++)
-		arena[i] = new Cell[Screen::screenWidth];
+	syscall_screen_clear();
+	syscall_cursor_disable();
+	// arena = new Cell *[screenHeight];
+	// for (byte i = 0; i < screenHeight; i++)
+	// 	arena[i] = new Cell[screenWidth];
 	gameOver = false;
 	Build();
 	Redraw();
 
-	lastCycle = Time::time();
+	lastCycle = syscall_time_get();
 
 	// game loop
 	while (true)
 	{
-		Keyboard::KeyEvent::KeyCode pressed = Keyboard::getKeyPressedEvent().getKeyCode();
+		KeyEvent::KeyCode pressed = syscall_keyboard_getKeyPressedEvent().getKeyCode();
 
 		switch (pressed)
 		{
-		case Keyboard::KeyEvent::KeyCode::W:
-		case Keyboard::KeyEvent::KeyCode::arrowUp:
+		case KeyEvent::KeyCode::W:
+		case KeyEvent::KeyCode::arrowUp:
 			if (currentDirection != Direction::down)
 				currentDirection = Direction::up;
 			break;
-		case Keyboard::KeyEvent::KeyCode::A:
-		case Keyboard::KeyEvent::KeyCode::arrowLeft:
+		case KeyEvent::KeyCode::A:
+		case KeyEvent::KeyCode::arrowLeft:
 			if (currentDirection != Direction::right)
 				currentDirection = Direction::left;
 			break;
-		case Keyboard::KeyEvent::KeyCode::S:
-		case Keyboard::KeyEvent::KeyCode::arrowDown:
+		case KeyEvent::KeyCode::S:
+		case KeyEvent::KeyCode::arrowDown:
 			if (currentDirection != Direction::up)
 				currentDirection = Direction::down;
 			break;
-		case Keyboard::KeyEvent::KeyCode::D:
-		case Keyboard::KeyEvent::KeyCode::arrowRight:
+		case KeyEvent::KeyCode::D:
+		case KeyEvent::KeyCode::arrowRight:
 			if (currentDirection != Direction::left)
 				currentDirection = Direction::right;
 			break;
-		case Keyboard::KeyEvent::KeyCode::R:
+		case KeyEvent::KeyCode::R:
 			if (gameOver)
 			{
-				Screen::clear();
-				Screen::Cursor::disable();
+				syscall_screen_clear();
+				syscall_cursor_disable();
 				gameOver = false;
 				Build();
 				Redraw();
 
-				lastCycle = Time::time();
+				lastCycle = syscall_time_get();
 			}
 			break;
-		case Keyboard::KeyEvent::KeyCode::Escape:
-			Screen::clear();
-			Screen::Cursor::enable(0xf, 0xd);
-			for (byte i = 0; i < Screen::screenHeight; i++)
-				delete[] arena[i];
-			delete[] arena;
+		case KeyEvent::KeyCode::Escape:
+			syscall_screen_clear();
+			syscall_cursor_enable_def();
+			// for (byte i = 0; i < screenHeight; i++)
+			// 	delete[] arena[i];
+			// delete[] arena;
 			return;
 		}
 
 		if (gameOver)
 			continue;
 
-		qword curCycle = Time::time();
+		qword curCycle = syscall_time_get();
 
 		if (curCycle - lastCycle >= timeDiffCount)
 		{

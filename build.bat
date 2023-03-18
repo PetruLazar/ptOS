@@ -7,10 +7,10 @@ rem assemble boot sector
 nasm.exe src/boot/boot.asm -o bin/boot.bin
 
 rem compile and assemble kernel
-compileall src/kernel obj || (echo Build failed! & exit)
+compileall src/kernel obj/kernel || (echo Build failed! & exit)
 
 rem link kernel
-linkall obj bin/kernel.bin "-Ttext 0x8000 -e 0x8000 -T linker.ld" || (echo Build failed! & exit)
+linkall obj/kernel bin/kernel.bin "-Ttext 0x8000 -e 0x8000 -T linker.ld" || (echo Build failed! & exit)
 
 rem build binaries
 if not exist bin\boot.bin (echo Build failed! & exit)

@@ -1,5 +1,6 @@
 #pragma once
-#include "../utils/types.h"
+#include "../../libc/types.h"
+#include "../core/paging.h"
 
 constexpr int KERNEL_CS = 0x8;
 
@@ -7,6 +8,14 @@ typedef void (*voidf)();
 
 extern "C" void disableInterrupts();
 extern "C" void enableInterrupts();
+
+struct registers_t
+{
+	qword rax, rbx, rcx, rdx, rdi, rsi, r8, r9,
+		fs, gs, rbp;
+	PageMapLevel4 *cr3;
+	qword rip, cs, rflags, rsp, ss;
+};
 
 class IDT
 {
