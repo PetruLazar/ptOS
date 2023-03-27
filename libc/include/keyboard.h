@@ -1,51 +1,8 @@
 #pragma once
 #include "types.h"
 
-enum Color : byte
+namespace Keyboard
 {
-	bright = 0b1000,
-	red = 0b100,
-	green = 0b10,
-	blue = 0b1,
-	black = 0b0,
-	white = 0b111
-};
-
-inline void syscall_breakpoint()
-{
-	asm("int $0x30"
-		:
-		: "a"(0));
-}
-
-inline void syscall_screen_clear()
-{
-	asm("int $0x30"
-		:
-		: "a"(1), "b"(0));
-}
-inline void syscall_screen_printstr(const char *msg)
-{
-	asm("int $0x30"
-		:
-		: "a"(1), "b"(1));
-}
-inline void syscall_screen_printch(char ch)
-{
-	asm("int $0x30"
-		:
-		: "a"(1), "b"(2));
-}
-inline void syscall_screen_paint(byte line, byte col, Color color)
-{
-	asm("int $0x30"
-		:
-		: "a"(1), "b"(3), "D"(line), "S"(col), "d"(color));
-}
-
-class KeyEvent
-{
-public:
 	enum class KeyCode : byte
 	{
 		f1,
@@ -156,7 +113,7 @@ public:
 
 		unknown = 0x7f,
 		keyReleasedFlag = 0x80,
-	} keyCode;
+	};
 
 	class ModKeys
 	{
@@ -207,66 +164,116 @@ public:
 		inline void clearCapsLock() { mask = MaskBits(mask & ~capsLock); }
 		inline void setNumLock() { mask = MaskBits(mask | numLock); }
 		inline void clearNumLock() { mask = MaskBits(mask & ~numLock); }
-	} modKeys;
+	};
 
-	inline KeyEvent() : keyCode(KeyCode::unknown), modKeys() {}
-	inline KeyEvent(KeyCode keyCode, ModKeys modKeys) : keyCode(keyCode), modKeys(modKeys) {}
+	class KeyEvent
+	{
+	public:
+		KeyCode keyCode;
+		ModKeys modKeys;
 
-	inline KeyCode getKeyCode() { return KeyCode((byte)keyCode & ~(byte)KeyCode::keyReleasedFlag); }
-	inline bool isReleased() { return (byte)keyCode & (byte)KeyCode::keyReleasedFlag; }
-	inline bool isPressed() { return !isReleased(); }
-	char getChar();
-};
+		inline KeyEvent() : keyCode(KeyCode::unknown), modKeys() {}
+		inline KeyEvent(KeyCode keyCode, ModKeys modKeys) : keyCode(keyCode), modKeys(modKeys) {}
 
-inline KeyEvent syscall_keyboard_getKeyEvent()
-{
-	ushort result;
-	asm("int $0x30"
-		: "=a"(result)
-		: "a"(2), "b"(0));
-	return *(KeyEvent *)&result;
-}
-inline KeyEvent syscall_keyboard_getKeyPressedEvent()
-{
-	ushort result;
-	asm("int $0x30"
-		: "=a"(result)
-		: "a"(2), "b"(1));
-	return *(KeyEvent *)&result;
-}
-inline KeyEvent syscall_keyboard_getKeyReleasedEvent()
-{
-	ushort result;
-	asm("int $0x30"
-		: "=a"(result)
-		: "a"(2), "b"(2));
-	return *(KeyEvent *)&result;
-}
+		inline KeyCode getKeyCode() { return KeyCode((byte)keyCode & ~(byte)KeyCode::keyReleasedFlag); }
+		inline bool isReleased() { return (byte)keyCode & (byte)KeyCode::keyReleasedFlag; }
+		inline bool isPressed() { return !isReleased(); }
+		char getChar()
+		{
+			switch (getKeyCode())
+			{
+			case KeyCode::A:
+			case KeyCode::B:
+			case KeyCode::C:
+			case KeyCode::D:
+			case KeyCode::E:
+			case KeyCode::F:
+			case KeyCode::G:
+			case KeyCode::H:
+			case KeyCode::I:
+			case KeyCode::J:
+			case KeyCode::K:
+			case KeyCode::L:
+			case KeyCode::M:
+			case KeyCode::N:
+			case KeyCode::O:
+			case KeyCode::P:
+			case KeyCode::Q:
+			case KeyCode::R:
+			case KeyCode::S:
+			case KeyCode::T:
+			case KeyCode::U:
+			case KeyCode::V:
+			case KeyCode::W:
+			case KeyCode::X:
+			case KeyCode::Y:
+			case KeyCode::Z:
+				return (char)keyCode - (char)KeyCode::A + (modKeys.getShift() ^ modKeys.getCapsLock() ? 'A' : 'a');
+			case KeyCode::numpad_0:
+			case KeyCode::numpad_1:
+			case KeyCode::numpad_2:
+			case KeyCode::numpad_3:
+			case KeyCode::numpad_4:
+			case KeyCode::numpad_5:
+			case KeyCode::numpad_6:
+			case KeyCode::numpad_7:
+			case KeyCode::numpad_8:
+			case KeyCode::numpad_9:
+				if (modKeys.getNumLock())
+					return '0' + ((char)keyCode - (char)KeyCode ::numpad_0);
+				return '?';
+			case KeyCode::alpha0:
+			case KeyCode::alpha1:
+			case KeyCode::alpha2:
+			case KeyCode::alpha3:
+			case KeyCode::alpha4:
+			case KeyCode::alpha5:
+			case KeyCode::alpha6:
+			case KeyCode::alpha7:
+			case KeyCode::alpha8:
+			case KeyCode::alpha9:
+			{
+				char d = (char)keyCode - (char)KeyCode::alpha0;
+				if (modKeys.getShift())
+					return ")!@#$%^&*("[d];
+				return '0' + d;
+			}
+			case KeyCode::numpad_minus:
+			case KeyCode::numpad_plus:
+			case KeyCode::numpad_star:
+			case KeyCode::numpad_slash:
+			case KeyCode::numpad_enter:
+			case KeyCode::numpad_dot:
+			{
+				char d = (char)keyCode - (char)KeyCode::numpad_minus;
+				return "-+*/\r."[d];
+			}
+			case KeyCode::alpha_minus:
+			case KeyCode::alpha_equal:
+			case KeyCode::backspace:
+			case KeyCode::bracketOpen:
+			case KeyCode::bracketClosed:
+			case KeyCode::backslash:
+			case KeyCode::semicolon:
+			case KeyCode::singleQuote:
+			case KeyCode::enter:
+			case KeyCode::comma:
+			case KeyCode::alpha_dot:
+			case KeyCode::slash:
+			{
+				char d = (char)keyCode - (char)KeyCode::alpha_minus;
+				if (modKeys.getShift())
+					return "_+\b{}|:\"\r<>?"[d];
+				return "-=\b[]\\;'\r,./"[d];
+			}
+			case KeyCode::space:
+				return ' ';
+			}
+			return 0;
+		}
+	};
 
-inline void syscall_cursor_enable_def()
-{
-	asm("int $0x30"
-		:
-		: "a"(5), "b"(0), "D"(0xf), "S"(0xd));
-}
-inline void syscall_cursor_enable(byte start, byte end)
-{
-	asm("int $0x30"
-		:
-		: "a"(5), "b"(0), "D"(start), "S"(end));
-}
-inline void syscall_cursor_disable()
-{
-	asm("int $0x30"
-		:
-		: "a"(5), "b"(1));
-}
-
-inline qword syscall_time_get()
-{
-	qword result;
-	asm("int $0x30"
-		: "=a"(result)
-		: "a"(6), "b"(0));
-	return result;
+	KeyEvent getKeyEvent();
+	KeyEvent getKeyPressedEvent();
+	KeyEvent getKeyReleasedEvent();
 }

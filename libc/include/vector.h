@@ -1,7 +1,8 @@
 #pragma once
-#include "../core/crl.h"
-// #include "../core/exception.h"
-// #include "../core/mem.h"
+#include "types.h"
+// #include "../core/crl.h"
+//  #include "../core/exception.h"
+//  #include "../core/mem.h"
 
 // #include "iostream.h"
 // #include "../core/sys.h"
@@ -122,6 +123,24 @@ namespace std
 			resize(size - 1);
 			return popped;
 		}
+		inline void insert(T value, ull pos)
+		{
+			// increase size
+			resize(size + 1);
+			// move old values
+			for (ull i = size - 1; i > pos; i--)
+				values[i] = values[i - 1];
+			values[pos] = value;
+		}
+		inline void erase(ull pos) { erase(pos, 1); }
+		inline void erase(ull pos, ull len)
+		{
+			// move values
+			for (ull i = pos + len; i < size; i++)
+				values[i - len] = values[i];
+			// resize
+			resize(size - len);
+		}
 		inline void assign(const T *ptr, ull len)
 		{
 			resize(len);
@@ -146,10 +165,12 @@ namespace std
 		{
 			return values[i];
 		}
+		inline const T &at(ull i) const { return values[i]; }
 		inline T &operator[](ull i)
 		{
 			return values[i];
 		}
+		inline T &at(ull i) { return values[i]; }
 		inline void operator=(const vector &other)
 		{
 			assign(other);

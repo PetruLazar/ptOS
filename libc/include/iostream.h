@@ -1,7 +1,7 @@
 #pragma once
-#include "../drivers/keyboard.h"
-#include "../drivers/screen.h"
-#include "cstring.h"
+#include <keyboard.h>
+#include <screen.h>
+#include <cstring.h>
 
 namespace std
 {
