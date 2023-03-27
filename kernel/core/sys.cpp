@@ -1,5 +1,5 @@
 #include "sys.h"
-#include "../utils/iostream.h"
+#include <iostream.h>
 #include "../drivers/keyboard.h"
 #include "../cpu/idt.h"
 
@@ -11,7 +11,7 @@ namespace System
 	{
 		if (echo)
 			cout << "Press any key to continue...";
-		while (Keyboard::getKeyPressedEvent().getKeyCode() == Keyboard::KeyEvent::KeyCode::unknown)
+		while (Keyboard::getKeyPressedEvent().getKeyCode() == Keyboard::KeyCode::unknown)
 			;
 		if (echo)
 			cout << '\n';

@@ -1,5 +1,5 @@
 #include "gdt.h"
-#include "../utils/iostream.h"
+#include <iostream.h>
 
 using namespace std;
 
@@ -38,18 +38,30 @@ namespace GDT
 	extern "C" void loadGDT(GDT::Descriptor &descriptor);
 	extern "C" void getCurrentGDT(GDT::Descriptor &descriptor);
 	extern "C" void updateSegmentRegisters();
+	extern "C" void loadTSS(word gdtEntry);
+
+	TSS *tss = (TSS *)0x20000;
 
 	void Initialize()
 	{
+		tss->clear();
+		tss->rsp[0] = tss->ist[0] = 0x30000;
+
+		TSSDescriptor tssDesc(*tss);
+
 		byte count = 0;
 		globalDescriptorTable[count++] = SegmentDescriptor();			  // null descriptor
 		globalDescriptorTable[count++] = CodeSegmentDescriptor(0, false); // code
 		globalDescriptorTable[count++] = DataSegmentDescriptor(0);		  // data
-		globalDescriptorTable[count++] = CodeSegmentDescriptor(0, true);
+		globalDescriptorTable[count++] = CodeSegmentDescriptor(0, true);  // code - compatibility
+		word tssEntry = count;
+		globalDescriptorTable[count++] = tssDesc.low;  // 64 bit tss - low entry
+		globalDescriptorTable[count++] = tssDesc.high; // 64 bit TSS - high entry
 
 		Descriptor descriptor((qword)globalDescriptorTable, sizeof(SegmentDescriptor) * count - 1);
 		loadGDT(descriptor);
 		updateSegmentRegisters();
+		loadTSS(tssEntry * sizeof(SegmentDescriptor));
 	}
 	void testGDT()
 	{

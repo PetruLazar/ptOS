@@ -1,6 +1,6 @@
 #pragma once
-#include "../../libc/types.h"
-#include "../utils/iostream.h"
+#include <types.h>
+#include <iostream.h>
 
 // #define ALLOC_DBG_MSG
 

@@ -1,5 +1,5 @@
 #pragma once
-#include "../../libc/types.h"
+#include <types.h>
 #include "../drivers/disk.h"
 #include "../utils/string.h"
 

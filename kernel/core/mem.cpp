@@ -1,9 +1,9 @@
 #include "mem.h"
-#include "../utils/iostream.h"
+#include <iostream.h>
 #include "paging.h"
 #include "../cpu/idt.h"
 #include "sys.h"
-#include "../utils/math.h"
+#include <math.h>
 
 using namespace std;
 
@@ -318,6 +318,7 @@ void *Memory::Heap::Allocate(qword allocationSize, ull alignment)
 		return obj->getAllocatedBlock();
 	}
 
+	cout << "Memory full!\n";
 	return nullptr;
 }
 inline void Memory::Heap::Deallocate(void *ptr)

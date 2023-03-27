@@ -17,3 +17,10 @@ mov es, ax
 mov fs, ax
 mov gs, ax
 ret
+
+;rdi - word gdtEntry
+global loadTSS
+loadTSS:
+mov rax, rdi
+ltr ax
+ret

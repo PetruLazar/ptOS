@@ -4,7 +4,7 @@
 #include "cpu/pic.h"
 #include "cpu/ports.h"
 #include "drivers/keyboard.h"
-#include "utils/iostream.h"
+#include <iostream.h>
 #include "utils/time.h"
 // #include "../libc/rand.h"
 #include "core/mem.h"
@@ -13,8 +13,9 @@
 #include "drivers/pci.h"
 #include "core/filesystem.h"
 #include "core/sys.h"
-#include "utils/math.h"
+#include <math.h>
 #include "core/paging.h"
+#include "core/scheduler.h"
 using namespace std;
 
 #define QEMU
@@ -32,9 +33,14 @@ void delay()
 extern "C" void testint();
 extern "C" void makesyscall();
 
+extern "C" qword getRFlags();
 extern "C" void testCompMode();
 
 // void *memoryToFileOffset(void *input) { return (byte *)input - 0x8000 + 0x200; }
+
+void terminal();
+void idle();
+void shutdown();
 
 extern void main()
 {
@@ -50,18 +56,62 @@ extern void main()
 
 	GDT::Initialize();
 
-	cout << "Welcome to ptOS!\n";
-	// testint();
-
-	// makesyscall();
-
-	// Random::setSeed(clock() & 0xffffffff);
-
 	Filesystem::Initialize();
 	PCI::InitializeDevices();
 
-	// error is at 9928
-	// cout << memoryToFileOffset(Keyboard::KeyEvent::getKeyCode) << '\n';
+	// get terminal task ready and initialize scheduler
+	registers_t terminalRegs;
+	terminalRegs.rip = (ull)terminal;
+	terminalRegs.cs = 0x8;
+	terminalRegs.cr3 = &PageMapLevel4::getCurrent();
+	terminalRegs.rbp = terminalRegs.rsp = 0x50000; // 0x50000
+	terminalRegs.fs = terminalRegs.gs = terminalRegs.ss = 0x10;
+	registers_t idleRegs = terminalRegs;
+	idleRegs.rip = (ull)idle;
+	idleRegs.rbp = idleRegs.rsp = 0x40000;
+	Scheduler::Initialize(new Task(terminalRegs), new Task(idleRegs));
+
+	enableInterrupts();
+	idle();
+
+	// disk operations
+
+	// cli and sti is not needed in the interrupt handlers, since they are not trap gates
+
+	// move gdt to c++
+	// add 4k-aligned allocation functions
+
+	// filesystem
+
+	// test compatibility mode
+
+	// pci supoprt
+
+	// implement syscall
+
+	// change video mode
+
+	// test dpl changing
+
+	// shutdown
+
+	// c++ exception handling maybe?
+
+	// apic
+
+	// sound
+
+	// loading of user programs, with dynamic linking
+	// maybe support for pe executables
+
+	// multitasking
+
+	// networking
+}
+
+void terminal()
+{
+	cout << "Welcome to ptOS!\n";
 
 	ull initialAllocCount = Memory::Heap::getAllocationCountFromSelected();
 	bool keepRunning = true;
@@ -73,77 +123,45 @@ extern void main()
 			cout << "Pressed " << ch << " (" << (int)ch << ")\n";
 		continue;*/
 
-		Keyboard::KeyEvent::KeyCode key = Keyboard::getKeyPressedEvent().getKeyCode();
+		Keyboard::KeyCode key = Keyboard::getKeyPressedEvent().getKeyCode();
 
 		switch (key)
 		{
-		case Keyboard::KeyEvent::KeyCode::Escape:
+		case Keyboard::KeyCode::Escape:
 			keepRunning = false;
 			break;
-		case Keyboard::KeyEvent::KeyCode::I:
-			asm("int $0x30");
+		case Keyboard::KeyCode::I:
+			// asm("int $0x30");
 			break;
-		case Keyboard::KeyEvent::KeyCode::S:
-		{
-			byte *content;
-			ull len;
-			if (!Filesystem::ReadFile(u"C:/snake/snake.bin", content, len))
-			{
-				cout << "Could not read file\n";
-				break;
-			}
-			byte *pageSpace = (byte *)Memory::Allocate(0x7000, 0x1000);
-			PageMapLevel4 *paging = (PageMapLevel4 *)pageSpace;
-			paging->clearAll();
-			qword freeSpace = (qword)(paging + 0x1);
-			paging->mapRegion(freeSpace, 0x1000, 0x1000, 0x4f000);									// page kernel and stack
-			paging->mapRegion(freeSpace, 0x100000, (qword)content, alignValueUpwards(len, 0x1000)); // page loaded code
-
-			if (freeSpace > (qword)(pageSpace + 0x7000))
-			{
-				cout << "Ran out of space for the paging structure.\n";
-				delete[] pageSpace;
-				delete[] content;
-				break;
-			}
-			PageMapLevel4 &kernelPaging = PageMapLevel4::getCurrent(); // get current kernel paging
-			paging->setAsCurrent();									   // apply program paging
-
-			voidf prog = (voidf)(0x100000);
-			prog();						 // call the loaded code
-			kernelPaging.setAsCurrent(); // back to the original paging
-
-			// clean-up
-			delete[] pageSpace;
-			delete[] content;
-		}
-		break;
-		case Keyboard::KeyEvent::KeyCode::arrowUp:
+		case Keyboard::KeyCode::S:
+			Task::createTask(u"C:/programs/snake.bin");
+			break;
+		case Keyboard::KeyCode::arrowUp:
 			Screen::scrollUp();
 			break;
-		case Keyboard::KeyEvent::KeyCode::arrowDown:
+		case Keyboard::KeyCode::arrowDown:
 			Screen::scrollDown();
 			break;
-		case Keyboard::KeyEvent::KeyCode::C:
+		case Keyboard::KeyCode::C:
 			Screen::clear();
 			break;
-		case Keyboard::KeyEvent::KeyCode::D:
+		case Keyboard::KeyCode::D:
 			cout << "Function to debug is at " << (void *)((char *)Disk::Initialize - 0x8000 + 0x200) << '\n';
 			break;
-		case Keyboard::KeyEvent::KeyCode::A:
+		case Keyboard::KeyCode::A:
 			cout << "Apic ";
 			if (!PIC::detectApic())
 				cout << "not ";
 			cout << "detected\n";
 			break;
-		case Keyboard::KeyEvent::KeyCode::M:
+		case Keyboard::KeyCode::M:
 			Memory::DisplayMap();
 			break;
-		case Keyboard::KeyEvent::KeyCode::L:
+		case Keyboard::KeyCode::L:
 			PCI::EnumerateDevices();
 			cout << "Done!\n";
 			break;
-		case Keyboard::KeyEvent::KeyCode::V:
+		case Keyboard::KeyCode::V:
 		{
 			char processorVendorString[13];
 			dword unused;
@@ -152,7 +170,7 @@ extern void main()
 			cout << "Processor vendor string is: " << processorVendorString << '\n';
 		}
 		break;
-		case Keyboard::KeyEvent::KeyCode::T:
+		case Keyboard::KeyCode::T:
 		{
 			qword clocks = clock();
 
@@ -162,8 +180,8 @@ extern void main()
 		}
 		break;
 
-		case Keyboard::KeyEvent::KeyCode::alpha0:
-		case Keyboard::KeyEvent::KeyCode::numpad_0:
+		case Keyboard::KeyCode::alpha0:
+		case Keyboard::KeyCode::numpad_0:
 		{
 			// Explorer::Start();
 			cout << "The file explorer is not currently available...\n";
@@ -187,8 +205,8 @@ extern void main()
 			delete list;
 		}
 		break;
-		case Keyboard::KeyEvent::KeyCode::alpha1:
-		case Keyboard::KeyEvent::KeyCode::numpad_1:
+		case Keyboard::KeyCode::alpha1:
+		case Keyboard::KeyCode::numpad_1:
 		{
 			break;
 			/*basic_string<byte *> allocations;
@@ -234,8 +252,8 @@ extern void main()
 			cout << '\n'; */
 		}
 		break;
-		case Keyboard::KeyEvent::KeyCode::alpha2:
-		case Keyboard::KeyEvent::KeyCode::numpad_2:
+		case Keyboard::KeyCode::alpha2:
+		case Keyboard::KeyCode::numpad_2:
 		{
 			while (true)
 			{
@@ -248,8 +266,8 @@ extern void main()
 			}
 		}
 		break;
-		case Keyboard::KeyEvent::KeyCode::alpha3:
-		case Keyboard::KeyEvent::KeyCode::numpad_3:
+		case Keyboard::KeyCode::alpha3:
+		case Keyboard::KeyCode::numpad_3:
 		{
 			bool first = true;
 			for (int i = 0; i < 4; i++)
@@ -278,92 +296,30 @@ extern void main()
 			cout << "Done!\n";
 		}
 		break;
-		case Keyboard::KeyEvent::KeyCode::alpha4:
-		case Keyboard::KeyEvent::KeyCode::numpad_4:
+		case Keyboard::KeyCode::alpha4:
+		case Keyboard::KeyCode::numpad_4:
 		{
-			ull len;
-			byte *contents;
-
-			// read before
-			if (Filesystem::ReadFile(u"C:/FOLDER1/FOLDER4/FILE7.TXT", contents, len))
-			{
-				string str((char *)contents, len);
-				cout << "Contents before:\n"
-					 << str << '\n';
-				delete[] contents;
-			}
-			else
-			{
-				cout << "Failed to read file\n";
-				break;
-			}
-
-			// write
-			{
-				string str = "These are the new contents of the file with the full path \"C:/FOLDER1/FOLDER4/FILE7.TXT\".\n"
-							 "It is intentionally longer than the initial contents, so that the function is properly tested.\n"
-							 "Also, it contains more lines than the initial file.\n\n"
-							 "Hello mom! ... and the rest of the world to... sure... why not...?\n";
-
-				if (!Filesystem::WriteFile(u"C:/FOLDER1/FOLDER4/FILE7.TXT", (byte *)str.data(), str.getSize()))
-				{
-					cout << "Failed to write to file\n";
-					break;
-				}
-			}
-
-			// read after
-			if (Filesystem::ReadFile(u"C:/FOLDER1/FOLDER4/FILE7.TXT", contents, len))
-			{
-				string str((char *)contents, len);
-				cout << "Contents after:\n"
-					 << str << '\n';
-				delete[] contents;
-			}
-			else
-			{
-				cout << "Failed to read file\n";
-				break;
-			}
+			Task *task = Task::createTask(u"c:/programs/hello1.bin");
+			if (task)
+				Scheduler::add(task);
+			break;
 		}
-		break;
-		case Keyboard::KeyEvent::KeyCode::alpha5:
-		case Keyboard::KeyEvent::KeyCode::numpad_5:
+		case Keyboard::KeyCode::alpha5:
+		case Keyboard::KeyCode::numpad_5:
 		{
-			// if (Filesystem::ReadFile(u"C:/aa b.txt", contents, len))
-
-			ull len;
-			byte *contents;
-			if (Filesystem::ReadFile(u"C:/New Text Document.txt", contents, len))
-			{
-				// DisplyMemoryBlock()
-				cout << "Size of file: " << len << " bytes\n";
-				string str((char *)contents, len);
-				cout << str << '\n';
-				delete[] contents;
-			}
-			else
-				cout << "Failed to read file\n";
+			Task *task = Task::createTask(u"c:/programs/hello2.bin");
+			if (task)
+				Scheduler::add(task);
+			break;
 		}
-		break;
-		case Keyboard::KeyEvent::KeyCode::alpha6:
-		case Keyboard::KeyEvent::KeyCode::numpad_6:
-		{
-			// string contents = "Might not seem like it, but this file is a big milestone for PTOS. This file has been entirely created and written to in the PTOS' FAT32 Filesystem Driver.";
-			// cout << contents << '\n';
-
-			// if (Filesystem::WriteFile(u"C:/New Text Document.txt", (byte *)contents.data(), contents.getSize()))
-			// 	cout << "Write complete!\n";
-			// else
-			// 	cout << "Write failed!\n";
-		}
-		break;
-		case Keyboard::KeyEvent::KeyCode::alpha7:
-		case Keyboard::KeyEvent::KeyCode::numpad_7:
-		case Keyboard::KeyEvent::KeyCode::alpha8:
-		case Keyboard::KeyEvent::KeyCode::numpad_8:
-		case Keyboard::KeyEvent::KeyCode::alpha9:
-		case Keyboard::KeyEvent::KeyCode::numpad_9:
+		case Keyboard::KeyCode::alpha6:
+		case Keyboard::KeyCode::numpad_6:
+		case Keyboard::KeyCode::alpha7:
+		case Keyboard::KeyCode::numpad_7:
+		case Keyboard::KeyCode::alpha8:
+		case Keyboard::KeyCode::numpad_8:
+		case Keyboard::KeyCode::alpha9:
+		case Keyboard::KeyCode::numpad_9:
 			cout << "This test is unused\n";
 			break;
 		}
@@ -379,45 +335,25 @@ extern void main()
 		System::pause();
 	}
 
-#ifdef QEMU
-	cout << "Shutting down...";
+	shutdown();
+}
+void idle()
+{
+	while (true)
+		;
+}
+
+void shutdown()
+{
 	disableInterrupts();
+
+#ifdef QEMU
+	cout
+		<< "Shutting down...";
 	outw(0x604, 0x2000);
 #else
 	cout << "Shutdown not implemented...\n";
 #endif
-
-	// disk operations
-
-	// cli and sti is not needed in the interrupt handlers, since they are not trap gates
-
-	// move gdt to c++
-	// add 4k-aligned allocation functions
-
-	// filesystem
-
-	// test compatibility mode
-
-	// pci supoprt
-
-	// implement syscall
-
-	// change video mode
-
-	// test dpl changing
-
-	// shutdown
-
-	// c++ exception handling maybe?
-
-	// apic
-
-	// sound
-
-	// loading of user programs, with dynamic linking
-	// maybe support for pe executables
-
-	// multitasking
-
-	// networking
+	while (true)
+		;
 }

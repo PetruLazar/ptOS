@@ -1,14 +1,9 @@
 #pragma once
-#include "../../libc/types.h"
+#include <time.h>
 
 extern "C" qword clock();
 
-class Time
+namespace Time
 {
-	static void IrqHandler();
-
-public:
-	static qword time();
-
-	static void Initialize();
-};
+	void Initialize();
+}

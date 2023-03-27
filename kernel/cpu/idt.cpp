@@ -2,9 +2,10 @@
 #include "pic.h"
 #include "../drivers/screen.h"
 #include "../utils/string.h"
-#include "../utils/iostream.h"
+#include <iostream.h>
 #include "../core/sys.h"
 #include "../core/paging.h"
+#include "../core/scheduler.h"
 
 using namespace std;
 
@@ -94,10 +95,10 @@ public:
 	}
 };
 IDT::Gate *gates = (IDT::Gate *)0x1000;
-voidf irqHandlers[16];
+IrqHandler irqHandlers[16];
 byte irqOffset;
 
-void IDT::Gate::setInterruptGate(voidf funOffset)
+void IDT::Gate::setInterruptGate(voidf funOffset, byte ist)
 {
 	qword offset = (qword)funOffset;
 	offsetLow = offset & 0xffff;
@@ -105,8 +106,9 @@ void IDT::Gate::setInterruptGate(voidf funOffset)
 	offsetHigh = offset >> 32;
 	segmentSelector = KERNEL_CS;
 	flags |= 0b10001110;
+	IST = ist;
 }
-void IDT::Gate::setTrapGate(voidf funOffset)
+void IDT::Gate::setTrapGate(voidf funOffset, byte ist)
 {
 
 	qword offset = (qword)funOffset;
@@ -115,64 +117,65 @@ void IDT::Gate::setTrapGate(voidf funOffset)
 	offsetHigh = offset >> 32;
 	segmentSelector = KERNEL_CS;
 	flags |= 0b10001111;
+	IST = ist;
 }
 void IDT::Initialize()
 {
 	// build idt
 	// exception interrupts
-	gates[0x00].setInterruptGate(isr_0);
-	gates[0x01].setInterruptGate(isr_1);
-	gates[0x02].setInterruptGate(isr_2);
-	gates[0x03].setInterruptGate(isr_3);
-	gates[0x04].setInterruptGate(isr_4);
-	gates[0x05].setInterruptGate(isr_5);
-	gates[0x06].setInterruptGate(isr_6);
-	gates[0x07].setInterruptGate(isr_7);
-	gates[0x08].setInterruptGate(isr_8);
-	gates[0x09].setInterruptGate(isr_9);
-	gates[0x0a].setInterruptGate(isr_a);
-	gates[0x0b].setInterruptGate(isr_b);
-	gates[0x0c].setInterruptGate(isr_c);
-	gates[0x0d].setInterruptGate(isr_d);
-	gates[0x0e].setInterruptGate(isr_e);
-	gates[0x0f].setInterruptGate(isr_f);
-	gates[0x10].setInterruptGate(isr_10);
-	gates[0x11].setInterruptGate(isr_11);
-	gates[0x12].setInterruptGate(isr_12);
-	gates[0x13].setInterruptGate(isr_13);
-	gates[0x14].setInterruptGate(isr_14);
-	gates[0x15].setInterruptGate(isr_15);
-	gates[0x16].setInterruptGate(isr_16);
-	gates[0x17].setInterruptGate(isr_17);
-	gates[0x18].setInterruptGate(isr_18);
-	gates[0x19].setInterruptGate(isr_19);
-	gates[0x1a].setInterruptGate(isr_1a);
-	gates[0x1b].setInterruptGate(isr_1b);
-	gates[0x1c].setInterruptGate(isr_1c);
-	gates[0x1d].setInterruptGate(isr_1d);
-	gates[0x1e].setInterruptGate(isr_1e);
-	gates[0x1f].setInterruptGate(isr_1f);
+	gates[0x00].setInterruptGate(isr_0, 1);
+	gates[0x01].setInterruptGate(isr_1, 1);
+	gates[0x02].setInterruptGate(isr_2, 1);
+	gates[0x03].setInterruptGate(isr_3, 1);
+	gates[0x04].setInterruptGate(isr_4, 1);
+	gates[0x05].setInterruptGate(isr_5, 1);
+	gates[0x06].setInterruptGate(isr_6, 1);
+	gates[0x07].setInterruptGate(isr_7, 1);
+	gates[0x08].setInterruptGate(isr_8, 1);
+	gates[0x09].setInterruptGate(isr_9, 1);
+	gates[0x0a].setInterruptGate(isr_a, 1);
+	gates[0x0b].setInterruptGate(isr_b, 1);
+	gates[0x0c].setInterruptGate(isr_c, 1);
+	gates[0x0d].setInterruptGate(isr_d, 1);
+	gates[0x0e].setInterruptGate(isr_e, 1);
+	gates[0x0f].setInterruptGate(isr_f, 1);
+	gates[0x10].setInterruptGate(isr_10, 1);
+	gates[0x11].setInterruptGate(isr_11, 1);
+	gates[0x12].setInterruptGate(isr_12, 1);
+	gates[0x13].setInterruptGate(isr_13, 1);
+	gates[0x14].setInterruptGate(isr_14, 1);
+	gates[0x15].setInterruptGate(isr_15, 1);
+	gates[0x16].setInterruptGate(isr_16, 1);
+	gates[0x17].setInterruptGate(isr_17, 1);
+	gates[0x18].setInterruptGate(isr_18, 1);
+	gates[0x19].setInterruptGate(isr_19, 1);
+	gates[0x1a].setInterruptGate(isr_1a, 1);
+	gates[0x1b].setInterruptGate(isr_1b, 1);
+	gates[0x1c].setInterruptGate(isr_1c, 1);
+	gates[0x1d].setInterruptGate(isr_1d, 1);
+	gates[0x1e].setInterruptGate(isr_1e, 1);
+	gates[0x1f].setInterruptGate(isr_1f, 1);
 
 	// interrupt requests
-	gates[0x20].setInterruptGate(irq_0);
-	gates[0x21].setInterruptGate(irq_1);
-	gates[0x22].setInterruptGate(irq_2);
-	gates[0x23].setInterruptGate(irq_3);
-	gates[0x24].setInterruptGate(irq_4);
-	gates[0x25].setInterruptGate(irq_5);
-	gates[0x26].setInterruptGate(irq_6);
-	gates[0x27].setInterruptGate(irq_7);
-	gates[0x28].setInterruptGate(irq_8);
-	gates[0x29].setInterruptGate(irq_9);
-	gates[0x2a].setInterruptGate(irq_10);
-	gates[0x2b].setInterruptGate(irq_11);
-	gates[0x2c].setInterruptGate(irq_12);
-	gates[0x2d].setInterruptGate(irq_13);
-	gates[0x2e].setInterruptGate(irq_14);
-	gates[0x2f].setInterruptGate(irq_15);
+	gates[0x20].setInterruptGate(irq_0, 1);
+	gates[0x21].setInterruptGate(irq_1, 1);
+	gates[0x22].setInterruptGate(irq_2, 1);
+	gates[0x23].setInterruptGate(irq_3, 1);
+	gates[0x24].setInterruptGate(irq_4, 1);
+	gates[0x25].setInterruptGate(irq_5, 1);
+	gates[0x26].setInterruptGate(irq_6, 1);
+	gates[0x27].setInterruptGate(irq_7, 1);
+	gates[0x28].setInterruptGate(irq_8, 1);
+	gates[0x29].setInterruptGate(irq_9, 1);
+	gates[0x2a].setInterruptGate(irq_10, 1);
+	gates[0x2b].setInterruptGate(irq_11, 1);
+	gates[0x2c].setInterruptGate(irq_12, 1);
+	gates[0x2d].setInterruptGate(irq_13, 1);
+	gates[0x2e].setInterruptGate(irq_14, 1);
+	gates[0x2f].setInterruptGate(irq_15, 1);
 
 	// os callback
-	gates[0x30].setInterruptGate(isr_30);
+	gates[0x30].setInterruptGate(isr_30, 1);
 
 	// load idt
 	IDT_descriptor descriptor((qword)(gates), sizeof(Gate) * IDT_LENGTH - 1);
@@ -275,7 +278,8 @@ extern "C" void exceptionHandler(registers_t &regs, qword int_no, qword err_no)
 		// 		 << "   Return address: " << (void *)rbp[1] << " (file offset: " << (void *)(rbp[1] - 0x8000 + 0x200) << ")\n";
 		// }
 
-		System::blueScreen();
+		Scheduler::preempt(regs, true);
+		// System::blueScreen();
 	}
 }
 bool irq1Recd = false;
@@ -300,11 +304,11 @@ extern "C" void irqHandler(registers_t &regs, qword irq_no, bool spurious)
 		Screen::print("\n");
 	}
 	if (irqHandlers[irq_no])
-		irqHandlers[irq_no]();
+		irqHandlers[irq_no](regs);
 	PIC::EndOfInterrupt(irq_no);
 }
 
-void IDT::registerIrqHandler(byte irq_no, voidf handler)
+void IDT::registerIrqHandler(byte irq_no, IrqHandler handler)
 {
 	irqHandlers[irq_no] = handler;
 }

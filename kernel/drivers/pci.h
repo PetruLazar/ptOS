@@ -1,6 +1,5 @@
 #pragma once
-#include "screen.h"
-#include "../utils/iostream.h"
+#include <iostream.h>
 #include "../cpu/ports.h"
 
 class PCI

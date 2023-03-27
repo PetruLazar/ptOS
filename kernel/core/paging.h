@@ -1,5 +1,5 @@
 #pragma once
-#include "../../libc/types.h"
+#include <types.h>
 
 class PageEntry
 {
@@ -169,6 +169,8 @@ public:
 
 	void mapRegion(qword &freeSpace, qword virtualAddress, qword physicalAddress, qword len);
 	void unmapRegion(qword virtualAddress, qword len);
+
+	bool getPhysicalAddress(qword virtualAddress, qword &physicalAddress);
 
 	static PageMapLevel4 &getCurrent();
 	void setAsCurrent();

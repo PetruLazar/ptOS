@@ -1,10 +1,8 @@
 #pragma once
-#include "../../libc/types.h"
+#include <types.h>
 #include "../core/paging.h"
 
 constexpr int KERNEL_CS = 0x8;
-
-typedef void (*voidf)();
 
 extern "C" void disableInterrupts();
 extern "C" void enableInterrupts();
@@ -16,6 +14,9 @@ struct registers_t
 	PageMapLevel4 *cr3;
 	qword rip, cs, rflags, rsp, ss;
 };
+
+typedef void (*voidf)();
+typedef void (*IrqHandler)(registers_t &);
 
 class IDT
 {
@@ -31,12 +32,12 @@ public:
 		dword offsetHigh = 0;
 		dword reserved = 0;
 
-		void setInterruptGate(voidf offset);
-		void setTrapGate(voidf offset);
+		void setInterruptGate(voidf offset, byte ist);
+		void setTrapGate(voidf offset, byte ist);
 	};
 
 	static void Initialize();
 
-	static void registerIrqHandler(byte irq_no, voidf handler);
+	static void registerIrqHandler(byte irq_no, IrqHandler handler);
 	static void waitForIrq1();
 };

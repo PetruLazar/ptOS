@@ -1,6 +1,6 @@
 #include "explorer.h"
-#include "../drivers/screen.h"
-#include "../core/filesystem.h"
+#include <screen.h>
+#include <filesystem.h>
 
 using namespace std;
 

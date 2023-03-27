@@ -1,19 +1,37 @@
 #include "time.h"
 #include "../cpu/idt.h"
+#include "../core/scheduler.h"
 
-qword irqCount = 0;
+#include "iostream.h"
+using namespace std;
 
-void Time::IrqHandler()
+namespace Time
 {
-	irqCount++;
-}
+	static constexpr int preempt_time = 5;
 
-void Time::Initialize()
-{
-	IDT::registerIrqHandler(0, Time::IrqHandler);
-}
+	qword irqCount = 0;
+	word preempt_timer;
 
-qword Time::time()
-{
-	return irqCount;
+	void IrqHandler(registers_t &regs)
+	{
+		irqCount++;
+		preempt_timer--;
+		if (!preempt_timer)
+		{
+			Scheduler::preempt(regs, false);
+			preempt_timer = preempt_time;
+			// cout << ostream::base::hex << regs.cs << ':' << (void *)regs.rip << ostream::base::dec << '\n';
+		}
+	}
+
+	void Initialize()
+	{
+		IDT::registerIrqHandler(0, IrqHandler);
+		preempt_timer = preempt_time;
+	}
+
+	qword time()
+	{
+		return irqCount;
+	}
 }

@@ -1,6 +1,7 @@
 #include "ports.h"
 #include "cpuid.h"
 #include "pic.h"
+#include "pit.h"
 
 constexpr word pic1cmd = 0x20,
 			   pic1data = pic1cmd + 1,
@@ -46,6 +47,8 @@ void PIC::Initialize(byte offset)
 
 	outb(pic1data, mask1);
 	outb(pic2data, mask2);
+
+	PIT::ConfigureChannel(PIT::SelectChannel::channel0, PIT::OperatingMode::rateGenerator, 100);
 }
 
 constexpr byte readIRRcmd = 0x0a,

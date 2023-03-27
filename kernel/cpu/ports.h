@@ -1,5 +1,5 @@
 #pragma once
-#include "../../libc/types.h"
+#include <types.h>
 
 extern "C" byte inb(word port);
 extern "C" word inw(word port);

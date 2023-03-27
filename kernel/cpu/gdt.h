@@ -1,8 +1,32 @@
 #pragma once
-#include "../../libc/types.h"
+#include <types.h>
 
 namespace GDT
 {
+	class TSS
+	{
+	public:
+		uint reserved1;
+		UnalignedField<ull> rsp[3],
+			reserved2,
+			ist[7],
+			reserved3;
+		word reserved4, iopb;
+
+		void clear()
+		{
+			reserved1 = 0;
+			reserved2 = 0;
+			reserved3 = 0;
+			reserved4 = 0;
+			for (int i = 0; i < 3; i++)
+				rsp[i] = 0;
+			for (int i = 0; i < 7; i++)
+				ist[i] = 0;
+			iopb = sizeof(TSS);
+		}
+	};
+
 	class SegmentDescriptor
 	{
 	protected:
@@ -21,7 +45,8 @@ namespace GDT
 							  dplMask = 0b11 << 5,
 							  dbFlag = 1 << 6,
 							  lFlag = 1 << 5,
-							  granularityFlag = 1 << 7;
+							  granularityFlag = 1 << 7,
+							  accessedFlag = 1;
 
 	public:
 		inline SegmentDescriptor() {}
@@ -50,9 +75,11 @@ namespace GDT
 		inline void setType(bool isCodeOrData) { isCodeOrData ? access |= segmentTypeBit : access &= ~segmentTypeBit; }
 		inline void setExecutable(bool e) { e ? access |= executableBit : access &= ~executableBit; }
 		inline void setGranularity(bool g) { g ? limitHighandFlags |= granularityFlag : limitHighandFlags &= ~granularityFlag; }
+		inline void setAccessed(bool a) { a ? access |= accessedFlag : access &= ~accessedFlag; }
 
 		inline byte getPrivilegeLevel();
 		inline bool getPresent() { return access & presentBit; }
+		inline bool getAccessed() { return access & accessedFlag; }
 	};
 
 	class DataSegmentDescriptor : public SegmentDescriptor
@@ -90,9 +117,30 @@ namespace GDT
 		inline void setCompMode(bool is32bit) { is32bit ? limitHighandFlags |= dbFlag : limitHighandFlags &= ~dbFlag; }
 		inline void setLongMode(bool lm) { lm ? limitHighandFlags |= lFlag : limitHighandFlags &= ~lFlag; }
 	};
-	/*class SystemSegmentDescriptor : public SegmentDescriptor
+	class SystemSegmentDescriptor
 	{
-	};*/
+	public:
+		SegmentDescriptor low;
+		SegmentDescriptor high;
+
+		inline SystemSegmentDescriptor(ull base, uint limit)
+		{
+			low.setBase((uint)base);
+			low.setLimit(limit);
+			low.setPresent(true);
+			low.setExecutable(true);
+			low.setAccessed(true);
+			// low.set
+			*(uint *)&high = base >> 32;
+		}
+	};
+	class TSSDescriptor : public SystemSegmentDescriptor
+	{
+	public:
+		// 0x89 access
+		// 0x40 flags, prob need 0x20
+		inline TSSDescriptor(TSS &tss) : SystemSegmentDescriptor((ull)&tss, sizeof(tss)) {}
+	};
 
 	void Initialize();
 	void testGDT();

@@ -1,28 +1,10 @@
 #include "../cpu/idt.h"
-#include "../utils/iostream.h"
+#include <iostream.h>
 #include "../utils/time.h"
+#include "scheduler.h"
 
-#define SYSCALL_BREAKPOINT 0
-#define SYSCALL_SCREEN 1
-#define SYSCALL_KEYBOARD 2
-#define SYSCALL_FILESYSTEM 3
-#define SYSCALL_PROGENV 4
-#define SYSCALL_CURSOR 5
-#define SYSCALL_TIME 6
-
-#define SYSCALL_SCREEN_CLEAR 0
-#define SYSCALL_SCREEN_PRINTSTR 1
-#define SYSCALL_SCREEN_PRINTCH 2
-#define SYSCALL_SCREEN_PAINT 3
-
-#define SYSCALL_KEYBOARD_KEYEVENT 0
-#define SYSCALL_KEYBOARD_KEYPRESSEDEVENT 1
-#define SYSCALL_KEYBOARD_KEYRELEASEDEVENT 2
-
-#define SYSCALL_CURSOR_ENABLE 0
-#define SYSCALL_CURSOR_DISABLE 1
-
-#define SYSCALL_TIME_GET 0
+#define OMIT_FUNCS
+#include <syscall.h>
 
 using namespace std;
 
@@ -35,6 +17,7 @@ void Syscall_Keyboard(registers_t &);
 void Syscall_Filesystem(registers_t &);
 void Syscall_Cursor(registers_t &);
 void Syscall_Time(registers_t &);
+void Syscall_ProgEnv(registers_t &);
 
 extern "C" void os_serviceHandler(registers_t &regs)
 {
@@ -52,6 +35,8 @@ extern "C" void os_serviceHandler(registers_t &regs)
 		return Syscall_Cursor(regs);
 	case SYSCALL_TIME:
 		return Syscall_Time(regs);
+	case SYSCALL_PROGENV:
+		return Syscall_ProgEnv(regs);
 	}
 }
 
@@ -65,10 +50,10 @@ void Syscall_Breakpoint(registers_t &regs)
 	{
 		switch (Keyboard::getKeyPressedEvent().getKeyCode())
 		{
-		case Keyboard::KeyEvent::KeyCode::C:
+		case Keyboard::KeyCode::C:
 			keepGoing = false;
 			break;
-		case Keyboard::KeyEvent::KeyCode::S:
+		case Keyboard::KeyCode::S:
 			constexpr int bytesPerRow = 16;
 			// for (byte *i = (byte *)regs.rsp; i <= (byte *)regs.rbp; i += bytesPerRow)
 			for (byte *i = (byte *)currRsp; i <= (byte *)regs.rbp; i += bytesPerRow)
@@ -86,9 +71,19 @@ void Syscall_Screen(registers_t &regs)
 	case SYSCALL_SCREEN_CLEAR:
 		return Screen::clear();
 	case SYSCALL_SCREEN_PRINTSTR:
-		// get the virtual address of the string from regs.rdi and the paging structures
-		//  return Screen::print((const char *)regs.rdi);
-		break;
+	{
+		// get the physical address of the string from regs.rdi and the paging structures
+		qword physical;
+		if (!regs.cr3->getPhysicalAddress((qword)regs.rdi, physical))
+		{
+			// error
+			cout << "Syscall error: address not mapped\n";
+			break;
+		}
+		// for now, everything is identity mapped, no translation from physical to kernel virtual space
+		// PageMapLevel4::getCurrent().mapRegion(...);
+		return Screen::print((const char *)physical);
+	}
 	case SYSCALL_SCREEN_PRINTCH:
 		return Screen::print((char)regs.rdi);
 	case SYSCALL_SCREEN_PAINT:
@@ -135,6 +130,15 @@ void Syscall_Time(registers_t &regs)
 	{
 	case SYSCALL_TIME_GET:
 		regs.rax = Time::time();
-		break;
+		return;
+	}
+}
+void Syscall_ProgEnv(registers_t &regs)
+{
+	switch (regs.rbx)
+	{
+	case SYSCALL_PROGENV_EXIT:
+		cout << "A task is exiting with code " << (int)regs.rdi << '\n';
+		return Scheduler::preempt(regs, true);
 	}
 }

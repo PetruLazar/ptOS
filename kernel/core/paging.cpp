@@ -1,5 +1,5 @@
 #include "paging.h"
-#include "../utils/iostream.h"
+#include <iostream.h>
 
 using namespace std;
 
@@ -121,6 +121,52 @@ void PageMapLevel4::mapRegion(qword &freeSpace, qword virtualAddress, qword phys
 		physicalAddress += 0x1000;*/
 	}
 }
+bool PageMapLevel4::getPhysicalAddress(qword virtualAddress, qword &physicalAddress)
+{
+	word i1 = virtualAddress >> 12 & 0x1ff, // get index in pt
+		i2 = virtualAddress >> 21 & 0x1ff,	// get index in pd
+		i3 = virtualAddress >> 30 & 0x1ff,	// get index in pdpt
+		i4 = virtualAddress >> 39 & 0x1ff;	// get index in pml4
+
+	PageTable *pt;
+	PageDirectory *pd;
+	PageDirectoryPointerTable *pdpt;
+	{
+		PageMapLevel4Entry &e = entries[i4];
+		if (!e.isPresent())
+			return false;
+		pdpt = e.getTable();
+	}
+	{
+		PageDirectoryPointerTableEntry &e = pdpt->entries[i3];
+		if (!e.isPresent())
+			return false;
+		if (e.isPageBig())
+		{
+			physicalAddress = e.getAddress() | (virtualAddress & 0x3fffffff);
+			return true;
+		}
+		pd = e.getTable();
+	}
+	{
+		PageDirectoryEntry &e = pd->entries[i2];
+		if (!e.isPresent())
+			return false;
+		if (e.isPageBig())
+		{
+			physicalAddress = e.getAddress() | (virtualAddress & 0x1fffff);
+			return true;
+		}
+		pt = e.getTable();
+	}
+	{
+		PageTableEntry &e = pt->entries[i1];
+		if (!e.isPresent())
+			return false;
+		physicalAddress = e.getAddress() | (virtualAddress & 0xfff);
+		return true;
+	}
+}
 
 /*void PageMapLevel4::unmapRegion(qword virtualAddress, qword len)
 {
@@ -140,5 +186,8 @@ void PageMapLevel4::mapRegion(qword &freeSpace, qword virtualAddress, qword phys
 	}
 }*/
 
-void PageMapLevel4::setAsCurrent() { setCR3(this); }
+void PageMapLevel4::setAsCurrent()
+{
+	setCR3(this);
+}
 PageMapLevel4 &PageMapLevel4::getCurrent() { return getCR3(); }

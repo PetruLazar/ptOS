@@ -1,6 +1,6 @@
 #include "disk.h"
 #include "../cpu/ports.h"
-#include "../utils/iostream.h"
+#include <iostream.h>
 #include "../cpu/idt.h"
 #include "../core/sys.h"
 #include "../core/filesystem.h"
@@ -105,7 +105,7 @@ namespace Disk
 	};
 
 	bool irqRecd = false;
-	void irqReceive()
+	void irqReceive(registers_t &)
 	{
 		irqRecd = true;
 	}
