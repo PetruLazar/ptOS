@@ -1,13 +1,5 @@
-#include "../../../../libc/syscall.h"
-#include "../../../../libc/rand.h"
-
-struct Vector2b
-{
-	byte x, y;
-};
-
-static constexpr byte screenWidth = 80;
-static constexpr byte screenHeight = 25;
+#include <syscall.h>
+#include <rand.h>
 
 enum class Direction : byte
 {
@@ -30,8 +22,8 @@ enum class Cell : byte
 Direction currentDirection = Direction::right;
 // Cell arena[Screen::screenHeight][Screen::screenWidth];
 // Cell **arena = nullptr;
-Cell arena[screenHeight][screenWidth];
-Vector2b snakeHead, snakeTail;
+Cell arena[Screen::screenHeight][Screen::screenWidth];
+Vector2b snakeHead(0, 0), snakeTail(0, 0);
 bool gameOver = false;
 
 void spawnApple()
@@ -40,8 +32,8 @@ void spawnApple()
 	do
 	{
 		uint r = (uint)Random::get();
-		x = r % screenWidth;
-		y = r / screenWidth % screenHeight;
+		x = r % Screen::screenWidth;
+		y = r / Screen::screenWidth % Screen::screenHeight;
 	} while (arena[y][x] != Cell::air);
 	arena[y][x] = Cell::apple;
 }
@@ -80,13 +72,13 @@ void Redraw()
 			switch (arena[y][x])
 			{
 			case Cell::air:
-				syscall_screen_paint(y, x, Color::black);
+				Screen::paint(y, x, Screen::Cell::black);
 				break;
 			case Cell::apple:
-				syscall_screen_paint(y, x, Color::red);
+				Screen::paint(y, x, Screen::Cell::red);
 				break;
 			default:
-				syscall_screen_paint(y, x, Color::green);
+				Screen::paint(y, x, Screen::Cell::green);
 			}
 		}
 }
@@ -104,24 +96,24 @@ void Cycle()
 		arena[snakeHead.y][snakeHead.x] = Cell::snakeUp;
 		snakeHead.y--;
 		if (snakeHead.y == 0xff)
-			snakeHead.y = screenHeight - 1;
+			snakeHead.y = Screen::screenHeight - 1;
 		break;
 	case Direction::down:
 		arena[snakeHead.y][snakeHead.x] = Cell::snakeDown;
 		snakeHead.y++;
-		if (snakeHead.y == screenHeight)
+		if (snakeHead.y == Screen::screenHeight)
 			snakeHead.y = 0;
 		break;
 	case Direction::left:
 		arena[snakeHead.y][snakeHead.x] = Cell::snakeLeft;
 		snakeHead.x--;
 		if (snakeHead.x == 0xff)
-			snakeHead.x = screenWidth - 1;
+			snakeHead.x = Screen::screenWidth - 1;
 		break;
 	case Direction::right:
 		arena[snakeHead.y][snakeHead.x] = Cell::snakeRight;
 		snakeHead.x++;
-		if (snakeHead.x == screenWidth)
+		if (snakeHead.x == Screen::screenWidth)
 			snakeHead.x = 0;
 		break;
 	}
@@ -148,23 +140,23 @@ void Cycle()
 		{
 		case Cell::snakeDown:
 			snakeTail.y++;
-			if (snakeTail.y == screenHeight)
+			if (snakeTail.y == Screen::screenHeight)
 				snakeTail.y = 0;
 			break;
 		case Cell::snakeLeft:
 			snakeTail.x--;
 			if (snakeTail.x == 0xff)
-				snakeTail.x = screenWidth - 1;
+				snakeTail.x = Screen::screenWidth - 1;
 			break;
 		case Cell::snakeRight:
 			snakeTail.x++;
-			if (snakeTail.x == screenWidth)
+			if (snakeTail.x == Screen::screenWidth)
 				snakeTail.x = 0;
 			break;
 		case Cell::snakeUp:
 			snakeTail.y--;
 			if (snakeTail.y == 0xff)
-				snakeTail.y = screenHeight - 1;
+				snakeTail.y = Screen::screenHeight - 1;
 			break;
 		}
 	}
@@ -176,8 +168,8 @@ constexpr qword timeDiffCount = 0x3;
 extern "C" void main()
 {
 	// inits
-	syscall_screen_clear();
-	syscall_cursor_disable();
+	Screen::clear();
+	Screen::Cursor::disable();
 	// arena = new Cell *[screenHeight];
 	// for (byte i = 0; i < screenHeight; i++)
 	// 	arena[i] = new Cell[screenWidth];
@@ -185,50 +177,50 @@ extern "C" void main()
 	Build();
 	Redraw();
 
-	lastCycle = syscall_time_get();
+	lastCycle = Time::time();
 
 	// game loop
 	while (true)
 	{
-		KeyEvent::KeyCode pressed = syscall_keyboard_getKeyPressedEvent().getKeyCode();
+		Keyboard::KeyCode pressed = Keyboard::getKeyPressedEvent().getKeyCode();
 
 		switch (pressed)
 		{
-		case KeyEvent::KeyCode::W:
-		case KeyEvent::KeyCode::arrowUp:
+		case Keyboard::KeyCode::W:
+		case Keyboard::KeyCode::arrowUp:
 			if (currentDirection != Direction::down)
 				currentDirection = Direction::up;
 			break;
-		case KeyEvent::KeyCode::A:
-		case KeyEvent::KeyCode::arrowLeft:
+		case Keyboard::KeyCode::A:
+		case Keyboard::KeyCode::arrowLeft:
 			if (currentDirection != Direction::right)
 				currentDirection = Direction::left;
 			break;
-		case KeyEvent::KeyCode::S:
-		case KeyEvent::KeyCode::arrowDown:
+		case Keyboard::KeyCode::S:
+		case Keyboard::KeyCode::arrowDown:
 			if (currentDirection != Direction::up)
 				currentDirection = Direction::down;
 			break;
-		case KeyEvent::KeyCode::D:
-		case KeyEvent::KeyCode::arrowRight:
+		case Keyboard::KeyCode::D:
+		case Keyboard::KeyCode::arrowRight:
 			if (currentDirection != Direction::left)
 				currentDirection = Direction::right;
 			break;
-		case KeyEvent::KeyCode::R:
+		case Keyboard::KeyCode::R:
 			if (gameOver)
 			{
-				syscall_screen_clear();
-				syscall_cursor_disable();
+				Screen::clear();
+				Screen::Cursor::disable();
 				gameOver = false;
 				Build();
 				Redraw();
 
-				lastCycle = syscall_time_get();
+				lastCycle = Time::time();
 			}
 			break;
-		case KeyEvent::KeyCode::Escape:
-			syscall_screen_clear();
-			syscall_cursor_enable_def();
+		case Keyboard::KeyCode::Escape:
+			Screen::clear();
+			Screen::Cursor::enable();
 			// for (byte i = 0; i < screenHeight; i++)
 			// 	delete[] arena[i];
 			// delete[] arena;
@@ -238,7 +230,7 @@ extern "C" void main()
 		if (gameOver)
 			continue;
 
-		qword curCycle = syscall_time_get();
+		qword curCycle = Time::time();
 
 		if (curCycle - lastCycle >= timeDiffCount)
 		{
