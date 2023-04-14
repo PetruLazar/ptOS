@@ -165,7 +165,7 @@ void Cycle()
 qword lastCycle = 0;
 constexpr qword timeDiffCount = 0x3;
 
-extern "C" void main()
+int main()
 {
 	// inits
 	Screen::clear();
@@ -224,7 +224,7 @@ extern "C" void main()
 			// for (byte i = 0; i < screenHeight; i++)
 			// 	delete[] arena[i];
 			// delete[] arena;
-			return;
+			return 0;
 		}
 
 		if (gameOver)

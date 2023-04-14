@@ -3,6 +3,7 @@ SECTIONS {
 		*(.comment)
 	}
 	.text : {
+		QUAD(entry)
 		*(.text)
 	}
 	/* /DISCARD/ : { */
