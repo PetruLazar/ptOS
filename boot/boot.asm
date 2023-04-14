@@ -18,7 +18,7 @@ mov byte [bootdrive], dl
 call check_a20
 jnz a20_enabled
 mov bx, 0x5000
-mov word [bx], 'N'
+mov dword [bx], 'A20'
 mov cx, bx
 call printstring16
 jmp $
@@ -50,7 +50,7 @@ cmp eax, 0x80000001
 jz nolongmode
 mov eax, 0x80000001
 cpuid
-test edx, 1 << 29
+test edx, 1 << 29 
 jz nolongmode
 
 ;get memory map
@@ -74,27 +74,28 @@ inc byte [0x5000]
 jmp memmaploop
 memmapend:
 
-; load kernel from disk
-; load from disk 2 times, 0xc000 bytes (0x60 sectors) each
-; 1 - 0x0800 0 to 0x1400 0, starting at sec 02
-; 2 - 0x1400 0 to 0x2000 0, starting at sec 62
-
 mov dl, [bootdrive]
-xor bx, bx
-mov ax, 0x800
-mov es, ax
-mov cx, 0x0260
-xor dh, dh
-clc
-call diskload
+mov bx, 0x55aa
+mov ah, 0x41
+int 0x13
 jc diskload_fail
 
-mov cx, 0x2360
-mov ax, 0x1400
+; load kernel from disk, 6 * 0x40 sectors, 0x30000 bytes
+
+mov cx, 6
+mov di, 0x40 * 6 + 1
+clc
+mov bx, 0x40
+loop_here:
+xor si, si
+mov ax, cx
+shl ax, 11
 mov es, ax
-inc dh
+sub di, 0x40
+mov ax, di
 call diskload
 jc diskload_fail
+loop loop_here
 
 ; disable interrupts
 cli
@@ -120,10 +121,14 @@ xor ax, ax
 not ax
 mov es, ax
 mov al, byte [0x7dfe]
-mov cl, al
-xor al, 1
-mov byte [es:0x7e0e], al
-xor cl, byte [es:0x7e0e]
+mov cl, byte [es:0x7e0e]
+cmp al, cl
+jnz check_a20_ret
+not al
+mov byte [0x7dfe], al
+mov cl, byte [es:0x7e0e]
+check_a20_ret:
+xor al, cl
 ret
 
 %include "src/boot/printstring16.asm"

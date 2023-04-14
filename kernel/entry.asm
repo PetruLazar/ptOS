@@ -73,7 +73,6 @@ mov rbp, rsp
 call main
 cli
 hlt
-jmp $
 
 global printnr64
 global printstring64

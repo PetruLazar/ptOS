@@ -29,7 +29,7 @@ mov [es:di + 0x2000], eax ; store the value as the first entry
 
 ; pt
 lea di, [di + 0x3000] ; point to the pt
-mov eax, PAGE_PRESENT | PAGE_READWRITE ; sest flags for memory block 0x0000
+mov eax, PAGE_PRESENT | PAGE_READWRITE ; set flags for memory block 0x0000
 pagetable_loop:
 mov [es:di], eax ; place memory block at [eax] in page table entry
 add eax, 0x1000 ; advance to the next 4kb memory block
