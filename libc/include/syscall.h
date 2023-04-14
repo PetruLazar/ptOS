@@ -25,8 +25,10 @@
 #define SYSCALL_CURSOR_DISABLE 1
 
 #define SYSCALL_TIME_GET 0
+#define SYSCALL_TIME_SLEEP 1
 
 #define SYSCALL_PROGENV_EXIT 0
+#define SYSCALL_PROGENV_WAITFORTASK 1
 #define SYSCALL_PROGENV_ALLOCHEAP
 
 #ifndef OMIT_FUNCS
@@ -50,13 +52,13 @@ namespace Screen
 	{
 		asm("int $0x30"
 			:
-			: "a"(SYSCALL_SCREEN), "b"(SYSCALL_SCREEN_PRINTCH));
+			: "a"(SYSCALL_SCREEN), "b"(SYSCALL_SCREEN_PRINTCH), "D"(ch));
 	}
 	inline void print(const char *msg)
 	{
 		asm("int $0x30"
 			:
-			: "a"(SYSCALL_SCREEN), "b"(SYSCALL_SCREEN_PRINTSTR));
+			: "a"(SYSCALL_SCREEN), "b"(SYSCALL_SCREEN_PRINTSTR), "D"(msg));
 	}
 	inline void paint(byte line, byte col, Cell::Color color)
 	{
@@ -123,6 +125,26 @@ namespace Time
 }
 
 #endif
+
+namespace Time
+{
+	inline void sleep(ull ms)
+	{
+		asm("int $0x30"
+			:
+			: "a"(SYSCALL_TIME), "b"(SYSCALL_TIME_SLEEP), "D"(ms));
+	}
+}
+
+namespace Scheduler
+{
+	inline void waitForTask(void *task)
+	{
+		asm("int $0x30"
+			:
+			: "a"(SYSCALL_PROGENV), "b"(SYSCALL_PROGENV_WAITFORTASK), "D"(task));
+	}
+}
 
 inline void exit(int exitCode)
 {
