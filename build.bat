@@ -19,7 +19,7 @@ rem build binaries
 if not exist bin\boot.bin (echo Build failed! & exit)
 if not exist bin\kernel.bin (echo Build failed! & exit)
 copy /b bin\boot.bin+bin\kernel.bin=image.vhd
-filepad.exe 0x18200 image.vhd || (echo Build failed! & exit)
+filepad.exe 0x30200 image.vhd || (echo Build failed! & exit)
 rem filepad.exe 0x40000000 image.vhd
 rem 1gb disk image - filepad.exe 0x40000000 image.vhd
 rem 1mb disk image - 

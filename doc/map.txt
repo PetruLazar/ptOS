@@ -3,7 +3,7 @@ during boot before memory initialization:
      0x5000		- memory map entry count
 0x5018	->  ????	- memory map
  ????	<- 0x8000	- stack
-0x8000 -> 0x20000	- kernel
+0x8000 -> 0x38000	- kernel
 0xa0000	-> 0xbffff	- hardware mapped
 0xc0000	->  ????	- rom, hardware mapped, shadow ram
 
@@ -12,13 +12,12 @@ after memory initialization:
 0x2000	-> 0x2fff	- gdt
 	  0x5000		- memory map entry count
 0x5018	->  ????	- memory map
-0x8000	-> 0x20000	- kernel
-0x20000	-> 0x20068	- 64-bit TSS
-0x21000	<- 0x30000	- interrupt stack
-0x30000 <- 0x40000	- idle task stack
+0x8000	-> 0x38000	- kernel
+0x38000	-> 0x38068	- 64-bit TSS
+0x39000	<- 0x40000	- interrupt stack
 0x40000 <- 0x50000	- terminal task stack
 
 task virtual space:
-0x1000 	-> 0x30000	- kernel
- ????	<- 0x50000	- private stack
+0x1000 	-> 0x40000	- kernel
+0x40000	<- 0x50000	- private stack
 0x100000->  ????	- program image
