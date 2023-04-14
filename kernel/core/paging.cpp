@@ -10,7 +10,7 @@ extern "C" PageMapLevel4 &getCR3();
 // in pd: 2mb pages (0x)
 // in pdpt: 1gb pages (0x)
 
-void PageMapLevel4::mapRegion(qword &freeSpace, qword virtualAddress, qword physicalAddress, qword len)
+void PageMapLevel4::mapRegion(qword &freeSpace, qword virtualAddress, qword physicalAddress, qword len, bool writeAccess, bool userPage)
 {
 	len >>= 12;
 	word i1 = virtualAddress >> 12 & 0x1ff, // get index in pt
@@ -25,7 +25,7 @@ void PageMapLevel4::mapRegion(qword &freeSpace, qword virtualAddress, qword phys
 	while (len)
 	{
 		// iterate through pml4 using i4
-		PageDirectoryPointerTable *pdpt = getOrCreate(i4, freeSpace); // get pdpt address from pml4
+		PageDirectoryPointerTable *pdpt = getOrCreate(i4, freeSpace, writeAccess, userPage); // get pdpt address from pml4
 		while (len)
 		{
 			// iterare through pdpt using i3
@@ -33,7 +33,7 @@ void PageMapLevel4::mapRegion(qword &freeSpace, qword virtualAddress, qword phys
 			{
 				// use a 1gb page
 				PageDirectoryPointerTableEntry &entry = pdpt->entries[i3];
-				entry.set(physicalAddress); // PAT bit is 0
+				entry.set(physicalAddress, writeAccess, userPage); // PAT bit is 0
 				entry.setPageSize(true);
 				len -= 0x40000;
 				physicalAddress += 0x40000000;
@@ -42,7 +42,7 @@ void PageMapLevel4::mapRegion(qword &freeSpace, qword virtualAddress, qword phys
 			{
 				// cannot use 1gb page
 				//  get pdpt entry
-				PageDirectory *pd = pdpt->getOrCreate(i3, freeSpace);
+				PageDirectory *pd = pdpt->getOrCreate(i3, freeSpace, writeAccess, userPage);
 				while (len)
 				{
 					// iterate through pd using i2
@@ -50,7 +50,7 @@ void PageMapLevel4::mapRegion(qword &freeSpace, qword virtualAddress, qword phys
 					{
 						// use a 2mb page
 						PageDirectoryEntry &entry = pd->entries[i2];
-						entry.set(physicalAddress); // PAT bit is 0
+						entry.set(physicalAddress, writeAccess, userPage); // PAT bit is 0
 						entry.setPageSize(true);
 						len -= 0x200;
 						physicalAddress += 0x200000;
@@ -59,11 +59,11 @@ void PageMapLevel4::mapRegion(qword &freeSpace, qword virtualAddress, qword phys
 					{
 						// cannot use 2mb page
 						// get pt entry
-						PageTable *pt = pd->getOrCreate(i2, freeSpace);
+						PageTable *pt = pd->getOrCreate(i2, freeSpace, writeAccess, userPage);
 						while (len)
 						{
 							// iterate through pt using i1
-							pt->entries[i1].set(physicalAddress);
+							pt->entries[i1].set(physicalAddress, writeAccess, userPage);
 							len--;
 							physicalAddress += 0x1000;
 							if (i1++ == 512)

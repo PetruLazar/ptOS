@@ -3,11 +3,27 @@
 
 namespace Scheduler
 {
-	void Initialize(Task *terminalTask, Task *idleTask);
+	enum class preemptReason
+	{
+		timeSliceEnded,
+		startedSleeping,
+		waitingIO,
+		taskExited
+	};
+
+	void Initialize(Task *terminalTask);
 	void CleanUp();
 
 	void add(Task *task);
 
-	void preempt(registers_t &regs, bool erase);
+	void preempt(registers_t &regs, preemptReason reason);
 	// void finish(registers_t &regs);
+
+	void tick(registers_t &regs);
+
+	void sleep(registers_t &regs, ull untilTime);
+	void waitForIrq(registers_t &regs, int irq_no);
+	void waitForTask(registers_t &regs, Task *task);
+
+	Task *getCurrentTask();
 }

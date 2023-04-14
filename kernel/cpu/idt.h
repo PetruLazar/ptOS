@@ -2,7 +2,7 @@
 #include <types.h>
 #include "../core/paging.h"
 
-constexpr int KERNEL_CS = 0x8;
+constexpr int ms_per_timeint = 10;
 
 extern "C" void disableInterrupts();
 extern "C" void enableInterrupts();
@@ -32,8 +32,8 @@ public:
 		dword offsetHigh = 0;
 		dword reserved = 0;
 
-		void setInterruptGate(voidf offset, byte ist);
-		void setTrapGate(voidf offset, byte ist);
+		void setInterruptGate(voidf offset, byte ist, byte dpl);
+		void setTrapGate(voidf offset, byte ist, byte dpl);
 	};
 
 	static void Initialize();

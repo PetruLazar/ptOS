@@ -13,7 +13,7 @@ public:
 						   userPageBit = 1 << 2,
 						   accessedBit = 1 << 5;
 
-	inline void set(qword address, bool writeAccess = true, bool userPage = false)
+	inline void set(qword address, bool writeAccess, bool userPage)
 	{
 		value = address & addressMask | presentBit;
 		if (writeAccess)
@@ -86,11 +86,11 @@ public:
 class PageDirectory
 {
 public:
-	inline PageTable *getOrCreate(word index, qword &freeSpace)
+	inline PageTable *getOrCreate(word index, qword &freeSpace, bool writeAccess, bool userPage)
 	{
 		if (entries[index].isPresent())
 			return entries[index].getTable();
-		entries[index].set(freeSpace);
+		entries[index].set(freeSpace, writeAccess, userPage);
 		freeSpace += 0x1000;
 		PageTable *ret = entries[index].getTable();
 		ret->clearAll();
@@ -120,11 +120,11 @@ public:
 class PageDirectoryPointerTable
 {
 public:
-	inline PageDirectory *getOrCreate(word index, qword &freeSpace)
+	inline PageDirectory *getOrCreate(word index, qword &freeSpace, bool writeAccess, bool userPage)
 	{
 		if (entries[index].isPresent())
 			return entries[index].getTable();
-		entries[index].set(freeSpace);
+		entries[index].set(freeSpace, writeAccess, userPage);
 		freeSpace += 0x1000;
 		PageDirectory *ret = entries[index].getTable();
 		ret->clearAll();
@@ -148,11 +148,11 @@ public:
 class PageMapLevel4
 {
 public:
-	inline PageDirectoryPointerTable *getOrCreate(word index, qword &freeSpace)
+	inline PageDirectoryPointerTable *getOrCreate(word index, qword &freeSpace, bool writeAccess, bool userPage)
 	{
 		if (entries[index].isPresent())
 			return entries[index].getTable();
-		entries[index].set(freeSpace);
+		entries[index].set(freeSpace, writeAccess, userPage);
 		freeSpace += 0x1000;
 		PageDirectoryPointerTable *ret = entries[index].getTable();
 		ret->clearAll();
@@ -167,7 +167,7 @@ public:
 			entries[i].clear();
 	}
 
-	void mapRegion(qword &freeSpace, qword virtualAddress, qword physicalAddress, qword len);
+	void mapRegion(qword &freeSpace, qword virtualAddress, qword physicalAddress, qword len, bool writeAccess, bool userPage);
 	void unmapRegion(qword virtualAddress, qword len);
 
 	bool getPhysicalAddress(qword virtualAddress, qword &physicalAddress);

@@ -403,6 +403,7 @@ namespace Disk
 					dev.model[k + 1] = ((char *)identificationSpace)[(word)IDfield::model + k];
 				}
 				dev.model[40] = 0;
+				delete[] identificationSpace;
 
 				// read sector 0 and tell the filesystem about the volumes present
 				if (dev.type == IDEtype::PATA || dev.type == IDEtype::SATA)

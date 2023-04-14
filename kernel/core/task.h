@@ -8,7 +8,17 @@ class Task
 	byte *pageSpace, *fileContent, *stack;
 
 public:
-	inline Task(const registers_t &regs, byte *pageSpace = nullptr, byte *fileContent = nullptr, byte *stack = nullptr) : regs(regs), pageSpace(pageSpace), fileContent(fileContent), stack(stack) {}
+	class TaskInfo
+	{
+	public:
+		ull data;
+
+		inline TaskInfo() {}
+		inline TaskInfo(ull data) : data(data) {}
+	} taskInfo;
+
+	inline Task(const registers_t &regs, byte *pageSpace = nullptr, byte *fileContent = nullptr, byte *stack = nullptr)
+		: regs(regs), pageSpace(pageSpace), fileContent(fileContent), stack(stack) {}
 	inline ~Task()
 	{
 		if (pageSpace)
@@ -24,7 +34,8 @@ public:
 	inline static void switchContext(Task *currentTask, Task *targetTask, registers_t &regs)
 	{
 		// save the state of the currentTask
-		currentTask->regs = regs;
+		if (currentTask)
+			currentTask->regs = regs;
 		// switch context to the selected task
 		regs = targetTask->regs;
 		// enable interrupts for the new task

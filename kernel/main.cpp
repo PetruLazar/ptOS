@@ -16,16 +16,11 @@
 #include <math.h>
 #include "core/paging.h"
 #include "core/scheduler.h"
+#define OMIT_FUNCS
+#include <syscall.h>
 using namespace std;
 
 #define QEMU
-
-int waitTime = 0x7fffff;
-void delay()
-{
-	for (int i = 0; i < waitTime; i++)
-		;
-}
 
 // calling convention: 	rdi, rsi, rdx, rcx, r8, r9, stack...
 //						xmm0, xmm1, xmm2, xmm3, xmm4, xmm5, xmm6, xmm7, stack...
@@ -39,7 +34,6 @@ extern "C" void testCompMode();
 // void *memoryToFileOffset(void *input) { return (byte *)input - 0x8000 + 0x200; }
 
 void terminal();
-void idle();
 void shutdown();
 
 extern void main()
@@ -52,7 +46,6 @@ extern void main()
 
 	Time::Initialize();
 	Keyboard::Initialize();
-	enableInterrupts();
 
 	GDT::Initialize();
 
@@ -60,28 +53,39 @@ extern void main()
 	PCI::InitializeDevices();
 
 	// get terminal task ready and initialize scheduler
-	registers_t terminalRegs;
-	terminalRegs.rip = (ull)terminal;
-	terminalRegs.cs = 0x8;
-	terminalRegs.cr3 = &PageMapLevel4::getCurrent();
-	terminalRegs.rbp = terminalRegs.rsp = 0x50000; // 0x50000
-	terminalRegs.fs = terminalRegs.gs = terminalRegs.ss = 0x10;
-	registers_t idleRegs = terminalRegs;
-	idleRegs.rip = (ull)idle;
-	idleRegs.rbp = idleRegs.rsp = 0x40000;
-	Scheduler::Initialize(new Task(terminalRegs), new Task(idleRegs));
+	Task *terminalTask = new Task(registers_t());
+	Scheduler::Initialize(terminalTask);
 
 	enableInterrupts();
-	idle();
+
+	terminal();
+
+	disableInterrupts();
+
+	Scheduler::CleanUp();
+	delete terminalTask;
+	Filesystem::CleanUp();
+	Keyboard::CleanUp();
+	Screen::Cleanup();
+
+	ull currAllocCount = Memory::Heap::getAllocationCountFromSelected();
+	if (currAllocCount)
+	{
+		// screen and keyboard do not need re-initialization, since the pointers preserved their values, and they will safely use the memory
+		// previously allocated to them, which will be free since no other memory allocations are used
+
+		cout << "Memory leaks detected: " << currAllocCount << " allocations!\n";
+		Memory::Heap::displayAllocationSummaryFromSelected();
+		enableInterrupts();
+		System::pause();
+		disableInterrupts();
+	}
+
+	shutdown();
 
 	// disk operations
 
 	// cli and sti is not needed in the interrupt handlers, since they are not trap gates
-
-	// move gdt to c++
-	// add 4k-aligned allocation functions
-
-	// filesystem
 
 	// test compatibility mode
 
@@ -113,7 +117,6 @@ void terminal()
 {
 	cout << "Welcome to ptOS!\n";
 
-	ull initialAllocCount = Memory::Heap::getAllocationCountFromSelected();
 	bool keepRunning = true;
 	while (keepRunning)
 	{
@@ -134,8 +137,15 @@ void terminal()
 			// asm("int $0x30");
 			break;
 		case Keyboard::KeyCode::S:
-			Task::createTask(u"C:/programs/snake.bin");
+		{
+			Task *task = Task::createTask(u"C:/programs/snake.bin");
+			if (task)
+			{
+				Scheduler::add(task);
+				Scheduler::waitForTask(task);
+			}
 			break;
+		}
 		case Keyboard::KeyCode::arrowUp:
 			Screen::scrollUp();
 			break;
@@ -186,23 +196,6 @@ void terminal()
 			// Explorer::Start();
 			cout << "The file explorer is not currently available...\n";
 			break;
-
-			// Filesystem::DirectoryIterator *list = Filesystem::GetDirectoryIterator(u"C:/FOLDER1/FOLDER4");
-			Filesystem::DirectoryIterator *list = Filesystem::GetDirectoryIterator(u"C:/");
-
-			if (list == nullptr)
-			{
-				cout << "Iterator was nullptr\n";
-				break;
-			}
-
-			while (!list->finished())
-			{
-				cout << list->getString() << " (" << ostream::base::dec << list->getSize() << " bytes)\n";
-				list->advance();
-			}
-
-			delete list;
 		}
 		break;
 		case Keyboard::KeyCode::alpha1:
@@ -255,7 +248,7 @@ void terminal()
 		case Keyboard::KeyCode::alpha2:
 		case Keyboard::KeyCode::numpad_2:
 		{
-			while (true)
+			/*while (true)
 			{
 				uint nr, align;
 				cin >> nr;
@@ -263,7 +256,7 @@ void terminal()
 					break;
 				cin >> align;
 				cout << "result: " << alignValueUpwards(nr, align) << '\n';
-			}
+			}*/
 		}
 		break;
 		case Keyboard::KeyCode::alpha3:
@@ -314,8 +307,22 @@ void terminal()
 		}
 		case Keyboard::KeyCode::alpha6:
 		case Keyboard::KeyCode::numpad_6:
+		{
+			uint count;
+			cout << "how many? ";
+			cin >> count;
+			for (uint i = 0; i < count; i++)
+			{
+				Task *task = Task::createTask(i & 1 ? u"c:/programs/hello2.bin" : u"c:/programs/hello1.bin");
+				if (task)
+					Scheduler::add(task);
+			}
+			break;
+		}
 		case Keyboard::KeyCode::alpha7:
 		case Keyboard::KeyCode::numpad_7:
+			Time::sleep(1000);
+			break;
 		case Keyboard::KeyCode::alpha8:
 		case Keyboard::KeyCode::numpad_8:
 		case Keyboard::KeyCode::alpha9:
@@ -327,20 +334,6 @@ void terminal()
 
 	// some cleanup
 	// Screen::Cleanup();
-
-	ull currAllocCount = Memory::Heap::getAllocationCountFromSelected();
-	if (initialAllocCount != currAllocCount)
-	{
-		cout << "Memory leaks detected: " << currAllocCount - initialAllocCount << " allocations!\n";
-		System::pause();
-	}
-
-	shutdown();
-}
-void idle()
-{
-	while (true)
-		;
 }
 
 void shutdown()
@@ -348,8 +341,7 @@ void shutdown()
 	disableInterrupts();
 
 #ifdef QEMU
-	cout
-		<< "Shutting down...";
+	// cout << "Shutting down...";
 	outw(0x604, 0x2000);
 #else
 	cout << "Shutdown not implemented...\n";

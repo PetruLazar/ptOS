@@ -2,6 +2,7 @@
 #include "cpuid.h"
 #include "pic.h"
 #include "pit.h"
+#include "idt.h"
 
 constexpr word pic1cmd = 0x20,
 			   pic1data = pic1cmd + 1,
@@ -48,7 +49,9 @@ void PIC::Initialize(byte offset)
 	outb(pic1data, mask1);
 	outb(pic2data, mask2);
 
-	PIT::ConfigureChannel(PIT::SelectChannel::channel0, PIT::OperatingMode::rateGenerator, 100);
+	PIT::ConfigureChannel(PIT::SelectChannel::channel0, PIT::OperatingMode::rateGenerator, 1000 / ms_per_timeint);
+	// PIT::ConfigureChannel(PIT::SelectChannel::channel2, PIT::OperatingMode::squareWaveGenerator, 10000 / ms_per_timeint);
+	// outb(0x61, inb(0x61) | 0b11);
 }
 
 constexpr byte readIRRcmd = 0x0a,

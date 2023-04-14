@@ -82,7 +82,8 @@ public:
 		inline static Heap *build(void *address, qword size);
 
 		inline qword getSize();
-		inline ull getAllocationCount();
+		ull getAllocationCount();
+		void displayAllocationSummary();
 
 		void *Allocate(qword allocationSize, ull alignment);
 		inline void Deallocate(void *ptr);
@@ -91,7 +92,8 @@ public:
 		inline static void DeallocateFromSelected(void *ptr);
 		inline static void DeallocateFromSelected(void *ptr, ull size);
 
-		static ull getAllocationCountFromSelected();
+		inline static ull getAllocationCountFromSelected() { return selected->getAllocationCount(); }
+		inline static void displayAllocationSummaryFromSelected() { return selected->displayAllocationSummary(); }
 	};
 
 	static void *Allocate(ull size, ull alignment);

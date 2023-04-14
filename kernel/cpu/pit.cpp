@@ -2,6 +2,9 @@
 #include "idt.h"
 #include "ports.h"
 
+#include <iostream.h>
+using namespace std;
+
 namespace PIT
 {
 	static constexpr word channel0_dataport = 0x40,

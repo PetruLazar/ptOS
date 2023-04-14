@@ -3,6 +3,12 @@
 
 namespace GDT
 {
+	static constexpr qword KERNEL_CS = 0x8,
+						   KERNEL_DS = 0x10,
+						   USER_CS = 0x18,
+						   USERCOMP_CS = 0x20,
+						   USER_DS = 0x28;
+
 	class TSS
 	{
 	public:
@@ -90,10 +96,13 @@ namespace GDT
 			setExecutable(false);
 			setWritable(writable);
 			setDirection(growsDown);
+			setLongMode(false);
 		}
 
 		inline void setDirection(bool growsDown) { growsDown ? access |= directionConformingBit : access &= ~directionConformingBit; }
 		inline void setWritable(bool w) { w ? access |= readWriteBit : access &= ~readWriteBit; }
+
+		inline void setLongMode(bool lm) { lm ? limitHighandFlags |= lFlag : limitHighandFlags &= ~lFlag; }
 	};
 	class CodeSegmentDescriptor : public SegmentDescriptor
 	{

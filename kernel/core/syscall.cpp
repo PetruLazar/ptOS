@@ -131,6 +131,8 @@ void Syscall_Time(registers_t &regs)
 	case SYSCALL_TIME_GET:
 		regs.rax = Time::time();
 		return;
+	case SYSCALL_TIME_SLEEP:
+		return Scheduler::sleep(regs, regs.rdi / ms_per_timeint + Time::time());
 	}
 }
 void Syscall_ProgEnv(registers_t &regs)
@@ -139,6 +141,8 @@ void Syscall_ProgEnv(registers_t &regs)
 	{
 	case SYSCALL_PROGENV_EXIT:
 		cout << "A task is exiting with code " << (int)regs.rdi << '\n';
-		return Scheduler::preempt(regs, true);
+		return Scheduler::preempt(regs, Scheduler::preemptReason::taskExited);
+	case SYSCALL_PROGENV_WAITFORTASK:
+		return Scheduler::waitForTask(regs, (Task *)regs.rdi);
 	}
 }

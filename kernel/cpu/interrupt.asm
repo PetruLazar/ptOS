@@ -374,6 +374,8 @@ push rbp
 lea rbp, [rsp + 8]
 push gs
 push fs
+; mov bp, ds
+; push rbp
 push r9
 push r8
 push rsi
@@ -399,6 +401,8 @@ pop rdi
 pop rsi
 pop r8
 pop r9
+; pop rbp
+; mov ds, bp
 pop fs
 pop gs
 xchg rbp, [rsp + 8] ; ret addr <=> stack cr3

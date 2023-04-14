@@ -29,6 +29,10 @@ namespace Keyboard
 		}
 		IDT::registerIrqHandler(1, EventListener);
 	}
+	void CleanUp()
+	{
+		delete[] eventQueue;
+	}
 
 	void waitForWrite()
 	{

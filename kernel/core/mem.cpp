@@ -171,13 +171,13 @@ void Memory::Initialize()
 
 	// identity map the first 2MB of ram
 	// pml4->mapRegion(nextFree, 0x1000, 0x1000, 0x200000 - 0x1000);
-	pml4->mapRegion(nextFree, 0, 0, 0x200000);
+	pml4->mapRegion(nextFree, 0, 0, 0x200000, true, false);
 	pml4->setAsCurrent();
 
 	// identity map the rest of the ram region
 	sqword leftToMap = (sqword)entry.base_address + entry.length - 0x200000;
 	if (leftToMap > 0)
-		pml4->mapRegion(nextFree, 0x200000, 0x200000, leftToMap);
+		pml4->mapRegion(nextFree, 0x200000, 0x200000, leftToMap, true, false);
 
 	qword diff = nextFree - (qword)entry.base_address;
 	entry.base_address += diff;
@@ -259,12 +259,22 @@ inline Memory::Heap *Memory::Heap::build(void *address, qword size)
 	return obj;
 }
 inline qword Memory::Heap::getSize() { return heapSize; }
-inline ull Memory::Heap::getAllocationCount()
+ull Memory::Heap::getAllocationCount()
 {
 	ull c = 0;
 	for (AllocatorEntry *i = firstAllocation; i; i = i->nextAllocation)
 		c++;
 	return c;
+}
+void Memory::Heap::displayAllocationSummary()
+{
+	for (auto *i = firstAllocation; i; i = i->nextAllocation)
+	{
+		// cheat to get the allocation size
+		ull size = ((ull *)i)[2];
+		cout << "Allocation of " << size << "bytes at " << (void *)i << ":\n";
+		DisplyMemoryBlock((byte *)i->getAllocatedBlock(), 0x30);
+	}
 }
 
 Memory::Heap *Memory::Heap::selected = nullptr;
@@ -355,10 +365,6 @@ inline void Memory::Heap::DeallocateFromSelected(void *ptr, ull size)
 	cout << "Freeing block at " << ptr << ", expected length is " << size << " bytes\n";
 #endif
 	selected->Deallocate(ptr);
-}
-ull Memory::Heap::getAllocationCountFromSelected()
-{
-	return selected->getAllocationCount();
 }
 
 void *Memory::Allocate(ull size, ull alignment) { return Heap::AllocateFromSelected(size, alignment); }

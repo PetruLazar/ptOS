@@ -40,20 +40,22 @@ namespace GDT
 	extern "C" void updateSegmentRegisters();
 	extern "C" void loadTSS(word gdtEntry);
 
-	TSS *tss = (TSS *)0x20000;
+	TSS *tss = (TSS *)0x38000;
 
 	void Initialize()
 	{
 		tss->clear();
-		tss->rsp[0] = tss->ist[0] = 0x30000;
+		tss->rsp[0] = tss->ist[0] = 0x40000;
 
 		TSSDescriptor tssDesc(*tss);
 
 		byte count = 0;
 		globalDescriptorTable[count++] = SegmentDescriptor();			  // null descriptor
-		globalDescriptorTable[count++] = CodeSegmentDescriptor(0, false); // code
-		globalDescriptorTable[count++] = DataSegmentDescriptor(0);		  // data
-		globalDescriptorTable[count++] = CodeSegmentDescriptor(0, true);  // code - compatibility
+		globalDescriptorTable[count++] = CodeSegmentDescriptor(0, false); // kernel code
+		globalDescriptorTable[count++] = DataSegmentDescriptor(0);		  // kernel data
+		globalDescriptorTable[count++] = CodeSegmentDescriptor(3, false); // user code (ring 3)
+		globalDescriptorTable[count++] = CodeSegmentDescriptor(3, true);  // compatibility user code (ring 3)
+		globalDescriptorTable[count++] = DataSegmentDescriptor(3);		  // user data
 		word tssEntry = count;
 		globalDescriptorTable[count++] = tssDesc.low;  // 64 bit tss - low entry
 		globalDescriptorTable[count++] = tssDesc.high; // 64 bit TSS - high entry

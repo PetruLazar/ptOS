@@ -36,6 +36,7 @@ namespace Keyboard
 	};
 
 	void Initialize();
+	void CleanUp();
 	// void EventListener(registers_t &regs);
 	void sendCommand(Command command, byte data);
 
