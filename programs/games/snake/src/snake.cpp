@@ -1,5 +1,6 @@
 #include <syscall.h>
 #include <rand.h>
+#include <iostream.h>
 
 enum class Direction : byte
 {
@@ -21,8 +22,7 @@ enum class Cell : byte
 
 Direction currentDirection = Direction::right;
 // Cell arena[Screen::screenHeight][Screen::screenWidth];
-// Cell **arena = nullptr;
-Cell arena[Screen::screenHeight][Screen::screenWidth];
+Cell **arena = nullptr;
 Vector2b snakeHead(0, 0), snakeTail(0, 0);
 bool gameOver = false;
 
@@ -163,16 +163,16 @@ void Cycle()
 }
 
 qword lastCycle = 0;
-constexpr qword timeDiffCount = 0x3;
+constexpr qword timeDiffCount = 30;
 
 int main()
 {
 	// inits
 	Screen::clear();
 	Screen::Cursor::disable();
-	// arena = new Cell *[screenHeight];
-	// for (byte i = 0; i < screenHeight; i++)
-	// 	arena[i] = new Cell[screenWidth];
+	arena = new Cell *[Screen::screenHeight];
+	for (byte i = 0; i < Screen::screenHeight; i++)
+		arena[i] = new Cell[Screen::screenWidth];
 	gameOver = false;
 	Build();
 	Redraw();

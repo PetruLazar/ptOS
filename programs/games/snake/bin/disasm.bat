@@ -1,0 +1,1 @@
+ndisasm -b 64 snake.bin > snake.asm
