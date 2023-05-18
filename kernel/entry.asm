@@ -166,30 +166,6 @@ int 30h
 jmp returnTo64Bits
 
 [bits 64]
-global clock
-global loadidt
-global clearint
-global setint
-
-clock:
-rdtsc
-and eax, 0xffffffff
-shl rdx, 32
-or rax, rdx
-ret
-
-loadidt:
-lidt [rdi]
-ret
-
-clearint:
-cli
-ret
-
-setint:
-sti
-ret
-
 global makesyscall
 makesyscall:
 syscall
