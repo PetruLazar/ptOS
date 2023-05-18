@@ -15,12 +15,21 @@ struct registers_t
 	qword rip, cs, rflags, rsp, ss;
 };
 
-typedef void (*voidf)();
-typedef void (*IrqHandler)(registers_t &);
+typedef void (*voidf)();				   // pointer to void returning function with no args
+typedef void (*IrqHandler)(registers_t &); // pointer to void returning function with a registers_t& arg
 
-class IDT
+namespace IDT
 {
-public:
+	enum class Irq_no
+	{
+		timer = 0,
+		ps2_keyboard = 1,
+
+		ps2_mouse = 12,
+		primaryATA = 14,
+		secondaryATA = 15
+	};
+
 	class Gate
 	{
 	public:
@@ -36,8 +45,7 @@ public:
 		void setTrapGate(voidf offset, byte ist, byte dpl);
 	};
 
-	static void Initialize();
+	void Initialize();
 
-	static void registerIrqHandler(byte irq_no, IrqHandler handler);
-	static void waitForIrq1();
+	void registerIrqHandler(byte irq_no, IrqHandler handler);
 };

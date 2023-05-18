@@ -53,7 +53,7 @@ extern void main()
 	PCI::InitializeDevices();
 
 	// get terminal task ready and initialize scheduler
-	Task *terminalTask = new Task(registers_t());
+	Task *terminalTask = new Task(registers_t(), true);
 	Scheduler::Initialize(terminalTask);
 
 	enableInterrupts();
@@ -125,7 +125,6 @@ void terminal()
 		if (ch)
 			cout << "Pressed " << ch << " (" << (int)ch << ")\n";
 		continue;*/
-
 		Keyboard::KeyCode key = Keyboard::getKeyPressedEvent().getKeyCode();
 
 		switch (key)
@@ -156,8 +155,11 @@ void terminal()
 			Screen::clear();
 			break;
 		case Keyboard::KeyCode::D:
-			cout << "Function to debug is at " << (void *)((char *)Disk::Initialize - 0x8000 + 0x200) << '\n';
+		{
+			cout << "Function to debug is at " << (void *)((char *)Keyboard::getKeyEvent_direct - 0x8000 + 0x200) << '\n';
+			// cout << "Function to debug is at " << (void *)((char *)Disk::Initialize - 0x8000 + 0x200) << '\n';
 			break;
+		}
 		case Keyboard::KeyCode::A:
 			cout << "Apic ";
 			if (!PIC::detectApic())
@@ -201,67 +203,24 @@ void terminal()
 		case Keyboard::KeyCode::alpha1:
 		case Keyboard::KeyCode::numpad_1:
 		{
-			break;
-			/*basic_string<byte *> allocations;
-			for (int i = 0; i < 100; i++)
-			{
-				switch (Random::get() % 3)
-				{
-				case 0:
-				case 2:
-				{
-					ull size = Random::get() % 10000 + 1;
-					byte *block = (byte *)Memory::Allocate(size, 0x1000);
-					allocations.push_back(block);
-					cout << "Allocated " << size << " bytes at " << block << '\n';
-					break;
-				}
-				case 1:
-				{
-					ull len = allocations.length();
-					if (!len)
-					{
-						cout << "No allocations to delete\n";
-						break;
-					}
-					ull index = Random::get() % len;
-					byte *block = allocations[index];
-					delete[] block;
-					allocations.erase(index);
-					cout << "Deallocated block at " << block << '\n';
-					break;
-				}
-				}
-
-				System::pause(false);
-			}
-
-			for (auto &block : allocations)
-			{
-				delete[] block;
-				cout << "Deallocated block at " << block << '\n';
-			}
-
-			cout << '\n'; */
+			asm("int $0x30"
+				:
+				: "a"(SYSCALL_SCREEN), "b"(SYSCALL_SCREEN_PRINTSTR), "D"("Hello world!\n"));
 		}
 		break;
 		case Keyboard::KeyCode::alpha2:
 		case Keyboard::KeyCode::numpad_2:
 		{
-			/*while (true)
-			{
-				uint nr, align;
-				cin >> nr;
-				if (!nr)
-					break;
-				cin >> align;
-				cout << "result: " << alignValueUpwards(nr, align) << '\n';
-			}*/
+			asm("int $0x30"
+				:
+				: "a"(SYSCALL_SCREEN), "b"(SYSCALL_SCREEN_PRINTSTR), "D"(0x0000));
 		}
 		break;
 		case Keyboard::KeyCode::alpha3:
 		case Keyboard::KeyCode::numpad_3:
 		{
+			*(byte *)(0x00) = 5;
+			break;
 			bool first = true;
 			for (int i = 0; i < 4; i++)
 			{
@@ -292,9 +251,12 @@ void terminal()
 		case Keyboard::KeyCode::alpha4:
 		case Keyboard::KeyCode::numpad_4:
 		{
-			Task *task = Task::createTask(u"c:/programs/hello1.bin");
+			Task *task = Task::createTask(u"c:/programs/test1.bin");
 			if (task)
+			{
 				Scheduler::add(task);
+				Scheduler::waitForTask(task);
+			}
 			break;
 		}
 		case Keyboard::KeyCode::alpha5:

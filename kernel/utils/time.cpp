@@ -22,6 +22,6 @@ namespace Time
 
 	qword time()
 	{
-		return irqCount;
+		return irqCount * ms_per_timeint;
 	}
 }

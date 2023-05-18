@@ -3,6 +3,7 @@
 #include "screen.h"
 #include "keyboard.h"
 #include "time.h"
+#include "mem.h"
 
 #define SYSCALL_BREAKPOINT 0
 #define SYSCALL_SCREEN 1
@@ -21,15 +22,21 @@
 #define SYSCALL_KEYBOARD_KEYPRESSEDEVENT 1
 #define SYSCALL_KEYBOARD_KEYRELEASEDEVENT 2
 
+#define SYSCALL_FILESYSTEM_READFILE 0
+#define SYSCALL_FILESYSTEM_WRITEFILE 1
+// #define SYSCALL_FILESYSTEM_GET
+
+#define SYSCALL_PROGENV_EXIT 0
+#define SYSCALL_PROGENV_WAITFORTASK 1
+// #define SYSCALL_PROGENV_ALLOCHEAP 2
+// #define SYSCALL_PROGENV_HEAPFULL 3
+// #define SYSCALL_PROGENV_HEAPCORRUPTION 4
+
 #define SYSCALL_CURSOR_ENABLE 0
 #define SYSCALL_CURSOR_DISABLE 1
 
 #define SYSCALL_TIME_GET 0
 #define SYSCALL_TIME_SLEEP 1
-
-#define SYSCALL_PROGENV_EXIT 0
-#define SYSCALL_PROGENV_WAITFORTASK 1
-#define SYSCALL_PROGENV_ALLOCHEAP
 
 #ifndef OMIT_FUNCS
 
@@ -84,34 +91,6 @@ namespace Screen
 	}
 }
 
-namespace Keyboard
-{
-	inline KeyEvent getKeyEvent()
-	{
-		ushort result;
-		asm("int $0x30"
-			: "=a"(result)
-			: "a"(SYSCALL_KEYBOARD), "b"(SYSCALL_KEYBOARD_KEYEVENT));
-		return *(KeyEvent *)&result;
-	}
-	inline KeyEvent getKeyPressedEvent()
-	{
-		ushort result;
-		asm("int $0x30"
-			: "=a"(result)
-			: "a"(SYSCALL_KEYBOARD), "b"(SYSCALL_KEYBOARD_KEYPRESSEDEVENT));
-		return *(KeyEvent *)&result;
-	}
-	inline KeyEvent getKeyReleasedEvent()
-	{
-		ushort result;
-		asm("int $0x30"
-			: "=a"(result)
-			: "a"(SYSCALL_KEYBOARD), "b"(SYSCALL_KEYBOARD_KEYRELEASEDEVENT));
-		return *(KeyEvent *)&result;
-	}
-}
-
 namespace Time
 {
 	inline qword time()
@@ -125,6 +104,34 @@ namespace Time
 }
 
 #endif
+
+namespace Keyboard
+{
+	inline KeyEvent getKeyEvent(bool blocking)
+	{
+		ushort result;
+		asm("int $0x30"
+			: "=a"(result)
+			: "a"(SYSCALL_KEYBOARD), "b"(SYSCALL_KEYBOARD_KEYEVENT), "D"(blocking));
+		return *(KeyEvent *)&result;
+	}
+	inline KeyEvent getKeyPressedEvent(bool blocking)
+	{
+		ushort result;
+		asm("int $0x30"
+			: "=a"(result)
+			: "a"(SYSCALL_KEYBOARD), "b"(SYSCALL_KEYBOARD_KEYPRESSEDEVENT), "D"(blocking));
+		return *(KeyEvent *)&result;
+	}
+	inline KeyEvent getKeyReleasedEvent(bool blocking)
+	{
+		ushort result;
+		asm("int $0x30"
+			: "=a"(result)
+			: "a"(SYSCALL_KEYBOARD), "b"(SYSCALL_KEYBOARD_KEYRELEASEDEVENT), "D"(blocking));
+		return *(KeyEvent *)&result;
+	}
+}
 
 namespace Time
 {

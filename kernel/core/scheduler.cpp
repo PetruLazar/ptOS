@@ -126,6 +126,24 @@ namespace Scheduler
 	}
 	void irqReceived(int irq_no)
 	{
+		if (!enabled)
+			return;
+
+		if (!irq_no)
+			return; // IRQ0 is not handled here
+
+		// go from 0 and go up, so the first function who started waiting will be awakened
+		ull limit = waitingTasks->getSize();
+		for (ull i = 0; i < limit; i++)
+		{
+			Task *task = waitingTasks->at(i);
+			if (IrqWaitingTaskInfo(irq_no) == task->taskInfo)
+			{
+				waitingTasks->erase(i);
+				executingTasks->push_back(task);
+				return;
+			}
+		}
 	}
 
 	void preempt(registers_t &regs, preemptReason reason)
@@ -211,9 +229,13 @@ namespace Scheduler
 		preempt(regs, preemptReason::startedSleeping);
 		preempt_timer = preempt_interval;
 	}
-	void waitForIrq(registers_t &regs, int irq_no)
+	// WARNING: only ONE task will be awakened if multiple tasks are waiting for the same irq
+	// cannot wait for irq 0
+	void waitForIrq(registers_t &regs, IDT::Irq_no irq_no)
 	{
-		getCurrentTask()->taskInfo = IrqWaitingTaskInfo(irq_no);
+		if (irq_no == IDT::Irq_no::timer)
+			return;
+		getCurrentTask()->taskInfo = IrqWaitingTaskInfo((int)irq_no);
 		preempt(regs, preemptReason::waitingIO);
 		preempt_timer = preempt_interval;
 	}

@@ -23,12 +23,14 @@ Task *Task::createTask(const std::string16 &executableFileName)
 		return nullptr;
 	}
 	byte *pageSpace = (byte *)Memory::Allocate(0x10000, 0x1000),
-		 *stack = (byte *)Memory::Allocate(0x10000, 0x1000);
+		 *stack = (byte *)Memory::Allocate(0x10000, 0x1000),
+		 *heap = (byte *)Memory::Allocate(0x10000, 0x1000);
 	PageMapLevel4 *paging = (PageMapLevel4 *)pageSpace;
 	paging->clearAll();
 	qword freeSpace = (qword)(paging + 0x1);
 	paging->mapRegion(freeSpace, 0x100000, (qword)content, alignValueUpwards(len, 0x1000), true, true); // page loaded code
 	paging->mapRegion(freeSpace, 0x40000, (ull)stack, 0x10000, true, true);								// page stack
+	paging->mapRegion(freeSpace, 0x7f0000000000, (ull)heap, 0x10000, true, true);						// page heap
 	paging->mapRegion(freeSpace, 0x1000, 0x1000, 0x40000 - 0x1000, false, false);						// page kernel
 	if (freeSpace > (qword)(pageSpace + 0x10000))
 	{
@@ -36,6 +38,7 @@ Task *Task::createTask(const std::string16 &executableFileName)
 		delete[] pageSpace;
 		delete[] content;
 		delete[] stack;
+		delete[] heap;
 		return nullptr;
 	}
 	ExecutableFileHeader *header = (ExecutableFileHeader *)content;
@@ -50,7 +53,7 @@ Task *Task::createTask(const std::string16 &executableFileName)
 	// cout << "pageSpace: " << (void *)pageSpace
 	// 	 << "\ncontent: " << (void *)content
 	// 	 << "\nstack: " << (void *)stack << '\n';
-	return new Task(regs, pageSpace, content, stack);
+	return new Task(regs, false, pageSpace, content, stack, heap);
 
 	// build virtual space:
 	// map kernel into the virtual space

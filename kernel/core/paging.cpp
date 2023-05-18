@@ -29,7 +29,7 @@ void PageMapLevel4::mapRegion(qword &freeSpace, qword virtualAddress, qword phys
 		while (len)
 		{
 			// iterare through pdpt using i3
-			if (len >= 0x40000 && (i1 | i2 == 0) && ((physicalAddress & 0x1000) == 0)) // if at least 1gb left to map and virtual address is aligned to 1gb
+			if (len >= 0x40000 && (i1 | i2 == 0) && ((physicalAddress & 0x1000) == 0)) // if at least 1gb left to map, virtual address is aligned to 1gb and the physical address does not use bit 12
 			{
 				// use a 1gb page
 				PageDirectoryPointerTableEntry &entry = pdpt->entries[i3];
@@ -92,33 +92,6 @@ void PageMapLevel4::mapRegion(qword &freeSpace, qword virtualAddress, qword phys
 			// pml4 over, virtual space overflow
 			return;
 		}
-
-		/*pt->entries[i1].set(physicalAddress);
-		if (++i1 == 512)
-		{
-			i1 = 0;
-			if (++i2 == 512)
-			{
-				i2 = 0;
-				if (++i3 == 512)
-				{
-					i3 = 0;
-					if (++i4 == 512) // this should never happen
-					{
-						cout << "Virtual space overflow!";
-						// halt
-						while (true)
-							;
-					}
-					pdpt = getOrCreate(i4, freeSpace);
-				}
-				pd = pdpt->getOrCreate(i3, freeSpace);
-			}
-			pt = pd->getOrCreate(i2, freeSpace);
-		}
-
-		len--;
-		physicalAddress += 0x1000;*/
 	}
 }
 bool PageMapLevel4::getPhysicalAddress(qword virtualAddress, qword &physicalAddress)

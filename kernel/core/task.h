@@ -5,7 +5,9 @@
 class Task
 {
 	registers_t regs;
-	byte *pageSpace, *fileContent, *stack;
+	byte *pageSpace, *fileContent, *stack, *heap;
+	std::vector<byte *> programResources;
+	bool m_isKernelTask;
 
 public:
 	class TaskInfo
@@ -17,16 +19,20 @@ public:
 		inline TaskInfo(ull data) : data(data) {}
 	} taskInfo;
 
-	inline Task(const registers_t &regs, byte *pageSpace = nullptr, byte *fileContent = nullptr, byte *stack = nullptr)
-		: regs(regs), pageSpace(pageSpace), fileContent(fileContent), stack(stack) {}
+	inline Task(const registers_t &regs, bool isKernelTask = false, byte *pageSpace = nullptr, byte *fileContent = nullptr, byte *stack = nullptr, byte *heap = nullptr)
+		: regs(regs), pageSpace(pageSpace), fileContent(fileContent), stack(stack), heap(heap), m_isKernelTask(isKernelTask) {}
 	inline ~Task()
 	{
+		for (auto ptr : programResources)
+			delete[] ptr;
 		if (pageSpace)
 			delete[] pageSpace;
 		if (fileContent)
 			delete[] fileContent;
 		if (stack)
 			delete[] stack;
+		if (heap)
+			delete[] heap;
 	}
 
 	static Task *createTask(const std::string16 &executableFileName);
@@ -43,4 +49,7 @@ public:
 	}
 
 	inline registers_t &getRegs() { return regs; }
+	inline bool isKernelTask() { return m_isKernelTask; }
+
+	inline void bindResource(byte *resource) { programResources.push_back(resource); }
 };

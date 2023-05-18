@@ -20,9 +20,10 @@ namespace Scheduler
 	// void finish(registers_t &regs);
 
 	void tick(registers_t &regs);
+	void irqReceived(int irq_no);
 
 	void sleep(registers_t &regs, ull untilTime);
-	void waitForIrq(registers_t &regs, int irq_no);
+	void waitForIrq(registers_t &regs, IDT::Irq_no irq_no);
 	void waitForTask(registers_t &regs, Task *task);
 
 	Task *getCurrentTask();
