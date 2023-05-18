@@ -2,6 +2,8 @@
 #include <iostream.h>
 #include "../utils/time.h"
 #include "scheduler.h"
+#include "mem.h"
+#include "../drivers/keyboard.h"
 
 #define OMIT_FUNCS
 #include <syscall.h>
@@ -96,20 +98,41 @@ void Syscall_Keyboard(registers_t &regs)
 	{
 	case SYSCALL_KEYBOARD_KEYEVENT:
 	{
-		Keyboard::KeyEvent event = Keyboard::getKeyEvent();
-		regs.rax = *(ushort *)&event;
+		Keyboard::KeyEvent event = Keyboard::getKeyEvent_direct();
+		if (event.keyCode == Keyboard::KeyCode::unknown && regs.rdi)
+		{
+			// no key in buffer, sleep
+			regs.rip -= 2; // return to the interrupt instruction after sleep instead of after it
+			Scheduler::waitForIrq(regs, IDT::Irq_no::ps2_keyboard);
+		}
+		else
+			regs.rax = *(ushort *)&event;
 	}
 	break;
 	case SYSCALL_KEYBOARD_KEYPRESSEDEVENT:
 	{
-		Keyboard::KeyEvent event = Keyboard::getKeyPressedEvent();
-		regs.rax = *(ushort *)&event;
+		Keyboard::KeyEvent event = Keyboard::getKeyPressedEvent_direct();
+		if (event.keyCode == Keyboard::KeyCode::unknown && regs.rdi)
+		{
+			// no key in buffer, sleep
+			regs.rip -= 2; // return to the interrupt instruction after sleep instead of after it
+			Scheduler::waitForIrq(regs, IDT::Irq_no::ps2_keyboard);
+		}
+		else
+			regs.rax = *(ushort *)&event;
 	}
 	break;
 	case SYSCALL_KEYBOARD_KEYRELEASEDEVENT:
 	{
-		Keyboard::KeyEvent event = Keyboard::getKeyReleasedEvent();
-		regs.rax = *(ushort *)&event;
+		Keyboard::KeyEvent event = Keyboard::getKeyReleasedEvent_direct();
+		if (event.keyCode == Keyboard::KeyCode::unknown && regs.rdi)
+		{
+			// no key in buffer, sleep
+			regs.rip -= 2; // return to the interrupt instruction after sleep instead of after it
+			Scheduler::waitForIrq(regs, IDT::Irq_no::ps2_keyboard);
+		}
+		else
+			regs.rax = *(ushort *)&event;
 	}
 	break;
 	}
@@ -132,7 +155,7 @@ void Syscall_Time(registers_t &regs)
 		regs.rax = Time::time();
 		return;
 	case SYSCALL_TIME_SLEEP:
-		return Scheduler::sleep(regs, regs.rdi / ms_per_timeint + Time::time());
+		return Scheduler::sleep(regs, regs.rdi + Time::time());
 	}
 }
 void Syscall_ProgEnv(registers_t &regs)
@@ -144,5 +167,13 @@ void Syscall_ProgEnv(registers_t &regs)
 		return Scheduler::preempt(regs, Scheduler::preemptReason::taskExited);
 	case SYSCALL_PROGENV_WAITFORTASK:
 		return Scheduler::waitForTask(regs, (Task *)regs.rdi);
+		/*case SYSCALL_PROGENV_ALLOCHEAP:
+		{
+			Memory::Allocate(0x3000, 0x1000);
+			Memory::Allocate(0x10000, 0x1000);
+			regs.cr3->mapRegion()
+				regs.rax = (qword)Memory::Heap::build(0x800000000000, 0x10000);
+			return;
+		}*/
 	}
 }

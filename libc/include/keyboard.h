@@ -115,9 +115,8 @@ namespace Keyboard
 		keyReleasedFlag = 0x80,
 	};
 
-	class ModKeys
+	struct ModKeys
 	{
-	public:
 		enum MaskBits : byte
 		{
 			leftShift = 0x1,
@@ -166,9 +165,8 @@ namespace Keyboard
 		inline void clearNumLock() { mask = MaskBits(mask & ~numLock); }
 	};
 
-	class KeyEvent
+	struct KeyEvent
 	{
-	public:
 		KeyCode keyCode;
 		ModKeys modKeys;
 
@@ -178,6 +176,7 @@ namespace Keyboard
 		inline KeyCode getKeyCode() { return KeyCode((byte)keyCode & ~(byte)KeyCode::keyReleasedFlag); }
 		inline bool isReleased() { return (byte)keyCode & (byte)KeyCode::keyReleasedFlag; }
 		inline bool isPressed() { return !isReleased(); }
+
 		char getChar()
 		{
 			switch (getKeyCode())
@@ -221,7 +220,7 @@ namespace Keyboard
 			case KeyCode::numpad_9:
 				if (modKeys.getNumLock())
 					return '0' + ((char)keyCode - (char)KeyCode ::numpad_0);
-				return '?';
+				return 0;
 			case KeyCode::alpha0:
 			case KeyCode::alpha1:
 			case KeyCode::alpha2:
@@ -273,7 +272,7 @@ namespace Keyboard
 		}
 	};
 
-	KeyEvent getKeyEvent();
-	KeyEvent getKeyPressedEvent();
-	KeyEvent getKeyReleasedEvent();
+	KeyEvent getKeyEvent(bool blocking = true);
+	KeyEvent getKeyPressedEvent(bool blocking = true);
+	KeyEvent getKeyReleasedEvent(bool blocking = true);
 }

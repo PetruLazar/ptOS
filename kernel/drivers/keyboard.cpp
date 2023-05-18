@@ -13,7 +13,9 @@ namespace Keyboard
 						 statusPort = 0x64,
 						 cmdPort = 0x64;
 
-	bool expectingCommandResult = false;
+	bool expectingCommandResult = false,
+		 sendDataNext;
+	word lastCommand;
 	KeyEvent *eventQueue;
 	byte queueStart = 0, queueEnd = 0;
 
@@ -44,11 +46,7 @@ namespace Keyboard
 	}
 
 	ModKeys currModKeys;
-	void insertEvent(const KeyEvent &event)
-	{
-		eventQueue[queueEnd++] = event;
-		// cout << "Key inserted, queueEnd becomes " << queueEnd << '\n';
-	}
+	void insertEvent(const KeyEvent &event) { eventQueue[queueEnd++] = event; }
 	KeyCode scancodeToKeycodeMap[2][0x80]{
 		{
 			/*0x00*/ KeyCode::unknown, // '?',
@@ -124,7 +122,7 @@ namespace Keyboard
 			KeyCode::unknown,		   // '?',
 			KeyCode::unknown,		   // '?',
 			KeyCode::unknown,		   // '?',
-			KeyCode::unknown,		   // '?',
+			KeyCode::numlock,		   // '?',
 			KeyCode::unknown,		   // '?',
 			KeyCode::numpad_7,
 			KeyCode::numpad_8,
@@ -325,9 +323,7 @@ namespace Keyboard
 			KeyCode::unknown,
 			KeyCode::unknown,
 			KeyCode::unknown,
-		}
-
-	};
+		}};
 
 	void EventListener(registers_t &)
 	{
@@ -340,12 +336,23 @@ namespace Keyboard
 			{
 			case Response::error1:
 			case Response::error2:
-			case Response::selfTestPassed:
 			case Response::selfTestFailed:
-			case Response::echo:
-			case Response::ack:
-			case Response::resend:
 				expectingCommandResult = false;
+				break;
+			case Response::selfTestPassed:
+			case Response::echo:
+				break;
+			case Response::ack:
+				if (sendDataNext)
+					sendCommand();
+				else
+					expectingCommandResult = false;
+				break;
+			case Response::resend:
+				if (sendDataNext)
+					sendCommand((Command)(lastCommand & 0xff), lastCommand >> 8);
+				else
+					sendCommand();
 				break;
 			}
 		}
@@ -355,12 +362,12 @@ namespace Keyboard
 				extendedScancode = true;
 			else
 			{
-				/*cout << "Keyboard event: ";
-				if (extendedScancode)
-					cout << "0xE0 ";
-				if (scanCode >= 0x80)
-					cout << "0x80 | ";
-				cout << ostream::base::hex << "0x" << (uint)(0x7f & scanCode) << ostream::base::dec << "\n";*/
+				// cout << "Keyboard event: ";
+				// if (extendedScancode)
+				// 	cout << "0xE0 ";
+				// if (scanCode >= 0x80)
+				// 	cout << "0x80 | ";
+				// cout << ostream::base::hex << "0x" << (uint)(0x7f & scanCode) << ostream::base::dec << "\n";
 
 				if (!checkFullQueue())
 				{
@@ -371,8 +378,6 @@ namespace Keyboard
 					KeyEvent event = KeyEvent(key, currModKeys);
 					insertEvent(event);
 
-					// cout << "DBG: " << extendedScancode << ' ' << scanCode << '\n';
-					// cout << "Key event " << (uint)event.getKeyCode() << '\n';
 					switch (event.getKeyCode())
 					{
 					case KeyCode::leftShift:
@@ -396,21 +401,21 @@ namespace Keyboard
 					case KeyCode::capsLock:
 						if (!releasedFlag)
 						{
-							// to-do: turn the LED on or off
 							if (currModKeys.getCapsLock())
 								currModKeys.clearCapsLock();
 							else
 								currModKeys.setCapsLock();
+							sendCommand(Command::setLED, (currModKeys.getCapsLock() << 2) | (currModKeys.getNumLock() << 1));
 						}
 						break;
 					case KeyCode::numlock:
 						if (!releasedFlag)
 						{
-							// to-do: turn the LED on or off
 							if (currModKeys.getNumLock())
 								currModKeys.clearNumLock();
 							else
 								currModKeys.setNumLock();
+							sendCommand(Command::setLED, (currModKeys.getCapsLock() << 2) | (currModKeys.getNumLock() << 1));
 						}
 						break;
 					}
@@ -422,21 +427,17 @@ namespace Keyboard
 	}
 
 	inline bool checkCharQueue() { return queueStart != queueEnd; }
-	inline bool checkFullQueue()
-	{
-		byte tmp = queueEnd + 1;
-		return tmp == queueStart;
-	}
+	inline bool checkFullQueue() { return byte(queueEnd + 1) == queueStart; }
 
-	KeyEvent getKeyEvent()
+	KeyEvent getKeyEvent_direct()
 	{
 		if (checkCharQueue())
 			return eventQueue[queueStart++];
 		return KeyEvent();
 	}
-	KeyEvent getKeyPressedEvent()
+	KeyEvent getKeyPressedEvent_direct()
 	{
-		if (checkCharQueue())
+		while (checkCharQueue())
 		{
 			KeyEvent &event = eventQueue[queueStart++];
 			if (event.isPressed())
@@ -444,9 +445,9 @@ namespace Keyboard
 		}
 		return KeyEvent();
 	}
-	KeyEvent getKeyReleasedEvent()
+	KeyEvent getKeyReleasedEvent_direct()
 	{
-		if (checkCharQueue())
+		while (checkCharQueue())
 		{
 			KeyEvent &event = eventQueue[queueStart++];
 			if (event.isReleased())
@@ -454,37 +455,28 @@ namespace Keyboard
 		}
 		return KeyEvent();
 	}
+
+	void sendCommand()
+	{
+		waitForWrite();
+		sendDataNext = false;
+		outb(dataPort, lastCommand >> 8);
+	}
+	void sendCommand(Command command, byte data)
+	{
+		lastCommand = (byte)command | (data << 8);
+		expectingCommandResult = true;
+
+		switch (command)
+		{
+		case Command::setLED:
+			waitForWrite();
+			sendDataNext = true;
+			outb(dataPort, (byte)command);
+			break;
+		default:
+			expectingCommandResult = false;
+			break;
+		}
+	}
 }
-
-/*void Keyboard::sendCommand(Command command, byte data)
-{
-	if (command == Command::identify)
-	{
-		waitForWrite();
-		outb(dataPort, (byte)command);
-		return;
-	}
-
-	switch (command)
-	{
-	case Command::identify:
-		waitForWrite();
-		outb(cmdPort, (byte)command);
-		break;
-	case Command::setLED:
-		waitForWrite();
-		outb(cmdPort, (byte)command);
-		waitForWrite();
-		outb(dataPort, 0b010);
-		break;
-	case Command::scancodeSet:
-		waitForWrite();
-		outb(dataPort, (byte)command);
-		waitForWrite();
-		outb(dataPort, data);
-		break;
-
-	default:
-		break;
-	}
-}*/

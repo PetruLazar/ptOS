@@ -4,9 +4,8 @@
 
 namespace Screen
 {
-	class Cell
+	struct Cell
 	{
-	public:
 		char character;
 		enum Color : byte
 		{

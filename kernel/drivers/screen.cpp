@@ -4,7 +4,7 @@
 
 using namespace std;
 
-short screenCursor = 0, screenSize = 80 * 25;
+short screenCursor = 0, screenSize;
 
 namespace Screen
 {
@@ -18,7 +18,6 @@ namespace Screen
 
 	void Initialize()
 	{
-		// contents = new vector<Cell *>();
 		screenSize = screenWidth * screenHeight;
 		bufferSize = screenSize * 10; // 10 screens
 		buffer = new Cell[bufferSize];

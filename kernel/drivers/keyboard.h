@@ -38,8 +38,13 @@ namespace Keyboard
 	void Initialize();
 	void CleanUp();
 	// void EventListener(registers_t &regs);
+	void sendCommand();
 	void sendCommand(Command command, byte data);
 
 	bool checkCharQueue();
 	bool checkFullQueue();
+
+	KeyEvent getKeyEvent_direct();
+	KeyEvent getKeyPressedEvent_direct();
+	KeyEvent getKeyReleasedEvent_direct();
 };

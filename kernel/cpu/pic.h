@@ -1,11 +1,10 @@
 #pragma once
 #include <types.h>
 
-class PIC
+namespace PIC
 {
-public:
-	static void EndOfInterrupt(byte irq_no);
-	static void Initialize(byte offset);
-	static bool detectApic();
-	static word getISR();
+	void EndOfInterrupt(byte irq_no);
+	void Initialize(byte offset);
+	bool detectApic();
+	word getISR();
 };
