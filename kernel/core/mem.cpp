@@ -159,7 +159,7 @@ namespace Memory
 
 	void DisplayMap()
 	{
-		cout << "Memory map: (" << mapLength << " x " << mapEntrySize << "bytes): ";
+		cout << "Memory map: (" << mapLength << " x " << mapEntrySize << " bytes): ";
 		for (byte i = 0; i < mapLength; i++)
 		{
 			MapEntry &en = memoryMap[i];
@@ -171,6 +171,47 @@ namespace Memory
 			// IDT::waitForIrq1();
 		}
 		cout << '\n';
+	}
+	string getStringMemoryMap()
+	{
+		string ret;
+		char buffer[32];
+		ret = "Memory map: (";
+		ulltos(buffer, mapLength);
+		ret += buffer;
+		ret += " x ";
+		ulltos(buffer, mapEntrySize);
+		ret += buffer;
+		ret += " bytes): ";
+		for (byte i = 0; i < mapLength; i++)
+		{
+			MapEntry &en = memoryMap[i];
+			ret += "\n[";
+			ulltos(buffer, i);
+			ret += buffer;
+			ret += "]  Base address: ";
+			qwordToHexString(buffer, (ull)en.base_address);
+			ret += buffer;
+			ret += "\n     Length: ";
+			qwordToHexString(buffer, (ull)en.length);
+			ret += buffer;
+			ret += " (";
+			ulltos(buffer, en.length);
+			ret += buffer;
+			ret += ")\n     End address: ";
+			qwordToHexString(buffer, (ull)(en.base_address + en.length - 1));
+			ret += buffer;
+			ret += "\n     Region type: ";
+			ret += typeToString(en.type);
+			ret += " (";
+			ulltos(buffer, (ull)en.type);
+			ret += buffer;
+			ret += ")\n     Reserved: ";
+			ulltos(buffer, en.acpiExtendableAttributes);
+			ret += buffer;
+			// IDT::waitForIrq1();
+		}
+		return ret;
 	}
 	void Initialize()
 	{

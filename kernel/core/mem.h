@@ -1,11 +1,13 @@
 #pragma once
 #include <mem.h>
+#include "../utils/string.h"
 
 // #define ALLOC_DBG_MSG
 
 namespace Memory
 {
 	void DisplayMap();
+	std::string getStringMemoryMap();
 	void Initialize();
 }
 
