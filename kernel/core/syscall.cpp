@@ -76,11 +76,12 @@ void Syscall_Screen(registers_t &regs)
 	{
 		// get the physical address of the string from regs.rdi and the paging structures
 		qword physical;
+		// check that the task has access to the entire string
 		if (!regs.cr3->getPhysicalAddress((qword)regs.rdi, physical))
 		{
 			// error
 			cout << "Syscall error: address not mapped\n";
-			break;
+			return Scheduler::preempt(regs, Scheduler::preemptReason::taskExited);
 		}
 		// for now, everything is identity mapped, no translation from physical to kernel virtual space
 		// PageMapLevel4::getCurrent().mapRegion(...);
