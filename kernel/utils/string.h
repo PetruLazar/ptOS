@@ -99,7 +99,7 @@ namespace std
 		}
 		inline void append(const T *ptr)
 		{
-			insert(ptr, length(ptr));
+			insert(ptr, length(ptr), length());
 		}
 		inline void append(const basic_string &str)
 		{
