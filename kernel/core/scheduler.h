@@ -11,6 +11,9 @@ namespace Scheduler
 		taskExited
 	};
 
+	void enable();
+	void disable();
+
 	void Initialize(Task *terminalTask);
 	void CleanUp();
 
