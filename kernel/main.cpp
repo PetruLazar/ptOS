@@ -113,76 +113,167 @@ extern void main()
 	// networking
 }
 
-void terminal()
+void readCommand(string &cmd)
 {
-	cout << "Welcome to ptOS!\n";
-
-	bool keepRunning = true;
-	while (keepRunning)
+	while (true)
 	{
-		// check for keyboard input
-		/*char ch = Keyboard::getKeyPressedEvent().getChar();
-		if (ch)
-			cout << "Pressed " << ch << " (" << (int)ch << ")\n";
-		continue;*/
-		Keyboard::KeyCode key = Keyboard::getKeyPressedEvent().getKeyCode();
-
-		switch (key)
+		Keyboard::KeyEvent event = Keyboard::getKeyPressedEvent();
+		switch (event.getKeyCode())
 		{
-		case Keyboard::KeyCode::Escape:
-			keepRunning = false;
-			break;
-		case Keyboard::KeyCode::I:
-			// asm("int $0x30");
-			break;
-		case Keyboard::KeyCode::S:
-		{
-			Task *task = Task::createTask(u"C:/programs/snake.bin");
-			if (task)
-			{
-				Scheduler::add(task);
-				Scheduler::waitForTask(task);
-			}
-			break;
-		}
 		case Keyboard::KeyCode::arrowUp:
 			Screen::scrollUp();
 			break;
 		case Keyboard::KeyCode::arrowDown:
 			Screen::scrollDown();
 			break;
-		case Keyboard::KeyCode::C:
-			Screen::clear();
-			break;
-		case Keyboard::KeyCode::D:
+		default:
+		{
+			char ch = event.getChar();
+			switch (ch)
+			{
+			case '\b': // delete one char
+				if (cmd[0] == 0)
+					break;
+				cout << "\b \b";
+				cmd.pop_back();
+				break;
+			case '\r': // finish reading
+				cout << '\n';
+				return;
+			case 0:
+				break;
+			default:
+				cout << ch;
+				cmd.push_back(ch);
+			}
+		}
+		}
+	}
+}
+bool getSubcommand(string &cmd, string &subCmd)
+{
+	ull space = cmd.firstOf(' ');
+	if (space == string::npos)
+	{
+		// no space
+		if (cmd.length() == 0)
+			return false;
+		subCmd = cmd;
+		cmd.erase();
+		return true;
+	}
+	subCmd.assign(cmd.data(), space);
+	cmd.erase(0, space + 1);
+	return true;
+}
+
+void terminal()
+{
+	cout << "Welcome to ptOS!\n";
+
+	bool keepRunning = true;
+	string cmd, subCmd;
+
+	while (keepRunning)
+	{
+		// read command
+		readCommand(cmd);
+
+		if (!getSubcommand(cmd, subCmd))
+			continue;
+
+		if (subCmd == "exit")
+		{
+			keepRunning = false;
+		}
+		else if (subCmd == "start" || subCmd == "call")
+		{
+			// convert string argument to string16
+			string16 filename;
+			for (char c : cmd)
+				filename += c;
+
+			Task *task = Task::createTask(string16(u"C:/programs/") + filename + u".bin");
+			if (task)
+			{
+				Scheduler::add(task);
+				if (subCmd == "call")
+					Scheduler::waitForTask(task);
+			}
+		}
+		else if (subCmd == "text" || subCmd == "bin")
+		{
+			// convert string argument to string16
+			string16 filename;
+			for (char c : cmd)
+				filename += c;
+
+			byte *content;
+			ull length;
+			Filesystem::result res = Filesystem::ReadFile(filename, content, length);
+			if (res == Filesystem::result::success)
+			{
+				if (subCmd == "text")
+				{
+					cout << string((char *)content, length) << '\n';
+				}
+				else
+				{
+					DisplyMemoryBlock(content, length);
+				}
+				delete[] content;
+			}
+			else
+				cout << "Error: " << Filesystem::resultAsString(res) << '\n';
+		}
+		else if (subCmd == "debug")
 		{
 			cout << "Function to debug is at " << (void *)((char *)Keyboard::getKeyEvent_direct - 0x8000 + 0x200) << '\n';
 			// cout << "Function to debug is at " << (void *)((char *)Disk::Initialize - 0x8000 + 0x200) << '\n';
-			break;
 		}
-		case Keyboard::KeyCode::A:
+		else if (subCmd == "pci")
+		{
+			PCI::EnumerateDevices();
+			cout << "Done!\n";
+		}
+		else if (subCmd == "clear")
+		{
+			Screen::clear();
+		}
+		else if (subCmd == "memmap")
+		{
+			Memory::DisplayMap();
+		}
+		else if (subCmd == "apic")
+		{
 			cout << "Apic ";
 			if (!PIC::detectApic())
 				cout << "not ";
 			cout << "detected\n";
-			break;
-		case Keyboard::KeyCode::M:
-			Memory::DisplayMap();
-			break;
-		case Keyboard::KeyCode::L:
-			PCI::EnumerateDevices();
-			cout << "Done!\n";
-			break;
-		case Keyboard::KeyCode::V:
-		{
-			char processorVendorString[13];
-			dword unused;
-			cpuid(0, unused, (dword &)processorVendorString[0], (dword &)processorVendorString[8], (dword &)processorVendorString[4]);
-			processorVendorString[12] = 0;
-			cout << "Processor vendor string is: " << processorVendorString << '\n';
 		}
-		break;
-		case Keyboard::KeyCode::T:
+		else if (subCmd == "cpu")
+		{
+			if (cmd == "speed")
+			{
+				ull clk = clock();
+				Time::sleep(1000);
+				ull diff = clock() - clk;
+				cout << "Average: " << diff << '\n';
+			}
+			else if (cmd == "vendor")
+			{
+				char processorVendorString[13];
+				dword unused;
+				cpuid(0, unused, (dword &)processorVendorString[0], (dword &)processorVendorString[8], (dword &)processorVendorString[4]);
+				processorVendorString[12] = 0;
+				cout << "Processor vendor string is: " << processorVendorString << '\n';
+			}
+			else
+			{
+				cout << "Invalid command.\n";
+			}
+		}
+		else if (subCmd == "clock")
 		{
 			qword clocks = clock();
 
@@ -190,37 +281,8 @@ void terminal()
 			qwordToHexString(str, clocks);
 			cout << "Clock is: " << str << '\n';
 		}
-		break;
-
-		case Keyboard::KeyCode::alpha0:
-		case Keyboard::KeyCode::numpad_0:
+		else if (subCmd == "ide")
 		{
-			// Explorer::Start();
-			cout << "The file explorer is not currently available...\n";
-			break;
-		}
-		break;
-		case Keyboard::KeyCode::alpha1:
-		case Keyboard::KeyCode::numpad_1:
-		{
-			asm("int $0x30"
-				:
-				: "a"(SYSCALL_SCREEN), "b"(SYSCALL_SCREEN_PRINTSTR), "D"("Hello world!\n"));
-		}
-		break;
-		case Keyboard::KeyCode::alpha2:
-		case Keyboard::KeyCode::numpad_2:
-		{
-			asm("int $0x30"
-				:
-				: "a"(SYSCALL_SCREEN), "b"(SYSCALL_SCREEN_PRINTSTR), "D"(0x0000));
-		}
-		break;
-		case Keyboard::KeyCode::alpha3:
-		case Keyboard::KeyCode::numpad_3:
-		{
-			*(byte *)(0x00) = 5;
-			break;
 			bool first = true;
 			for (int i = 0; i < 4; i++)
 			{
@@ -247,51 +309,85 @@ void terminal()
 			}
 			cout << "Done!\n";
 		}
+		else if (subCmd == "explorer")
+		{
+			// Explorer::Start();
+			cout << "The file explorer is not currently available...\n";
+		}
+		else if (subCmd == "test")
+		{
+			// convert to number
+			ull i = 0;
+			for (char c : cmd)
+			{
+				if (c < '0' || c > '9')
+				{
+					cmd.erase();
+					break;
+				}
+				i = i * 10 + (c - '0');
+			}
+			if (cmd.length() == 0)
+				cout << "Invalid command.\n";
+			else
+			{
+				switch (i)
+				{
+				case 0:
+				{
+					string test = Memory::getStringMemoryMap();
+					// Filesystem::CreateFile
+					Filesystem::result res = Filesystem::WriteFile(u"c:/export.txt", (byte *)test.data(), test.length());
+					if (res != Filesystem::result::success)
+					{
+						if (res == Filesystem::result::fileDoesNotExist)
+						{
+							if (Filesystem::CreateFile(u"c:/export.txt", (byte *)test.data(), test.length()) != Filesystem::result::success)
+							{
+								cout << "Could not create file.\n";
+							}
+							else
+								cout << "Success\n";
+						}
+						else
+							cout << "Write failed: " << Filesystem::resultAsString(res) << '\n';
+					}
+					else
+						cout << "Success\n";
+					break;
+				}
+				default:
+					cout << "Invalid test number.\n";
+				}
+			}
+		}
+		else
+		{
+			cout << "Invalid command.\n";
+		}
+
+		/*switch (key)
+		{
+		case Keyboard::KeyCode::alpha3:
+		case Keyboard::KeyCode::numpad_3:
+		{
+		}
 		break;
-		case Keyboard::KeyCode::alpha4:
-		case Keyboard::KeyCode::numpad_4:
-		{
-			Task *task = Task::createTask(u"c:/programs/test1.bin");
-			if (task)
-			{
-				Scheduler::add(task);
-				Scheduler::waitForTask(task);
-			}
-			break;
-		}
-		case Keyboard::KeyCode::alpha5:
-		case Keyboard::KeyCode::numpad_5:
-		{
-			Task *task = Task::createTask(u"c:/programs/hello2.bin");
-			if (task)
-				Scheduler::add(task);
-			break;
-		}
-		case Keyboard::KeyCode::alpha6:
-		case Keyboard::KeyCode::numpad_6:
-		{
-			uint count;
-			cout << "how many? ";
-			cin >> count;
-			for (uint i = 0; i < count; i++)
-			{
-				Task *task = Task::createTask(i & 1 ? u"c:/programs/hello2.bin" : u"c:/programs/hello1.bin");
-				if (task)
-					Scheduler::add(task);
-			}
-			break;
-		}
 		case Keyboard::KeyCode::alpha7:
 		case Keyboard::KeyCode::numpad_7:
-			Time::sleep(1000);
-			break;
-		case Keyboard::KeyCode::alpha8:
-		case Keyboard::KeyCode::numpad_8:
-		case Keyboard::KeyCode::alpha9:
-		case Keyboard::KeyCode::numpad_9:
-			cout << "This test is unused\n";
+		{
+			// test allocations, one at a time
 			break;
 		}
+		case Keyboard::KeyCode::alpha8:
+		case Keyboard::KeyCode::numpad_8:
+		{
+			// test stressing the allocator
+			break;
+		}
+		}*/
+
+		cmd.erase();
 	}
 
 	// some cleanup
