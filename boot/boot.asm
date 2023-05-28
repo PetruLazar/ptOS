@@ -117,17 +117,12 @@ jmp $
 
 check_a20:
 ; check 0x0000:0x7dfe (0x7dfe) against 0xffff:0x7e0e (0x107dfe)
-xor ax, ax
-not ax
+mov ax, 0xffff
 mov es, ax
 mov al, byte [0x7dfe]
-mov cl, byte [es:0x7e0e]
-cmp al, cl
-jnz check_a20_ret
 not al
-mov byte [0x7dfe], al
-mov cl, byte [es:0x7e0e]
-check_a20_ret:
+mov byte [es:0x7e0e], al
+mov cl, byte [0x7dfe]
 xor al, cl
 ret
 

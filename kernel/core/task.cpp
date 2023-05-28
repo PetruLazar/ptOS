@@ -47,16 +47,7 @@ Task *Task::createTask(const std::string16 &executableFileName)
 	regs.cs = GDT::USER_CS | 3;
 	regs.cr3 = paging;
 	regs.rbp = regs.rsp = 0x50000;
-	// regs.ds =
 	regs.fs = regs.gs = regs.ss = GDT::USER_DS | 3;
 	regs.rflags = 0;
-	// cout << "pageSpace: " << (void *)pageSpace
-	// 	 << "\ncontent: " << (void *)content
-	// 	 << "\nstack: " << (void *)stack << '\n';
 	return new Task(regs, false, pageSpace, content, stack, heap);
-
-	// build virtual space:
-	// map kernel into the virtual space
-	// map actual image into the virtual space
-	// allocate and map stack into the virtual space
 }
