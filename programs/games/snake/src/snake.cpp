@@ -163,7 +163,7 @@ void Cycle()
 }
 
 qword lastCycle = 0;
-constexpr qword timeDiffCount = 30;
+constexpr qword timeDiffCount = 100;
 
 int main()
 {
@@ -182,7 +182,7 @@ int main()
 	// game loop
 	while (true)
 	{
-		Keyboard::KeyCode pressed = Keyboard::getKeyPressedEvent().getKeyCode();
+		Keyboard::KeyCode pressed = Keyboard::getKeyPressedEvent(false).getKeyCode();
 
 		switch (pressed)
 		{
@@ -221,9 +221,6 @@ int main()
 		case Keyboard::KeyCode::Escape:
 			Screen::clear();
 			Screen::Cursor::enable();
-			// for (byte i = 0; i < screenHeight; i++)
-			// 	delete[] arena[i];
-			// delete[] arena;
 			return 0;
 		}
 
