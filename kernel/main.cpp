@@ -16,6 +16,7 @@
 #include <math.h>
 #include "core/paging.h"
 #include "core/scheduler.h"
+#include "core/explorer.h"
 #define OMIT_FUNCS
 #include <syscall.h>
 using namespace std;
@@ -311,8 +312,7 @@ void terminal()
 		}
 		else if (subCmd == "explorer")
 		{
-			// Explorer::Start();
-			cout << "The file explorer is not currently available...\n";
+			Explorer::Start();
 		}
 		else if (subCmd == "test")
 		{

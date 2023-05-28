@@ -1,8 +1,9 @@
 #include "explorer.h"
+#include "filesystem.h"
 #include <screen.h>
-#include <filesystem.h>
 
 using namespace std;
+using namespace Filesystem;
 
 namespace Explorer
 {
@@ -15,7 +16,7 @@ namespace Explorer
 		{
 			// display current directory's contents
 			ull count = 0;
-			auto it = Filesystem::GetDirectoryIterator(currentDirectory);
+			auto it = GetDirectoryIterator(currentDirectory);
 			cout << "\nCurrently in \"" << currentDirectory << "\":\n";
 			while (!it->finished())
 			{
@@ -67,9 +68,9 @@ namespace Explorer
 							string16 filename;
 							cin >> filename;
 							filename = currentDirectory + filename;
-							bool success = (choice == 1 ? Filesystem::CreateDirectory(filename + u'/') : Filesystem::CreateFile(filename));
-							if (!success)
-								cout << "Operation failed.\n";
+							result res = (choice == 1 ? CreateDirectory(filename + u'/') : CreateFile(filename));
+							if (res != result::success)
+								cout << "Operation failed: " << resultAsString(res) << "\n";
 						}
 						break;
 						}
@@ -86,7 +87,7 @@ namespace Explorer
 						if (dirname == u".")
 						{
 							if (remove)
-								cout << "Cammpt remove \".\"\n";
+								cout << "Cannot remove \".\"\n";
 						}
 						else if (dirname == u"..")
 						{
@@ -102,8 +103,9 @@ namespace Explorer
 						{
 							if (remove)
 							{
-								if (!Filesystem::RemoveDirectory(currentDirectory + it->getString() + u'/'))
-									cout << "Failed to remove directory \"" << it->getString() << "\"\n";
+								result res = RemoveDirectory(currentDirectory + it->getString() + u'/');
+								if (res != result::success)
+									cout << "Failed to remove directory \"" << it->getString() << "\": " << resultAsString(res) << "\n";
 								remove = false;
 							}
 							else
@@ -114,8 +116,9 @@ namespace Explorer
 					{
 						if (remove)
 						{
-							if (!Filesystem::RemoveFile(currentDirectory + it->getString()))
-								cout << "Failed to remove file \"" << it->getString() << "\"\n";
+							result res = RemoveFile(currentDirectory + it->getString());
+							if (res != result::success)
+								cout << "Failed to remove file \"" << it->getString() << "\": " << resultAsString(res) << "\n";
 							remove = false;
 						}
 						else

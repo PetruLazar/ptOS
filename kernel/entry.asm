@@ -32,13 +32,6 @@ db 10011010b ; access byte
 db 00100000b ; flags and limit 16 - 19
 db 0x0 ; base 24 - 31
 
-; gdt_code32:
-; dd 0x0
-; db 0x0
-; db 10011010b
-; db 01000000b
-; db 0x0
-
 gdt_data:
 dw 0xffff
 dw 0x0000
@@ -52,7 +45,6 @@ dw gdt_descriptor - gdt_null - 1
 dq gdt_null
 
 CODE64_SEG equ gdt_code64 - gdt_null ;  0x8
-; CODE32_SEG equ gdt_code32 - gdt_null
 DATA_SEG equ gdt_data - gdt_null ; 0x10
 
 [bits 64]
