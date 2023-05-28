@@ -170,7 +170,7 @@ public:
 	void mapRegion(qword &freeSpace, qword virtualAddress, qword physicalAddress, qword len, bool writeAccess, bool userPage);
 	void unmapRegion(qword virtualAddress, qword len);
 
-	bool getPhysicalAddress(qword virtualAddress, qword &physicalAddress);
+	bool getPhysicalAddress(qword virtualAddress, qword &physicalAddress, bool isUserAccess = false);
 
 	static PageMapLevel4 &getCurrent();
 	void setAsCurrent();

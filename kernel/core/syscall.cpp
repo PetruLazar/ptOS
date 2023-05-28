@@ -77,7 +77,7 @@ void Syscall_Screen(registers_t &regs)
 		// get the physical address of the string from regs.rdi and the paging structures
 		qword physical;
 		// check that the task has access to the entire string
-		if (!regs.cr3->getPhysicalAddress((qword)regs.rdi, physical))
+		if (!regs.cr3->getPhysicalAddress((qword)regs.rdi, physical, true))
 		{
 			// error
 			cout << "Syscall error: address not mapped\n";
@@ -103,7 +103,7 @@ void Syscall_Keyboard(registers_t &regs)
 		if (event.keyCode == Keyboard::KeyCode::unknown && regs.rdi)
 		{
 			// no key in buffer, sleep
-			regs.rip -= 2; // return to the interrupt instruction after sleep instead of after it
+			regs.rip -= 2; // return to the interrupt instruction after sleep instead of after the instruction
 			Scheduler::waitForIrq(regs, IDT::Irq_no::ps2_keyboard);
 		}
 		else
@@ -116,7 +116,7 @@ void Syscall_Keyboard(registers_t &regs)
 		if (event.keyCode == Keyboard::KeyCode::unknown && regs.rdi)
 		{
 			// no key in buffer, sleep
-			regs.rip -= 2; // return to the interrupt instruction after sleep instead of after it
+			regs.rip -= 2; // return to the interrupt instruction after sleep instead of after the instruction
 			Scheduler::waitForIrq(regs, IDT::Irq_no::ps2_keyboard);
 		}
 		else
@@ -129,7 +129,7 @@ void Syscall_Keyboard(registers_t &regs)
 		if (event.keyCode == Keyboard::KeyCode::unknown && regs.rdi)
 		{
 			// no key in buffer, sleep
-			regs.rip -= 2; // return to the interrupt instruction after sleep instead of after it
+			regs.rip -= 2; // return to the interrupt instruction after sleep instead of after the instruction
 			Scheduler::waitForIrq(regs, IDT::Irq_no::ps2_keyboard);
 		}
 		else

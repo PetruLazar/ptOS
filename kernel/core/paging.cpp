@@ -94,7 +94,7 @@ void PageMapLevel4::mapRegion(qword &freeSpace, qword virtualAddress, qword phys
 		}
 	}
 }
-bool PageMapLevel4::getPhysicalAddress(qword virtualAddress, qword &physicalAddress)
+bool PageMapLevel4::getPhysicalAddress(qword virtualAddress, qword &physicalAddress, bool isUserAccess)
 {
 	word i1 = virtualAddress >> 12 & 0x1ff, // get index in pt
 		i2 = virtualAddress >> 21 & 0x1ff,	// get index in pd
@@ -106,13 +106,13 @@ bool PageMapLevel4::getPhysicalAddress(qword virtualAddress, qword &physicalAddr
 	PageDirectoryPointerTable *pdpt;
 	{
 		PageMapLevel4Entry &e = entries[i4];
-		if (!e.isPresent())
+		if (!e.isPresent() || (isUserAccess && !e.isUserPage()))
 			return false;
 		pdpt = e.getTable();
 	}
 	{
 		PageDirectoryPointerTableEntry &e = pdpt->entries[i3];
-		if (!e.isPresent())
+		if (!e.isPresent() || (isUserAccess && !e.isUserPage()))
 			return false;
 		if (e.isPageBig())
 		{
@@ -123,7 +123,7 @@ bool PageMapLevel4::getPhysicalAddress(qword virtualAddress, qword &physicalAddr
 	}
 	{
 		PageDirectoryEntry &e = pd->entries[i2];
-		if (!e.isPresent())
+		if (!e.isPresent() || (isUserAccess && !e.isUserPage()))
 			return false;
 		if (e.isPageBig())
 		{
@@ -134,7 +134,7 @@ bool PageMapLevel4::getPhysicalAddress(qword virtualAddress, qword &physicalAddr
 	}
 	{
 		PageTableEntry &e = pt->entries[i1];
-		if (!e.isPresent())
+		if (!e.isPresent() || (isUserAccess && !e.isUserPage()))
 			return false;
 		physicalAddress = e.getAddress() | (virtualAddress & 0xfff);
 		return true;
