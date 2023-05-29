@@ -1,6 +1,6 @@
 #include "cpu/idt.h"
 #include "drivers/screen.h"
-#include "utils/string.h"
+#include <string.h>
 #include "cpu/pic.h"
 #include "cpu/ports.h"
 #include "drivers/keyboard.h"
@@ -50,6 +50,7 @@ extern void main()
 
 	GDT::Initialize();
 
+	Disk::Initialize();
 	Filesystem::Initialize();
 	PCI::InitializeDevices();
 
@@ -66,6 +67,7 @@ extern void main()
 	Scheduler::CleanUp();
 	delete terminalTask;
 	Filesystem::CleanUp();
+	Disk::CleanUp();
 	Keyboard::CleanUp();
 	Screen::Cleanup();
 
@@ -284,31 +286,32 @@ void terminal()
 		}
 		else if (subCmd == "ide")
 		{
-			bool first = true;
-			for (int i = 0; i < 4; i++)
-			{
-				Disk::Device &disk = Disk::devices[i];
-				if (disk.reserved)
-				{
-					if (first)
-						first = false;
-					else
-						System::pause(false);
-					cout << "Disk " << i + 1 << ":\n"
-												"   channel: "
-						 << ostream::base::hex << disk.channel
-						 << "\n   drive: " << disk.drive
-						 << "\n   type: " << Disk::deviceTypes[(byte)disk.type]
-						 << "\n   signature: " << disk.signature
-						 << "\n   capabilities: " << disk.capabilities
-						 << "\n   command sets: " << disk.commandSets
-						 /*<< "\n   max lba: " << getIdField(identificationSpace, IDfield::maxLba)
-						 << "\n   max lba ext: " << getIdField(identificationSpace, IDfield::maxLbaExt)*/
-						 << "\n   size: " << disk.size
-						 << "\n   model: " << disk.model << ostream::base::dec << "\n\n";
-				}
-			}
-			cout << "Done!\n";
+			cout << "Command not available at the moment!\n";
+			// bool first = true;
+			// for (int i = 0; i < 4; i++)
+			// {
+			// 	Disk::Device &disk = Disk::devices[i];
+			// 	if (disk.reserved)
+			// 	{
+			// 		if (first)
+			// 			first = false;
+			// 		else
+			// 			System::pause(false);
+			// 		cout << "Disk " << i + 1 << ":\n"
+			// 									"   channel: "
+			// 			 << ostream::base::hex << disk.channel
+			// 			 << "\n   drive: " << disk.drive
+			// 			 << "\n   type: " << Disk::deviceTypes[(byte)disk.type]
+			// 			 << "\n   signature: " << disk.signature
+			// 			 << "\n   capabilities: " << disk.capabilities
+			// 			 << "\n   command sets: " << disk.commandSets
+			// 			 /*<< "\n   max lba: " << getIdField(identificationSpace, IDfield::maxLba)
+			// 			 << "\n   max lba ext: " << getIdField(identificationSpace, IDfield::maxLbaExt)*/
+			// 			 << "\n   size: " << disk.size
+			// 			 << "\n   model: " << disk.model << ostream::base::dec << "\n\n";
+			// 	}
+			// }
+			// cout << "Done!\n";
 		}
 		else if (subCmd == "explorer")
 		{

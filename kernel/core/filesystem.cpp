@@ -14,7 +14,7 @@ namespace Filesystem
 	{
 	public:
 		int lbaStart, lbaLen;
-		byte disk;
+		StorageDevice *disk;
 		char letter;
 
 		// virtual void formatPartition() = 0;
@@ -738,10 +738,10 @@ namespace Filesystem
 		private:
 			void flushFSInfo()
 			{
-				if (byte err = accessATAdrive(accessDir::write, disk, fsInfoSect, 1, fsInfo))
+				Disk::result res = disk->write(fsInfoSect, 1, (byte *)fsInfo);
+				if (res != Disk::result::success)
 				{
-					cout << "Error writing to disk!\n";
-					displayError(disk, err);
+					cout << "Error writing to disk: " << Disk::resultAsString(res) << "\n";
 				}
 			}
 
@@ -792,11 +792,13 @@ namespace Filesystem
 					delete[] cachedFATSector;
 				}
 				cachedFATSector = (uint *)new byte[512];
-				if (byte err = accessATAdrive(accessDir::read, disk, fatOffset + sectorNr, 1, cachedFATSector))
+				Disk::result res = disk->read(fatOffset + sectorNr, 1, (byte *)cachedFATSector);
+				if (res != Disk::result::success)
 				{
 					delete[] cachedFATSector;
 					cachedFATSectorNr = -1;
 					cachedFATSector = nullptr;
+					return 0;
 				}
 				cachedFATSectorNr = sectorNr;
 				return relIndex;
@@ -805,7 +807,7 @@ namespace Filesystem
 			{
 				if (cachedFATSector)
 					for (uint i = 0; i < fatCount; i++)
-						accessATAdrive(accessDir::write, disk, fatOffset + i * sectorsPerFAT + cachedFATSectorNr, 1, cachedFATSector);
+						disk->write(fatOffset + i * sectorsPerFAT + cachedFATSectorNr, 1, (byte *)cachedFATSector);
 			}
 
 		public:
@@ -855,7 +857,7 @@ namespace Filesystem
 				byte *current = buffer;
 				for (uint next = startCluster; next < lastCluster; next = getFatEntry(next))
 				{
-					accessATAdrive(accessDir::read, disk, ClusterToLba(next), sectorsPerCluster, current);
+					disk->read(ClusterToLba(next), sectorsPerCluster, current);
 					current += 512 * sectorsPerCluster;
 				}
 				// cout << "Read " << clusterLen << " clusters\n";
@@ -868,18 +870,18 @@ namespace Filesystem
 					// buffer smaller than a cluster, pad
 					byte *padded = new byte[clusterLen];
 					memcpy(padded, buffer, length);
-					if (byte err = accessATAdrive(accessDir::write, disk, ClusterToLba(cluster), sectorsPerCluster, padded))
+					Disk::result res = disk->write(ClusterToLba(cluster), sectorsPerCluster, padded);
+					if (res != Disk::result::success)
 					{
-						cout << "Error writing to cluster " << cluster << '\n';
-						displayError(disk, err);
+						cout << "Error writing to cluster " << cluster << ": " << Disk::resultAsString(res) << '\n';
 					}
 					delete[] padded;
 					return;
 				}
-				if (byte err = accessATAdrive(accessDir::write, disk, ClusterToLba(cluster), sectorsPerCluster, buffer))
+				Disk::result res = disk->write(ClusterToLba(cluster), sectorsPerCluster, buffer);
+				if (res != Disk::result::success)
 				{
-					cout << "Error writing to cluster " << cluster << '\n';
-					displayError(disk, err);
+					cout << "Error writing to cluster " << cluster << ": " << Disk::resultAsString(res) << '\n';
 				}
 			}
 			result WriteClusterChain(uint &startCluster, byte *buffer, ull length)
@@ -1327,16 +1329,15 @@ namespace Filesystem
 			return true;
 		}
 
-		bool tryLoadPartition(const Device &disk, MBRpartitionEntry &part)
+		bool tryLoadPartition(StorageDevice *disk, MBRpartitionEntry &part)
 		{
 			// load the volume boot record
 			byte *bootRecord = new byte[512];
-			int diskNr = &disk - devices;
 			BiosParameterBlock &bpm = *(BiosParameterBlock *)bootRecord;
 			ExtendedBootRecord &ebr = *(ExtendedBootRecord *)(bootRecord + sizeof(BiosParameterBlock));
 
 			// do some checks on the boot record and FAT structures
-			if (accessATAdrive(accessDir::read, diskNr, part.lbaStart, 1, bootRecord) ||
+			if (disk->read(part.lbaStart, 1, bootRecord) != Disk::result::success ||
 				string(ebr.systemIdString, 8) != "FAT32   " ||
 				!(ebr.signature == 0x28 || ebr.signature == 0x29) ||
 				((word *)bootRecord)[255] != 0xaa55)
@@ -1347,7 +1348,7 @@ namespace Filesystem
 
 			byte *fsInfoSector = new byte[512];
 			FSInfoStruct &fsInfo = *(FSInfoStruct *)fsInfoSector;
-			if (accessATAdrive(accessDir::read, diskNr, ebr.FSinfoSectNr + part.lbaStart, 1, fsInfoSector) ||
+			if (disk->read(ebr.FSinfoSectNr + part.lbaStart, 1, fsInfoSector) != Disk::result::success ||
 				fsInfo.leadSignature != 0x41615252 ||
 				fsInfo.midSignature != 0x61417272 ||
 				fsInfo.trailSignature != 0xaa550000)
@@ -1362,7 +1363,7 @@ namespace Filesystem
 
 			// data about the partition
 			ptr->letter = 'c' + partitions->getSize();
-			ptr->disk = &disk - devices;
+			ptr->disk = disk;
 			ptr->lbaStart = part.lbaStart;
 			ptr->lbaLen = part.lbaLen;
 
@@ -1405,10 +1406,10 @@ namespace Filesystem
 		return part1.lbaStart < part2.lbaStart ? (part1.lbaStart + part1.lbaLen > part2.lbaStart) : (part2.lbaStart + part2.lbaLen > part1.lbaStart);
 	}
 	static constexpr byte fat32PartType = 0xc; // fat32 with lba
-	bool tryLoadPartition(const Device &disk, MBRpartitionEntry &part)
+	bool tryLoadPartition(StorageDevice *disk, MBRpartitionEntry &part)
 	{
 		// limit-check partition size
-		if (part.lbaStart + part.lbaLen > disk.size)
+		if (part.lbaStart + part.lbaLen > disk->getSize())
 			return false;
 
 		// try load partition by type
@@ -1420,7 +1421,7 @@ namespace Filesystem
 			return false;
 		}
 	}
-	void detectPartitions(const Device &disk, byte *bootsector)
+	void detectPartitions(StorageDevice *disk, byte *bootsector)
 	{
 		MBRpartitionEntry *partitions = (MBRpartitionEntry *)(bootsector + 0x1be);
 		// check for partition intersections, treat the disk as invalid if any are found

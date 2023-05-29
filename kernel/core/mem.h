@@ -1,6 +1,6 @@
 #pragma once
 #include <mem.h>
-#include "../utils/string.h"
+#include <string.h>
 
 // #define ALLOC_DBG_MSG
 

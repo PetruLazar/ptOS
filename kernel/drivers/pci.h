@@ -2,7 +2,7 @@
 #include <iostream.h>
 #include "../cpu/ports.h"
 
-class PCI
+namespace PCI
 {
 	static constexpr word configAddressPort = 0xcf8,
 						  configDataPort = 0xcfc;
@@ -13,8 +13,8 @@ class PCI
 		byte subclass, classCode;
 	};
 
-	static void Initialize();
-	static inline dword getConfigReg(byte busNr, byte deviceNr, byte funcNr, byte regOffsest)
+	void Initialize();
+	inline dword getConfigReg(byte busNr, byte deviceNr, byte funcNr, byte regOffsest)
 	{
 		deviceNr &= 0x1f;
 		funcNr &= 0x7;
@@ -23,25 +23,45 @@ class PCI
 		return indw(configDataPort);
 	}
 
-	static inline word getVendorId(byte busNr, byte deviceNr, byte funcNr)
+	// header with type 0x0
+	struct DeviceHeader
+	{
+		word vendorId, deviceId,
+			command, status;
+		byte revisionId, progIF, subclass, classCode,
+			cacheLineSize, latencyTimer, headerType, BIST;
+		uint bar0,
+			bar1,
+			bar2,
+			bar3,
+			bar4,
+			bar5,
+			cardbusCISpointer;
+		word subsystemVendorId, subsystemId;
+		uint expansionROMbaseAddress;
+		byte capabilitiesPointer, reserved1[3];
+		uint reserved;
+		byte interruptLine, interruptPin, minGrant, maxLatency;
+	};
+
+	inline word getVendorId(byte busNr, byte deviceNr, byte funcNr)
 	{
 		return getConfigReg(busNr, deviceNr, funcNr, 0) & 0xffff;
 	}
-	static inline deviceFunction getFunction(byte busNr, byte deviceNr, byte funcNr)
+	inline deviceFunction getFunction(byte busNr, byte deviceNr, byte funcNr)
 	{
 		dword val = getConfigReg(busNr, deviceNr, funcNr, 0x8);
 		return *(deviceFunction *)(&val);
 	}
-	static inline bool deviceExists(byte busNr, byte deviceNr, byte funcNr)
+	inline bool deviceExists(byte busNr, byte deviceNr, byte funcNr)
 	{
 		return getVendorId(busNr, deviceNr, funcNr) != 0xffff;
 	}
-	static inline byte getHeaderType(byte busNr, byte deviceNr, byte funcNr)
+	inline byte getHeaderType(byte busNr, byte deviceNr, byte funcNr)
 	{
 		return getConfigReg(busNr, deviceNr, funcNr, 0xc) >> 16 & 0xff;
 	}
 
-public:
 	enum class DeviceClass : byte
 	{
 		unclassified = 0x0,
@@ -102,6 +122,6 @@ public:
 		other = 0x80,
 	};
 
-	static void InitializeDevices();
-	static void EnumerateDevices();
+	void InitializeDevices();
+	void EnumerateDevices();
 };

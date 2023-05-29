@@ -1,7 +1,7 @@
 #include "idt.h"
 #include "pic.h"
 #include "../drivers/screen.h"
-#include "../utils/string.h"
+#include <string.h>
 #include <iostream.h>
 #include "../core/sys.h"
 #include "../core/paging.h"

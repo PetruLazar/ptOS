@@ -1,7 +1,7 @@
 #pragma once
 #include <types.h>
-#include "../drivers/disk.h"
-#include "../utils/string.h"
+#include "../drivers/disk/disk.h"
+#include <string.h>
 
 namespace Filesystem
 {
@@ -21,7 +21,6 @@ namespace Filesystem
 		nameNotUnique,
 		nameTooLong
 	};
-
 	inline std::string resultAsString(result res)
 	{
 		switch (res)
@@ -76,7 +75,7 @@ namespace Filesystem
 
 	void Initialize();
 	void CleanUp();
-	void detectPartitions(const Disk::Device &disk, byte *bootsector);
+	void detectPartitions(Disk::StorageDevice *dev, byte *bootsector);
 
 	void formatPartition(char driveLetter);
 

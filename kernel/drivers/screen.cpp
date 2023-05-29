@@ -1,6 +1,6 @@
 #include "screen.h"
 #include "../cpu/ports.h"
-#include "../utils/string.h"
+#include <string.h>
 
 using namespace std;
 

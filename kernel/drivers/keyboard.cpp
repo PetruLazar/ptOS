@@ -1,7 +1,7 @@
 #include "keyboard.h"
 #include "screen.h"
 #include "../cpu/idt.h"
-#include "../utils/string.h"
+#include <string.h>
 #include <iostream.h>
 #include "../core/sys.h"
 

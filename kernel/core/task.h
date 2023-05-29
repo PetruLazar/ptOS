@@ -1,6 +1,6 @@
 #pragma once
 #include "../cpu/idt.h"
-#include "../utils/string.h"
+#include <string.h>
 
 class Task
 {
