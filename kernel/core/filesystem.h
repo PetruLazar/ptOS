@@ -76,6 +76,8 @@ namespace Filesystem
 	void Initialize();
 	void CleanUp();
 	void detectPartitions(Disk::StorageDevice *dev, byte *bootsector);
+	std::string partitionList();
+	void displayPartitions();
 
 	void formatPartition(char driveLetter);
 

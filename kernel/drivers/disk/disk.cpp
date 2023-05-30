@@ -1,5 +1,7 @@
 #include "disk.h"
+
 #include "ide.h"
+#include "ahci.h"
 
 using namespace PCI;
 using namespace std;
@@ -13,10 +15,12 @@ namespace Disk
 		devices = new vector<StorageDevice *>;
 
 		IDE::Initialize();
+		AHCI::Initialize();
 	}
 	void CleanUp()
 	{
 		IDE::CleanUp();
+		AHCI::CleanUp();
 
 		for (auto &device : *devices)
 			delete device;
@@ -28,6 +32,9 @@ namespace Disk
 		{
 		case MassStorageController::IDEController:
 			IDE::ControllerDetected(header);
+			break;
+		case MassStorageController::SATAcontroller:
+			AHCI::ControllerDetected(header);
 			break;
 		default:
 			// unsupported device

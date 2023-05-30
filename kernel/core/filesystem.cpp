@@ -738,7 +738,7 @@ namespace Filesystem
 		private:
 			void flushFSInfo()
 			{
-				Disk::result res = disk->write(fsInfoSect, 1, (byte *)fsInfo);
+				Disk::result res = disk->access(accessDir::write, fsInfoSect, 1, (byte *)fsInfo);
 				if (res != Disk::result::success)
 				{
 					cout << "Error writing to disk: " << Disk::resultAsString(res) << "\n";
@@ -792,7 +792,7 @@ namespace Filesystem
 					delete[] cachedFATSector;
 				}
 				cachedFATSector = (uint *)new byte[512];
-				Disk::result res = disk->read(fatOffset + sectorNr, 1, (byte *)cachedFATSector);
+				Disk::result res = disk->access(accessDir::read, fatOffset + sectorNr, 1, (byte *)cachedFATSector);
 				if (res != Disk::result::success)
 				{
 					delete[] cachedFATSector;
@@ -807,7 +807,7 @@ namespace Filesystem
 			{
 				if (cachedFATSector)
 					for (uint i = 0; i < fatCount; i++)
-						disk->write(fatOffset + i * sectorsPerFAT + cachedFATSectorNr, 1, (byte *)cachedFATSector);
+						disk->access(accessDir::write, fatOffset + i * sectorsPerFAT + cachedFATSectorNr, 1, (byte *)cachedFATSector);
 			}
 
 		public:
@@ -857,7 +857,7 @@ namespace Filesystem
 				byte *current = buffer;
 				for (uint next = startCluster; next < lastCluster; next = getFatEntry(next))
 				{
-					disk->read(ClusterToLba(next), sectorsPerCluster, current);
+					disk->access(accessDir::read, ClusterToLba(next), sectorsPerCluster, current);
 					current += 512 * sectorsPerCluster;
 				}
 				// cout << "Read " << clusterLen << " clusters\n";
@@ -870,7 +870,7 @@ namespace Filesystem
 					// buffer smaller than a cluster, pad
 					byte *padded = new byte[clusterLen];
 					memcpy(padded, buffer, length);
-					Disk::result res = disk->write(ClusterToLba(cluster), sectorsPerCluster, padded);
+					Disk::result res = disk->access(accessDir::write, ClusterToLba(cluster), sectorsPerCluster, padded);
 					if (res != Disk::result::success)
 					{
 						cout << "Error writing to cluster " << cluster << ": " << Disk::resultAsString(res) << '\n';
@@ -878,7 +878,7 @@ namespace Filesystem
 					delete[] padded;
 					return;
 				}
-				Disk::result res = disk->write(ClusterToLba(cluster), sectorsPerCluster, buffer);
+				Disk::result res = disk->access(accessDir::write, ClusterToLba(cluster), sectorsPerCluster, buffer);
 				if (res != Disk::result::success)
 				{
 					cout << "Error writing to cluster " << cluster << ": " << Disk::resultAsString(res) << '\n';
@@ -1337,7 +1337,7 @@ namespace Filesystem
 			ExtendedBootRecord &ebr = *(ExtendedBootRecord *)(bootRecord + sizeof(BiosParameterBlock));
 
 			// do some checks on the boot record and FAT structures
-			if (disk->read(part.lbaStart, 1, bootRecord) != Disk::result::success ||
+			if (disk->access(accessDir::read, part.lbaStart, 1, bootRecord) != Disk::result::success ||
 				string(ebr.systemIdString, 8) != "FAT32   " ||
 				!(ebr.signature == 0x28 || ebr.signature == 0x29) ||
 				((word *)bootRecord)[255] != 0xaa55)
@@ -1348,7 +1348,7 @@ namespace Filesystem
 
 			byte *fsInfoSector = new byte[512];
 			FSInfoStruct &fsInfo = *(FSInfoStruct *)fsInfoSector;
-			if (disk->read(ebr.FSinfoSectNr + part.lbaStart, 1, fsInfoSector) != Disk::result::success ||
+			if (disk->access(accessDir::read, ebr.FSinfoSectNr + part.lbaStart, 1, fsInfoSector) != Disk::result::success ||
 				fsInfo.leadSignature != 0x41615252 ||
 				fsInfo.midSignature != 0x61417272 ||
 				fsInfo.trailSignature != 0xaa550000)
@@ -1537,5 +1537,23 @@ namespace Filesystem
 	result Copy(const string16 &src, const string16 &dest)
 	{
 		return (result)-1;
+	}
+
+	string partitionList()
+	{
+		string ret;
+		for (auto &part : *partitions)
+		{
+			ret += toUpper(part->letter);
+		}
+		return ret;
+	}
+	void displayPartitions()
+	{
+		cout << "List of " << partitions->getSize() << ":\n";
+		for (auto &part : *partitions)
+		{
+			cout << "\n\t" << toUpper(part->letter) << ": " << part->lbaLen << " sectors at " << part->lbaStart << ".\n";
+		}
 	}
 }

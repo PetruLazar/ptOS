@@ -11,11 +11,6 @@ namespace IDE
 		lba28,
 		lba48
 	};
-	enum class accessDir : byte
-	{
-		read,
-		write
-	};
 	enum class IDEtype : word
 	{
 		SATA,

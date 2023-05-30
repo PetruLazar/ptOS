@@ -191,7 +191,7 @@ namespace IDE
 
 		virtual int getSize() override { return size; }
 
-		result access(accessDir dir, uint lba, byte numsects, void *buffer_)
+		virtual result access(accessDir dir, uint lba, uint numsects, byte *buffer_) override
 		{
 			accessMode mode;
 			bool dma;
@@ -317,7 +317,7 @@ namespace IDE
 					result res;
 					// pio read
 					// int testvar = 0;
-					for (int s = 0; s < numsects; s++)
+					for (int s = 0; s < (byte)numsects; s++)
 					{
 						res = controller->polling(channel, true);
 						if (res != result::success)
@@ -335,7 +335,7 @@ namespace IDE
 				else
 				{
 					// pio write
-					for (int s = 0; s < numsects; s++)
+					for (int s = 0; s < (byte)numsects; s++)
 					{
 						controller->polling(channel, false);
 						for (int i = 0; i < words; i++)
@@ -347,19 +347,6 @@ namespace IDE
 				}
 			}
 			return result::success;
-		}
-
-		virtual result read(uint lba, uint numsec, byte *buffer) override
-		{
-			if (type == IDEtype::SATA || type == IDEtype::PATA)
-				return access(accessDir::read, lba, numsec, buffer);
-			return result::deviceNotSupported;
-		}
-		virtual result write(uint lba, uint numsec, byte *buffer) override
-		{
-			if (type == IDEtype::SATA || type == IDEtype::PATA)
-				return access(accessDir::write, lba, numsec, buffer);
-			return result::deviceNotSupported;
 		}
 	};
 
@@ -593,7 +580,9 @@ namespace IDE
 		if (controller->DetectDisks())
 			controllers->push_back(controller);
 		else
+		{
 			delete controller;
+		}
 	}
 
 	enum class ATAPIcmd

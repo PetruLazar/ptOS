@@ -86,19 +86,13 @@ extern void main()
 
 	shutdown();
 
-	// disk operations
-
 	// cli and sti is not needed in the interrupt handlers, since they are not trap gates
 
 	// test compatibility mode
 
-	// pci supoprt
-
-	// implement syscall
+	// implement syscall maybe?
 
 	// change video mode
-
-	// test dpl changing
 
 	// shutdown
 
@@ -108,10 +102,8 @@ extern void main()
 
 	// sound
 
-	// loading of user programs, with dynamic linking
-	// maybe support for pe executables
-
-	// multitasking
+	// dynamic linking
+	//  maybe support for pe executables
 
 	// networking
 }
@@ -231,8 +223,7 @@ void terminal()
 		}
 		else if (subCmd == "debug")
 		{
-			cout << "Function to debug is at " << (void *)((char *)Keyboard::getKeyEvent_direct - 0x8000 + 0x200) << '\n';
-			// cout << "Function to debug is at " << (void *)((char *)Disk::Initialize - 0x8000 + 0x200) << '\n';
+			cout << "Function to debug is at " << (void *)((char *)main - 0x8000 + 0x200) << '\n';
 		}
 		else if (subCmd == "pci")
 		{
@@ -284,9 +275,13 @@ void terminal()
 			qwordToHexString(str, clocks);
 			cout << "Clock is: " << str << '\n';
 		}
-		else if (subCmd == "ide")
+		else if (subCmd == "fsPart")
 		{
-			cout << "Command not available at the moment!\n";
+			Filesystem::displayPartitions();
+		}
+		else if (subCmd == "disk")
+		{
+			cout << "Currently " << Disk::devices->getSize() << " disk drives\n";
 			// bool first = true;
 			// for (int i = 0; i < 4; i++)
 			// {

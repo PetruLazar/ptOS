@@ -233,8 +233,9 @@ namespace Memory
 		pml4->mapRegion(nextFree, 0x1000, 0x1000, 0x200000 - 0x1000, true, false);
 		pml4->setAsCurrent();
 
-		// identity map the rest of the ram region
-		sqword leftToMap = (sqword)entry.base_address + entry.length - 0x200000;
+		// identity map the rest of RAM
+		MapEntry &last = memoryMap[mapLength - 1];
+		sqword leftToMap = (sqword)last.base_address + last.length - 0x200000;
 		if (leftToMap > 0)
 			pml4->mapRegion(nextFree, 0x200000, 0x200000, leftToMap, true, false);
 

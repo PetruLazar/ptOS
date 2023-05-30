@@ -16,7 +16,11 @@ namespace Disk
 		track0NotFound = 0x2,
 		noAddressMark = 0x1
 	};
-
+	enum class accessDir : byte
+	{
+		read,
+		write
+	};
 	enum class result : word
 	{
 		success,
@@ -71,8 +75,7 @@ namespace Disk
 	public:
 		virtual int getSize() = 0;
 
-		virtual result read(uint lba, uint numsec, byte *buffer) = 0;
-		virtual result write(uint lba, uint numsec, byte *buffer) = 0;
+		virtual result access(accessDir dir, uint lba, uint numsec, byte *buffer) = 0;
 	};
 
 	extern std::vector<StorageDevice *> *devices;

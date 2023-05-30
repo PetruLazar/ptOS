@@ -22,6 +22,7 @@ namespace PCI
 		outdw(configAddressPort, val);
 		return indw(configDataPort);
 	}
+	// inline void setConfigReg(byte busNr, byte deviceNr, byte funcNr, byte regOffset, uint val)
 
 	// header with type 0x0
 	struct DeviceHeader
