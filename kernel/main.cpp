@@ -196,8 +196,40 @@ void terminal()
 					Scheduler::waitForTask(task);
 			}
 		}
-		else if (subCmd == "text" || subCmd == "bin")
+		else if (subCmd == "dump")
 		{
+			// get optional arguments
+			bool forceText = false,
+				 forceBin = false;
+			while (cmd[0] == '-' || cmd[0] == '/')
+			{
+				getSubcommand(cmd, subCmd);
+				switch (subCmd[1])
+				{
+				case 'b': // bainry mode
+					if (forceText)
+					{
+						cout << "Conflicting argument 'b', forcing binary mode instead of text mode.\n";
+						forceText = false;
+					}
+					else if (forceBin)
+						cout << "Redundant argument 'b', already in forced binary mode.\n";
+					forceBin = true;
+					break;
+				case 't':
+				case 'a': // text (or ascii) mode
+					if (forceBin)
+					{
+						cout << "Conflicting argument '" << subCmd[1] << "', forcing text mode instead of binary mode.\n";
+						forceBin = false;
+					}
+					else if (forceText)
+						cout << "Redundant argument '" << subCmd[1] << "', already in forced text mode.\n";
+					forceText = true;
+					break;
+				}
+			}
+
 			// convert string argument to string16
 			string16 filename;
 			for (char c : cmd)
@@ -208,7 +240,24 @@ void terminal()
 			Filesystem::result res = Filesystem::ReadFile(filename, content, length);
 			if (res == Filesystem::result::success)
 			{
-				if (subCmd == "text")
+				// if no mode is forced, determine the type of the contents
+				if (!(forceBin || forceText))
+				{
+					ull checkLen = length > 0x1000 ? 0x1000 : length; // if file is longer than 4KB, check only the first 4KB
+					forceText = true;								  // assume text
+					for (ull i = 0; i < checkLen; i++)
+					{
+						byte b = content[i];
+						if (b == 0x00 || b == 0xff) // assume the file is binary
+						{
+							forceText = false;
+							forceBin = true;
+							break;
+						}
+					}
+				}
+
+				if (forceText)
 				{
 					cout << string((char *)content, length) << '\n';
 				}
@@ -220,6 +269,9 @@ void terminal()
 			}
 			else
 				cout << "Error: " << Filesystem::resultAsString(res) << '\n';
+		}
+		else if (subCmd == "edit")
+		{
 		}
 		else if (subCmd == "debug")
 		{
