@@ -521,6 +521,8 @@ namespace Filesystem
 				stdEntry->setString(shortFilename);
 				stdEntry->reserved = 0;
 				stdEntry->attributes.set(FileAttributes::none);
+				stdEntry->fileSize = 0;
+				stdEntry->setFirstCluster(0);
 
 				// return the entry
 				return stdEntry;
@@ -695,6 +697,8 @@ namespace Filesystem
 					stdEntry->setString(shortFilename);
 					stdEntry->reserved = 0;
 					stdEntry->attributes = FileAttributes::none;
+					stdEntry->fileSize = 0;
+					stdEntry->setFirstCluster(0);
 					// return the entry
 					entry = stdEntry;
 					return result::success;
@@ -1021,10 +1025,15 @@ namespace Filesystem
 					if (res != result::success)
 					{
 						// failed to write, leave the entry in the directory though
+						entry->setFirstCluster(0);
+						entry->fileSize = 0;
 						delete it;
 						return res;
 					}
-					entry->setFirstCluster(startCluster);
+					else
+					{
+						entry->setFirstCluster(startCluster);
+					}
 					it->flush();
 				}
 				delete it;
@@ -1131,9 +1140,9 @@ namespace Filesystem
 
 				uint firstCluster = entry->getFirstCluster();
 				result res = WriteClusterChain(firstCluster, contents, length);
-				entry->setFirstCluster(firstCluster);
 				if (res == result::success)
 				{
+					entry->setFirstCluster(firstCluster);
 					entry->fileSize = length;
 					it->flush();
 				}
