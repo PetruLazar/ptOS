@@ -170,6 +170,7 @@ namespace AHCI
 	{
 		Registers *regs;
 		byte *pageSpace;
+		vector<void *> allocations;
 		uint cmdSlots;
 	};
 	vector<Controller *> *controllers;
@@ -340,6 +341,8 @@ namespace AHCI
 		for (auto &controller : *controllers)
 		{
 			delete[] controller->pageSpace;
+			for (auto &ptr : controller->allocations)
+				delete[] (byte *)ptr;
 			delete controller;
 		}
 		delete controllers;
@@ -398,18 +401,24 @@ namespace AHCI
 						if (!port.cmdListBase)
 						{
 							// cout << "DEBUG: Allocated a command list.\n";
-							port.cmdListBase = (CmdHeader *)Memory::Allocate(0x400, 0x400);
+							void *ptr = Memory::Allocate(0x400, 0x400);
+							controller->allocations.push_back(ptr);
+							port.cmdListBase = (CmdHeader *)ptr;
 						}
 						if (!port.FISbase)
 						{
 							// cout << "DEBUG: Allocated a FIS struct.\n";
-							port.cmdListBase = (CmdHeader *)Memory::Allocate(0x100, 0x100);
+							void *ptr = Memory::Allocate(0x100, 0x100);
+							controller->allocations.push_back(ptr);
+							port.cmdListBase = (CmdHeader *)ptr;
 						}
 						for (uint i = 0; i < controller->cmdSlots; i++)
 							if (!port.cmdListBase[i].cmdTable)
 							{
 								// cout << "DEBUG: Allocated CMD table for cmd slot " << i << ".\n";
-								port.cmdListBase[i].cmdTable = (CmdTable *)Memory::Allocate(0x10080, 0x80);
+								void *ptr = Memory::Allocate(0x10080, 0x80);
+								controller->allocations.push_back(ptr);
+								port.cmdListBase[i].cmdTable = (CmdTable *)ptr;
 							}
 
 						// identify cmd
