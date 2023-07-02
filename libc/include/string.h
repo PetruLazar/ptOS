@@ -288,9 +288,34 @@ namespace std
 		static constexpr ull npos = (ull)(-1);
 	};
 
+	template <class T>
+	inline basic_string<T> operator+(const T *ptr, const basic_string<T> &str)
+	{
+		basic_string<T> result = str;
+		result.insert(ptr, 0);
+		return result;
+	}
+
 	typedef basic_string<char> string;		 // 8 bits char string
 	typedef basic_string<char16_t> string16; // 16 bits char string
 	typedef basic_string<wchar_t> wstring;	 // 32 bits char string
+
+	inline string to_string(llong x)
+	{
+		char str[32];
+		lltos(str, x);
+		return string(str);
+	}
+	inline string to_string(ull x)
+	{
+		char str[32];
+		ulltos(str, x);
+		return string(str);
+	}
+	inline string to_string(short x) { return to_string((llong)x); }
+	inline string to_string(ushort x) { return to_string((ull)x); }
+	inline string to_string(int x) { return to_string((llong)x); }
+	inline string to_string(uint x) { return to_string((ull)x); }
 
 	inline ostream &operator<<(ostream &os, const string &str)
 	{
