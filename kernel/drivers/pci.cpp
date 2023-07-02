@@ -893,7 +893,7 @@ namespace PCI
 						switch (func.classCode)
 						{
 						case (byte)DeviceClass::massStorageController:
-							Disk::ControllerDetected(header);
+							Disk::ControllerDetected(PCILocation(busNr, deviceNr, funcNr), header);
 							break;
 						default:
 							break;

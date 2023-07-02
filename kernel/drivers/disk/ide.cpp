@@ -70,20 +70,6 @@ namespace IDE
 		devaddress = 0xd
 	};
 
-	enum class IDfield : word
-	{
-		deviceType = 0,
-		cylinders = 2,
-		heads = 6,
-		sectors = 12,
-		serial = 20,
-		model = 54,
-		capabilities = 98,
-		fieldValid = 106,
-		maxLba = 120,
-		commandSets = 164,
-		maxLbaExt = 200
-	};
 	dword getIdField(void *idSpace, IDfield field)
 	{
 		switch (field)
@@ -107,6 +93,9 @@ namespace IDE
 			word ioBase;
 			word ctrl;
 		} channels[2];
+
+		// location info
+		PCILocation pciLocation;
 
 		byte readReg(byte channel, ATAreg reg)
 		{
@@ -190,6 +179,11 @@ namespace IDE
 		char model[41];
 
 		virtual int getSize() override { return size; }
+		virtual string getModel() override { return model; }
+		virtual string getLocation() override
+		{
+			return "Channel " + to_string(channel) + ", drive " + to_string(drive) + " of IDE Controller on " + controller->pciLocation.to_string();
+		}
 
 		virtual result access(accessDir dir, uint lba, uint numsects, byte *buffer_) override
 		{
@@ -564,7 +558,7 @@ namespace IDE
 			delete controller;
 		delete controllers;
 	}
-	void ControllerDetected(DeviceHeader *header)
+	void ControllerDetected(PCILocation location, DeviceHeader *header)
 	{
 		// init controller structure
 		IDEController *controller = new IDEController;
@@ -572,8 +566,9 @@ namespace IDE
 		controller->channels[0].ctrl = header->bar1 ? header->bar1 : primary_ctrl;
 		controller->channels[1].ioBase = header->bar2 ? header->bar2 : secondary_io;
 		controller->channels[1].ctrl = header->bar3 ? header->bar3 : secondary_ctrl;
+		controller->pciLocation = location;
 
-		// stop the controller from triggerint interrupts
+		// stop the controller from triggering interrupts
 		controller->writeReg(0, ATAreg::control, 2);
 		controller->writeReg(1, ATAreg::control, 2);
 

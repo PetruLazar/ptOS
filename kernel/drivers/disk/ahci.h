@@ -6,7 +6,5 @@ namespace AHCI
 	void Initialize();
 	void CleanUp();
 
-	void ControllerDetected(PCI::DeviceHeader *header);
-
-	void test();
+	void ControllerDetected(PCI::PCILocation location, PCI::DeviceHeader *header);
 }

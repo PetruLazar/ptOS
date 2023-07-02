@@ -172,6 +172,9 @@ namespace AHCI
 		byte *pageSpace;
 		vector<void *> allocations;
 		uint cmdSlots;
+
+		// location info
+		PCILocation pciLocation;
 	};
 	vector<Controller *> *controllers;
 
@@ -180,6 +183,7 @@ namespace AHCI
 		Controller *controller;
 		ull size;
 		byte portNr;
+		char model[41];
 
 		int findCmdSlot(Port &port)
 		{
@@ -194,6 +198,11 @@ namespace AHCI
 		}
 
 		virtual int getSize() override { return size; }
+		virtual string getModel() override { return model; }
+		virtual string getLocation() override
+		{
+			return "Slot " + to_string(portNr) + " of AHCI Controller on " + controller->pciLocation.to_string();
+		}
 		virtual bool getID(byte buffer[512])
 		{
 			Port &port = controller->regs->ports[portNr];
@@ -348,11 +357,12 @@ namespace AHCI
 		delete controllers;
 	}
 
-	void ControllerDetected(DeviceHeader *header)
+	void ControllerDetected(PCILocation location, DeviceHeader *header)
 	{
 		Controller *controller = new Controller;
 		controllers->push_back(controller);
 		controller->regs = (Registers *)(ull)header->bar5;
+		controller->pciLocation = location;
 
 		// Controller_Mem *controller = (Controller_Mem *)(ull)header->bar5;
 
@@ -375,85 +385,88 @@ namespace AHCI
 				byte det = SATAStatus & 0xf,
 					 ipm = SATAStatus >> 8 & 0xf;
 
-				if (det == 3 && ipm == 1)
+				if (det != 3 || ipm != 1)
+					continue;
+
+				// device detected
+				uint sig = port.signature;
+
+				// display device info
+				switch (sig)
 				{
-					// device detected
-					uint sig = port.signature;
+				case SATA_SIG_PM:
+					break;
+				case SATA_SIG_ATAPI:
+					break;
+				case SATA_SIG_SEMB:
+					break;
+				default:
+				{
+					// build device
+					StorageDevice *dev = new StorageDevice;
+					dev->controller = controller;
+					dev->portNr = i;
+					devices->push_back(dev);
 
-					// display device info
-					switch (sig)
+					// allocate memory for the device if it is not
+					if (!port.cmdListBase)
 					{
-					case SATA_SIG_PM:
-						break;
-					case SATA_SIG_ATAPI:
-						break;
-					case SATA_SIG_SEMB:
-						break;
-					default:
+						// cout << "DEBUG: Allocated a command list.\n";
+						void *ptr = Memory::Allocate(0x400, 0x400);
+						controller->allocations.push_back(ptr);
+						port.cmdListBase = (CmdHeader *)ptr;
+					}
+					if (!port.FISbase)
 					{
-						// build device
-						StorageDevice *dev = new StorageDevice;
-						dev->controller = controller;
-						dev->portNr = i;
-						devices->push_back(dev);
-
-						// allocate memory for the device if it is not
-						if (!port.cmdListBase)
-						{
-							// cout << "DEBUG: Allocated a command list.\n";
-							void *ptr = Memory::Allocate(0x400, 0x400);
-							controller->allocations.push_back(ptr);
-							port.cmdListBase = (CmdHeader *)ptr;
-						}
-						if (!port.FISbase)
-						{
-							// cout << "DEBUG: Allocated a FIS struct.\n";
-							void *ptr = Memory::Allocate(0x100, 0x100);
-							controller->allocations.push_back(ptr);
-							port.cmdListBase = (CmdHeader *)ptr;
-						}
-						for (uint i = 0; i < controller->cmdSlots; i++)
-							if (!port.cmdListBase[i].cmdTable)
-							{
-								// cout << "DEBUG: Allocated CMD table for cmd slot " << i << ".\n";
-								void *ptr = Memory::Allocate(0x10080, 0x80);
-								controller->allocations.push_back(ptr);
-								port.cmdListBase[i].cmdTable = (CmdTable *)ptr;
-							}
-
-						// identify cmd
-						word *identify = new word[256];
-						if (dev->getID((byte *)identify))
-						{
-							if (identify[83] & (1 << 10))
-								// lba48
-								dev->size = *(ull *)&identify[100];
-							else
-								// lba28
-								dev->size = *(uint *)&identify[60];
-						}
-						else
-							dev->size = 0;
-						delete[] identify;
-
-						// try load bootsector and check partitions
-						byte *bootsector = new byte[0x200];
-						result res = dev->access(accessDir::read, 0, 1, bootsector);
-						if (res == result::success)
-							Filesystem::detectPartitions(dev, bootsector);
-						else
-							cout << "Bootsector read error: " << resultAsString(res) << '\n';
-						delete[] bootsector;
+						// cout << "DEBUG: Allocated a FIS struct.\n";
+						void *ptr = Memory::Allocate(0x100, 0x100);
+						controller->allocations.push_back(ptr);
+						port.cmdListBase = (CmdHeader *)ptr;
 					}
+					for (uint i = 0; i < controller->cmdSlots; i++)
+						if (!port.cmdListBase[i].cmdTable)
+						{
+							// cout << "DEBUG: Allocated CMD table for cmd slot " << i << ".\n";
+							void *ptr = Memory::Allocate(0x10080, 0x80);
+							controller->allocations.push_back(ptr);
+							port.cmdListBase[i].cmdTable = (CmdTable *)ptr;
+						}
+
+					// identify cmd
+					word *identify = new word[256];
+					if (dev->getID((byte *)identify))
+					{
+						if (identify[83] & (1 << 10))
+							// lba48
+							dev->size = *(ull *)&identify[100];
+						else
+							// lba28
+							dev->size = *(uint *)&identify[60];
+
+						for (int k = 0; k < 40; k += 2)
+						{
+							dev->model[k] = ((char *)identify)[(word)IDfield::model + k + 1];
+							dev->model[k + 1] = ((char *)identify)[(word)IDfield::model + k];
+						}
+						dev->model[40] = 0;
 					}
+					else
+						dev->size = 0;
+					delete[] identify;
+
+					// try load bootsector and check partitions
+					byte *bootsector = new byte[0x200];
+					result res = dev->access(accessDir::read, 0, 1, bootsector);
+					if (res == result::success)
+						Filesystem::detectPartitions(dev, bootsector);
+					else
+						cout << "Bootsector read error: " << resultAsString(res) << '\n';
+					delete[] bootsector;
+				}
 				}
 			}
 
 			implementedPorts >>= 1;
 		}
-	}
-
-	void test()
-	{
 	}
 }

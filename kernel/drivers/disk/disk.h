@@ -21,6 +21,20 @@ namespace Disk
 		read,
 		write
 	};
+	enum class IDfield : word
+	{
+		deviceType = 0,
+		cylinders = 2,
+		heads = 6,
+		sectors = 12,
+		serial = 20,
+		model = 54,
+		capabilities = 98,
+		fieldValid = 106,
+		maxLba = 120,
+		commandSets = 164,
+		maxLbaExt = 200
+	};
 	enum class result : word
 	{
 		success,
@@ -74,6 +88,8 @@ namespace Disk
 	{
 	public:
 		virtual int getSize() = 0;
+		virtual std::string getModel() = 0;
+		virtual std::string getLocation() = 0;
 
 		virtual result access(accessDir dir, uint lba, uint numsec, byte *buffer) = 0;
 	};
@@ -82,5 +98,5 @@ namespace Disk
 
 	void Initialize();
 	void CleanUp();
-	void ControllerDetected(PCI::DeviceHeader *header);
+	void ControllerDetected(PCI::PCILocation location, PCI::DeviceHeader *header);
 }

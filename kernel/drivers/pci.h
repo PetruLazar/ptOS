@@ -1,5 +1,6 @@
 #pragma once
 #include <iostream.h>
+#include <string.h>
 #include "../cpu/ports.h"
 
 namespace PCI
@@ -11,6 +12,19 @@ namespace PCI
 	{
 		byte unused, progIF;
 		byte subclass, classCode;
+	};
+	struct PCILocation
+	{
+		word busNr;
+		byte deviceNr, funcNr;
+
+		inline PCILocation() {}
+		inline PCILocation(word busNr, byte deviceNr, byte funcNr) : busNr(busNr), deviceNr(deviceNr), funcNr(funcNr) {}
+
+		inline std::string to_string()
+		{
+			return "PCI bus " + std::to_string(busNr) + ", device " + std::to_string(deviceNr) + ", function " + std::to_string(funcNr);
+		}
 	};
 
 	void Initialize();

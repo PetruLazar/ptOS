@@ -86,26 +86,19 @@ extern void main()
 
 	shutdown();
 
-	// cli and sti is not needed in the interrupt handlers, since they are not trap gates
-
-	// test compatibility mode
-
-	// implement syscall maybe?
-
-	// change video mode
-
-	// shutdown
-
-	// c++ exception handling maybe?
-
-	// apic
-
-	// sound
-
-	// dynamic linking
-	//  maybe support for pe executables
-
-	// networking
+	/*
+	cli and sti is not needed in the interrupt handlers, since they are not trap gates
+	test compatibility mode
+	implement syscall maybe?
+	change video mode
+	shutdown
+	c++ exception handling maybe?
+	apic
+	sound
+	dynamic linking
+	maybe support for pe executables
+	networking
+	*/
 }
 
 void readCommand(string &cmd)
@@ -333,7 +326,44 @@ void terminal()
 		}
 		else if (subCmd == "disk")
 		{
-			cout << "Currently " << Disk::devices->getSize() << " disk drives\n";
+			cout << "Currently " << Disk::devices->getSize() << " disk drives:";
+
+			for (auto *dev : *Disk::devices)
+			{
+				ull size = dev->getSize() * 512; // assume 512 sector size
+				byte magnitude = 0;
+				while (size >= 1024 && magnitude < 4)
+				{
+					// round to nearest 1024 multiple
+					size = ((size - 512) & ~(ull)0x3ff) + 1024;
+					size /= 1024;
+					magnitude++;
+				}
+				char unit = '?';
+				switch (magnitude)
+				{
+				case 0:
+					unit = 'B';
+					break;
+				case 1:
+					unit = 'K';
+					break;
+				case 2:
+					unit = 'M';
+					break;
+				case 3:
+					unit = 'G';
+					break;
+				case 4:
+					unit = 'T';
+				}
+
+				cout << "\n\nModel: " << dev->getModel();
+				cout << "\nSize: " << size << unit << " (" << dev->getSize() << " sectors)"
+																				"\nLocation: "
+					 << dev->getLocation();
+			}
+			cout << '\n';
 			// bool first = true;
 			// for (int i = 0; i < 4; i++)
 			// {
