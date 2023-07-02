@@ -451,7 +451,10 @@ namespace AHCI
 						dev->model[40] = 0;
 					}
 					else
+					{
 						dev->size = 0;
+						dev->model[0] = 0;
+					}
 					delete[] identify;
 
 					// try load bootsector and check partitions
