@@ -411,6 +411,16 @@ void terminal()
 						cout << "Success\n";
 					break;
 				}
+				case 1:
+				{
+					Task *task = Task::createTask(u"C:/programs/hello1.bin");
+					if (task)
+						Scheduler::add(task);
+					task = Task::createTask(u"C:/programs/hello2.bin");
+					if (task)
+						Scheduler::add(task);
+					break;
+				}
 				default:
 					cout << "Invalid test number.\n";
 				}
