@@ -266,27 +266,24 @@ namespace IDT
 		else
 			cout << "Invalid virtual address.\n";
 
+		cout << "Call stack:\n";
+		for (qword *rbp = (qword *)regs.rbp; rbp[0]; rbp = (qword *)rbp[0])
+		{
+			cout << "\t0x" << (void *)rbp[1] << " (file offset: 0x" << (void *)(rbp[1] - 0x8000 + 0x200) << ")\n";
+		}
+
 		switch (int_no)
 		{
 		case 0xd: // general protection fault
 			cout << "Error code: " << err_no << " (0x" << ostream::base::hex << err_no << ")\n";
 			break;
 		case 0xe: // page fault
-			cout << "Error code: " << err_no
-				 << "\nExecuting address: " << (void *)regs.rip << '\n';
-			displayMemoryRow((byte *)regs.rip);
-			cout << "Accessing address: " << (void *)getCR2() << '\n';
-
-			// for (qword *rbp = (qword *)regs.rbp; rbp; rbp = (qword *)rbp[0])
-			// {
-			// 	cout << "\nCaller Stack frame: " << (void *)rbp[0]
-			// 		 << "   Return address: " << (void *)rbp[1] << " (file offset: " << (void *)(rbp[1] - 0x8000 + 0x200) << ")\n";
-			// }
-
+			cout << "Error code: " << err_no;
+			cout << "\nAccessing address: " << (void *)getCR2() << '\n';
 			break;
 		}
 
-		if (Scheduler::getCurrentTask()->isKernelTask())
+		if (!Scheduler::isEnabled() || Scheduler::getCurrentTask()->isKernelTask())
 		{
 			cout << "kernel exception\n";
 			System::blueScreen();

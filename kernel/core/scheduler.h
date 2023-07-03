@@ -13,6 +13,7 @@ namespace Scheduler
 
 	void enable();
 	void disable();
+	bool isEnabled();
 
 	void Initialize(Task *terminalTask);
 	void CleanUp();

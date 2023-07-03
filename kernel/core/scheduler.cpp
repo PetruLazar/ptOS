@@ -59,6 +59,7 @@ namespace Scheduler
 	{
 		enabled = false;
 	}
+	bool isEnabled() { return enabled; }
 
 	void Initialize(Task *terminalTask)
 	{
