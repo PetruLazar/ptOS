@@ -29,7 +29,7 @@ void PageMapLevel4::mapRegion(qword &freeSpace, qword virtualAddress, qword phys
 		while (len)
 		{
 			// iterare through pdpt using i3
-			if (len >= 0x40000 && (i1 | i2 == 0) && ((physicalAddress & 0x1000) == 0)) // if at least 1gb left to map, virtual address is aligned to 1gb and the physical address does not use bit 12
+			if (len >= 0x40000 && ((i1 | i2) == 0) && ((physicalAddress & 0x3fffffff) == 0)) // if at least 1gb left to map, virtual address is aligned to 1gb and the physical address does not use bit 12
 			{
 				// use a 1gb page
 				PageDirectoryPointerTableEntry &entry = pdpt->entries[i3];
@@ -41,12 +41,12 @@ void PageMapLevel4::mapRegion(qword &freeSpace, qword virtualAddress, qword phys
 			else
 			{
 				// cannot use 1gb page
-				//  get pdpt entry
+				// get pdpt entry
 				PageDirectory *pd = pdpt->getOrCreate(i3, freeSpace, writeAccess, userPage);
 				while (len)
 				{
 					// iterate through pd using i2
-					if (len >= 0x200 && (i1 == 0) && ((physicalAddress & 0x1000) == 0))
+					if (len >= 0x200 && (i1 == 0) && ((physicalAddress & 0x1fffff) == 0))
 					{
 						// use a 2mb page
 						PageDirectoryEntry &entry = pd->entries[i2];
@@ -66,28 +66,28 @@ void PageMapLevel4::mapRegion(qword &freeSpace, qword virtualAddress, qword phys
 							pt->entries[i1].set(physicalAddress, writeAccess, userPage);
 							len--;
 							physicalAddress += 0x1000;
-							if (i1++ == 512)
+							if (++i1 == 512)
 							{
 								i1 = 0;
 								break;
 							}
 						}
 					}
-					if (i2++ == 512)
+					if (++i2 == 512)
 					{
 						i2 = 0;
 						break;
 					}
 				}
 			}
-			if (i3++ == 512)
+			if (++i3 == 512)
 			{
 				// pdpt over
 				i3 = 0;
 				break;
 			}
 		}
-		if (i4++ == 512) // go to the next pml4 entry
+		if (++i4 == 512) // go to the next pml4 entry
 		{
 			// pml4 over, virtual space overflow
 			return;
