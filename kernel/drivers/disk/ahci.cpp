@@ -369,8 +369,20 @@ namespace AHCI
 		controller->pageSpace = (byte *)Memory::Allocate(0x8000, 0x1000);
 		ull freeSpace = (ull)controller->pageSpace;
 
-		PageMapLevel4::getCurrent().mapRegion(freeSpace, (ull)header->bar5, (ull)header->bar5, 0x2000, true, false);
+		PageMapLevel4 &current = PageMapLevel4::getCurrent();
+		ull physicalAddress;
+		if (!current.getPhysicalAddress((ull)header->bar5, physicalAddress))
+			current.mapRegion(freeSpace, (ull)header->bar5, (ull)header->bar5, 0x2000, true, false);
 
+		// ex: regs is not memory mapped for some reason
+		// page fault at
+		// AHCI::ControllerDetected: 5ed2
+
+		// call stack:
+		// Disk::ControllerDetected: 6411
+		// PCI::InitializeDevices: 8ed3
+		// main: a141
+		// entry: 277
 		uint implementedPorts = controller->regs->portImplemented;
 		controller->cmdSlots = ((controller->regs->capability >> 8) & 0x1f) + 1;
 		if (controller->cmdSlots > 2)
