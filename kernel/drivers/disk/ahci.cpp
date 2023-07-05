@@ -122,7 +122,9 @@ namespace AHCI
 	{
 		static constexpr uint ATA_DEV_BUSY = 0x80,
 							  ATA_DEV_DRQ = 0x08,
-							  TFES = 0x40000000;
+							  TFES = 0x40000000,
+							  START = 1,
+							  FIS_REC_ENABLED = 1 << 4;
 
 		// uint cmdListBaseLow,
 		// 	cmdListBaseHigh,
@@ -197,7 +199,7 @@ namespace AHCI
 			return -1;
 		}
 
-		virtual int getSize() override { return size; }
+		virtual ull getSize() override { return size; }
 		virtual string getModel() override { return model; }
 		virtual string getLocation() override
 		{
@@ -364,8 +366,6 @@ namespace AHCI
 		controller->regs = (Registers *)(ull)header->bar5;
 		controller->pciLocation = location;
 
-		// Controller_Mem *controller = (Controller_Mem *)(ull)header->bar5;
-
 		controller->pageSpace = (byte *)Memory::Allocate(0x8000, 0x1000);
 		ull freeSpace = (ull)controller->pageSpace;
 
@@ -374,15 +374,8 @@ namespace AHCI
 		if (!current.getPhysicalAddress((ull)header->bar5, physicalAddress))
 			current.mapRegion(freeSpace, (ull)header->bar5, (ull)header->bar5, 0x2000, true, false);
 
-		// ex: regs is not memory mapped for some reason
-		// page fault at
-		// AHCI::ControllerDetected: 5ed2
+		// preform bios handoff is supported
 
-		// call stack:
-		// Disk::ControllerDetected: 6411
-		// PCI::InitializeDevices: 8ed3
-		// main: a141
-		// entry: 277
 		uint implementedPorts = controller->regs->portImplemented;
 		controller->cmdSlots = ((controller->regs->capability >> 8) & 0x1f) + 1;
 		if (controller->cmdSlots > 2)
@@ -444,6 +437,12 @@ namespace AHCI
 							port.cmdListBase[i].cmdTable = (CmdTable *)ptr;
 						}
 
+					// check device status
+					if (!(port.cmdAndStatus & Port::FIS_REC_ENABLED))
+						port.cmdAndStatus |= Port::FIS_REC_ENABLED;
+					if (!(port.cmdAndStatus & Port::START))
+						port.cmdAndStatus |= Port::START;
+
 					// identify cmd
 					word *identify = new word[256];
 					if (dev->getID((byte *)identify))
@@ -465,7 +464,10 @@ namespace AHCI
 					else
 					{
 						dev->size = 0;
-						dev->model[0] = 0;
+						const char unk[] = "Unknown device";
+						memcpy(dev->model, unk, sizeof(unk));
+						delete[] identify;
+						continue;
 					}
 					delete[] identify;
 

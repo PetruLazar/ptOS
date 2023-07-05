@@ -87,7 +87,7 @@ namespace Disk
 	class StorageDevice
 	{
 	public:
-		virtual int getSize() = 0;
+		virtual ull getSize() = 0;
 		virtual std::string getModel() = 0;
 		virtual std::string getLocation() = 0;
 

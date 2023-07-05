@@ -178,7 +178,7 @@ namespace IDE
 		dword commandSets, size;
 		char model[41];
 
-		virtual int getSize() override { return size; }
+		virtual ull getSize() override { return size; }
 		virtual string getModel() override { return model; }
 		virtual string getLocation() override
 		{
