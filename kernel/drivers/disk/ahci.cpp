@@ -282,6 +282,7 @@ namespace AHCI
 			cmdHeader.setFISdwordCount(sizeof(FIS_reg_h2d) / sizeof(uint));
 			cmdHeader.setWrite(false); // set according to dir
 			cmdHeader.prdtLength = (word)(numsec - 1 >> 4) + 1;
+			cmdHeader.prdByteCount = 0;
 
 			CmdTable *cmdTable = cmdHeader.cmdTable;
 			memset(cmdTable, sizeof(CmdTable) + (cmdHeader.prdtLength - 1) * sizeof(PRDTentry), 0);
@@ -295,12 +296,12 @@ namespace AHCI
 				entry.setByteCount(8 * 1024 - 1);
 				entry.setInterruptOnCompletion(true);
 				buffer += 8 * 1024;
-				numsec -= 16;
+				// numsec -= 16;
 			}
 			// last entry
 			PRDTentry &entry = cmdTable->prdt[i];
 			entry.dataAddress = (ull)buffer;
-			entry.setByteCount((numsec << 9) - 1);
+			entry.setByteCount(((numsec - i * 16) << 9) - 1);
 			entry.setInterruptOnCompletion(true);
 
 			FIS_reg_h2d &fis = *(FIS_reg_h2d *)cmdTable->cmdFIS;
@@ -326,7 +327,7 @@ namespace AHCI
 			if (timeout == 1000000)
 				return result::deviceFault;
 
-			port.commandIssue = 1 << slot;
+			port.commandIssue |= 1 << slot;
 
 			// wait for completion
 			while (true)
