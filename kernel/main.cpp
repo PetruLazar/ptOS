@@ -351,6 +351,7 @@ void terminal()
 		}
 		else if (subCmd == "disk")
 		{
+			int c = 0;
 			cout << "Currently " << Disk::devices->getSize() << " disk drives:";
 
 			for (auto *dev : *Disk::devices)
@@ -383,9 +384,10 @@ void terminal()
 					unit = 'T';
 				}
 
-				cout << "\n\nModel: " << dev->getModel();
-				cout << "\nSize: " << size << unit << " (" << dev->getSize() << " sectors)"
-																				"\nLocation: "
+				cout << "\n\nDisk " << c++
+					 << ":\n\tModel: " << dev->getModel()
+					 << "\n\tSize: " << size << unit << " (" << dev->getSize() << " sectors)\n"
+																				  "\tLocation: "
 					 << dev->getLocation();
 			}
 			cout << '\n';
