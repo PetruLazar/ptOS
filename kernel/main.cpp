@@ -443,12 +443,34 @@ void terminal()
 				}
 				case 1:
 				{
-					Task *task = Task::createTask(u"C:/programs/hello1.bin");
-					if (task)
-						Scheduler::add(task);
-					task = Task::createTask(u"C:/programs/hello2.bin");
-					if (task)
-						Scheduler::add(task);
+					uint count;
+					cout << "How many of each? ";
+					cin >> count;
+					const char16_t *programs[2] = {
+						u"hello1",
+						u"hello2"};
+					for (count; count > 0; count--)
+					{
+						for (auto *program : programs)
+						{
+							bool found = false;
+							for (auto &disk : *Disk::devices)
+							{
+								for (auto &part : disk->partitions)
+								{
+									Task *task = Task::createTask((char16_t)part->letter + string16(u":/programs/") + program + u".bin");
+									if (task)
+									{
+										Scheduler::add(task);
+										found = true;
+										break;
+									}
+								}
+								if (found)
+									break;
+							}
+						}
+					}
 					break;
 				}
 				default:
