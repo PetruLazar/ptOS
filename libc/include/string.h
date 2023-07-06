@@ -295,6 +295,14 @@ namespace std
 		result.insert(ptr, 0);
 		return result;
 	}
+	template <class T>
+	inline basic_string<T> operator+(T val, const basic_string<T> &str)
+	{
+		basic_string<T> result;
+		result.push_back(val);
+		result.append(str);
+		return result;
+	}
 
 	typedef basic_string<char> string;		 // 8 bits char string
 	typedef basic_string<char16_t> string16; // 16 bits char string
