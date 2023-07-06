@@ -2,5 +2,5 @@
 
 namespace Explorer
 {
-	void Start();
+	void Start(char partitionLetter = 'c');
 }

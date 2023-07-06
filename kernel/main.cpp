@@ -181,13 +181,26 @@ void terminal()
 			for (char c : cmd)
 				filename += c;
 
-			Task *task = Task::createTask(string16(u"C:/programs/") + filename + u".bin");
-			if (task)
+			bool found = false;
+			for (auto &disk : *Disk::devices)
 			{
-				Scheduler::add(task);
-				if (subCmd == "call")
-					Scheduler::waitForTask(task);
+				for (auto &part : disk->partitions)
+				{
+					Task *task = Task::createTask((char16_t)part->letter + string16(u":/programs/") + filename + u".bin");
+					if (task)
+					{
+						Scheduler::add(task);
+						if (subCmd == "call")
+							Scheduler::waitForTask(task);
+						found = true;
+						break;
+					}
+				}
+				if (found)
+					break;
 			}
+			if (!found)
+				cout << "Failed to run program\n";
 		}
 		else if (subCmd == "dump")
 		{
@@ -324,6 +337,18 @@ void terminal()
 		{
 			Filesystem::displayPartitions();
 		}
+		else if (subCmd == "diskpart")
+		{
+			int c = 0;
+			for (auto &disk : *Disk::devices)
+			{
+				cout << "Disk " << c++ << ":\n";
+				for (auto &part : disk->partitions)
+				{
+					cout << '\t' << toUpper(part->letter) << ": " << part->lbaLen << " sectors at " << part->lbaStart << ", " << part->type() << " partition\n";
+				}
+			}
+		}
 		else if (subCmd == "disk")
 		{
 			cout << "Currently " << Disk::devices->getSize() << " disk drives:";
@@ -367,7 +392,10 @@ void terminal()
 		}
 		else if (subCmd == "explorer")
 		{
-			Explorer::Start();
+			if (cmd.length() != 1)
+				cout << "Partition must be a single letter\n";
+			else
+				Explorer::Start(cmd[0]);
 		}
 		else if (subCmd == "test")
 		{

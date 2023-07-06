@@ -19,7 +19,7 @@ Task *Task::createTask(const std::string16 &executableFileName)
 	Filesystem::result res = Filesystem::ReadFile(executableFileName, content, len);
 	if (res != Filesystem::result::success)
 	{
-		cout << "Could not read file: " << Filesystem::resultAsString(res) << "\n";
+		// cout << "Could not read file: " << Filesystem::resultAsString(res) << "\n";
 		return nullptr;
 	}
 	byte *pageSpace = (byte *)Memory::Allocate(0x10000, 0x1000),

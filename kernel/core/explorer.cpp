@@ -7,16 +7,21 @@ using namespace Filesystem;
 
 namespace Explorer
 {
-	void Start()
+	void Start(char partitionLetter)
 	{
 		cout << "\nWelcome to PTOS File Explorer:\n";
-		string16 currentDirectory = u"C:/";
+		string16 currentDirectory = (char16_t)toUpper(partitionLetter) + string16(u":/");
 
 		while (true)
 		{
 			// display current directory's contents
 			ull count = 0;
 			auto it = GetDirectoryIterator(currentDirectory);
+			if (!it)
+			{
+				cout << "Invalid partition\n";
+				return;
+			}
 			cout << "\nCurrently in \"" << currentDirectory << "\":\n";
 			while (!it->finished())
 			{
