@@ -84,9 +84,23 @@ namespace Disk
 		}
 	}
 
+	class StorageDevice;
+	class Partition
+	{
+	public:
+		int lbaStart, lbaLen;
+		StorageDevice *disk;
+		char letter;
+
+		virtual ~Partition() {}
+		virtual const char *type() { return "raw"; };
+	};
 	class StorageDevice
 	{
 	public:
+		std::vector<Partition *> partitions;
+		void detectPartitions();
+
 		virtual ull getSize() = 0;
 		virtual std::string getModel() = 0;
 		virtual std::string getLocation() = 0;

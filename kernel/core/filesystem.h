@@ -75,7 +75,7 @@ namespace Filesystem
 
 	void Initialize();
 	void CleanUp();
-	void detectPartitions(Disk::StorageDevice *dev, byte *bootsector);
+	void detectPartitions(Disk::StorageDevice *dev);
 	std::string partitionList();
 	void displayPartitions();
 

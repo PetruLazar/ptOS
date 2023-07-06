@@ -437,22 +437,10 @@ namespace IDE
 				dev->model[40] = 0;
 				delete[] identificationSpace;
 
-				// read sector 0 and tell the filesystem about the volumes present
 				if (dev->type == IDEtype::PATA || dev->type == IDEtype::SATA)
 				{
-					byte *bootsector = new byte[512];
-					result res = dev->access(accessDir::read, 0, 1, bootsector);
-					if (res == result::success)
-					{
-						Filesystem::detectPartitions(dev, bootsector);
-					}
-					else
-					{
-						// error: err
-						cout << resultAsString(res) << '\n';
-					}
-
-					delete[] bootsector;
+					dev->detectPartitions();
+					Filesystem::detectPartitions(dev);
 				}
 			}
 		return deviceCount;

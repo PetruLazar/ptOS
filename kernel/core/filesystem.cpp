@@ -10,13 +10,9 @@ namespace Filesystem
 	template <typename T>
 	using Unalg = UnalignedField<T>;
 
-	class Partition
+	class Partition : public Disk::Partition
 	{
 	public:
-		int lbaStart, lbaLen;
-		StorageDevice *disk;
-		char letter;
-
 		// virtual void formatPartition() = 0;
 
 		virtual result CreateFile(string16 &path, byte *contents, ull length) = 0;
@@ -28,21 +24,9 @@ namespace Filesystem
 		virtual DirectoryIterator *GetDirectoryIterator(string16 &path) = 0;
 		virtual result RemoveDirectory(string16 &path) = 0;
 		virtual result CreateDirectory(string16 &path) = 0;
-
-		virtual void CleanUp() = 0;
 	};
 
 	vector<Partition *> *partitions;
-
-	class MBRpartitionEntry
-	{
-	public:
-		byte attributes, startHead;
-		word startSecAndCyl;
-		byte type, endHead;
-		word endSecAndCyl;
-		uint lbaStart, lbaLen;
-	};
 
 	class BiosParameterBlock
 	{
@@ -815,12 +799,13 @@ namespace Filesystem
 			}
 
 		public:
-			void CleanUp() override
+			virtual ~Partition() override
 			{
 				delete[] fsInfo;
 				if (cachedFATSector)
 					delete[] cachedFATSector;
 			}
+			virtual const char *type() { return "FAT32"; }
 
 			uint getFatEntry(uint index)
 			{
@@ -1338,7 +1323,7 @@ namespace Filesystem
 			return true;
 		}
 
-		bool tryLoadPartition(StorageDevice *disk, MBRpartitionEntry &part)
+		bool tryLoadPartition(Disk::Partition *&part)
 		{
 			// load the volume boot record
 			byte *bootRecord = new byte[512];
@@ -1346,7 +1331,7 @@ namespace Filesystem
 			ExtendedBootRecord &ebr = *(ExtendedBootRecord *)(bootRecord + sizeof(BiosParameterBlock));
 
 			// do some checks on the boot record and FAT structures
-			if (disk->access(accessDir::read, part.lbaStart, 1, bootRecord) != Disk::result::success ||
+			if (part->disk->access(accessDir::read, part->lbaStart, 1, bootRecord) != Disk::result::success ||
 				string(ebr.systemIdString, 8) != "FAT32   " ||
 				!(ebr.signature == 0x28 || ebr.signature == 0x29) ||
 				((word *)bootRecord)[255] != 0xaa55)
@@ -1357,7 +1342,7 @@ namespace Filesystem
 
 			byte *fsInfoSector = new byte[512];
 			FSInfoStruct &fsInfo = *(FSInfoStruct *)fsInfoSector;
-			if (disk->access(accessDir::read, ebr.FSinfoSectNr + part.lbaStart, 1, fsInfoSector) != Disk::result::success ||
+			if (part->disk->access(accessDir::read, ebr.FSinfoSectNr + part->lbaStart, 1, fsInfoSector) != Disk::result::success ||
 				fsInfo.leadSignature != 0x41615252 ||
 				fsInfo.midSignature != 0x61417272 ||
 				fsInfo.trailSignature != 0xaa550000)
@@ -1368,28 +1353,30 @@ namespace Filesystem
 			}
 
 			// do something
-			FAT32::Partition *ptr = new FAT32::Partition;
+			FAT32::Partition *ptr = new FAT32::Partition();
 
 			// data about the partition
-			ptr->letter = 'c' + partitions->getSize();
-			ptr->disk = disk;
-			ptr->lbaStart = part.lbaStart;
-			ptr->lbaLen = part.lbaLen;
+			ptr->letter = part->letter;
+			ptr->disk = part->disk;
+			ptr->lbaStart = part->lbaStart;
+			ptr->lbaLen = part->lbaLen;
 
 			// data about the partition content
 			ptr->fatCount = bpm.nrOfFATs;
-			ptr->fatOffset = part.lbaStart + bpm.nrOfReservedSectors;
+			ptr->fatOffset = part->lbaStart + bpm.nrOfReservedSectors;
 			ptr->sectorsPerFAT = ebr.sectorsPerFAT;
 			ptr->sectorsPerCluster = bpm.sectorsPerCluster;
 			ptr->rootDirCluster = ebr.rootDirClusterNr;
 			ptr->dataSectorOffset = ptr->fatOffset + bpm.nrOfFATs * ebr.sectorsPerFAT - 2 * bpm.sectorsPerCluster;
 
-			ptr->fsInfoSect = part.lbaStart + ebr.FSinfoSectNr;
+			ptr->fsInfoSect = part->lbaStart + ebr.FSinfoSectNr;
 			ptr->fsInfo = (FSInfoStruct *)fsInfoSector;
 
 			partitions->push_back(ptr);
 
 			delete[] bootRecord;
+			delete part;
+			part = ptr;
 			return true;
 		}
 	}
@@ -1400,47 +1387,21 @@ namespace Filesystem
 	}
 	void CleanUp()
 	{
-		// nothing for now
-		for (auto part : *partitions)
-		{
-			part->CleanUp();
-			delete part;
-		}
+		// each partition will be deleted by the disk driver
 		delete partitions;
 	}
-	bool intersectPartition(const MBRpartitionEntry &part1, const MBRpartitionEntry &part2)
-	{
-		if (part1.type == 0 || part2.type == 0)
-			return false;
-		return part1.lbaStart < part2.lbaStart ? (part1.lbaStart + part1.lbaLen > part2.lbaStart) : (part2.lbaStart + part2.lbaLen > part1.lbaStart);
-	}
 	static constexpr byte fat32PartType = 0xc; // fat32 with lba
-	bool tryLoadPartition(StorageDevice *disk, MBRpartitionEntry &part)
+	bool tryLoadPartition(Disk::Partition *&part)
 	{
-		// limit-check partition size
-		if (part.lbaStart + part.lbaLen > disk->getSize())
-			return false;
-
 		// try load partition by type
-		switch (part.type)
-		{
-		case fat32PartType:
-			return FAT32::tryLoadPartition(disk, part);
-		default:
-			return false;
-		}
+		if (FAT32::tryLoadPartition(part))
+			return true;
+		return false;
 	}
-	void detectPartitions(StorageDevice *disk, byte *bootsector)
+	void detectPartitions(StorageDevice *disk)
 	{
-		MBRpartitionEntry *partitions = (MBRpartitionEntry *)(bootsector + 0x1be);
-		// check for partition intersections, treat the disk as invalid if any are found
-		for (int i = 0; i < 3; i++)
-			for (int j = i + 1; j < 4; j++)
-				if (intersectPartition(partitions[i], partitions[j]))
-					return;
-
-		for (int i = 0; i < 4; i++)
-			tryLoadPartition(disk, partitions[i]);
+		for (auto &part : disk->partitions)
+			tryLoadPartition(part);
 	}
 
 	Partition *getPartition(char letter)

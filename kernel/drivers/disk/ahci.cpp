@@ -471,14 +471,8 @@ namespace AHCI
 					}
 					delete[] identify;
 
-					// try load bootsector and check partitions
-					byte *bootsector = new byte[0x200];
-					result res = dev->access(accessDir::read, 0, 1, bootsector);
-					if (res == result::success)
-						Filesystem::detectPartitions(dev, bootsector);
-					else
-						cout << "Bootsector read error: " << resultAsString(res) << '\n';
-					delete[] bootsector;
+					dev->detectPartitions();
+					Filesystem::detectPartitions(dev);
 				}
 				}
 			}
