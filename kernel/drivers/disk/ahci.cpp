@@ -270,6 +270,13 @@ namespace AHCI
 		}
 		virtual result access(accessDir dir, uint lba, uint numsec, byte *buffer) override
 		{
+			// read-only for now
+			if (dir == accessDir::write)
+			{
+				cout << "AHCI driver is read-only so far\n";
+				return result::unknownError;
+			}
+
 			Port &port = controller->regs->ports[portNr];
 			port.interruptStatus = (uint)-1;
 			// find cmd slot
