@@ -2,6 +2,7 @@
 
 #include "ide.h"
 #include "ahci.h"
+#include <math.h>
 
 using namespace PCI;
 using namespace std;
@@ -21,6 +22,36 @@ namespace Disk
 		byte type, endHead;
 		word endSecAndCyl;
 		uint lbaStart, lbaLen;
+	};
+	class GPTHeader
+	{
+	public:
+		char signature[8];
+		uint gptRevision,
+			headerSize,
+			headerCRC32,
+			reserved;
+		ull headerLba,
+			altHeaderLba,
+			firstUsableBlock,
+			lastUsableBlock;
+		char diskGuid[16];
+		ull partitionArrayLba;
+		uint partitionCount,
+			partitionEntrySize,
+			partitionArrayCRC32;
+	};
+	class GPTEntry
+	{
+	public:
+		char partitionTypeGuid[16],
+			uniquePartitionGuid[16];
+		ull startLba,
+			endLba,
+			attributes;
+
+		char16_t partitionName[36];
+		// char16_t *partitionNameStart() { return (char16_t *)(this + 1); }
 	};
 
 	void Initialize()
@@ -85,7 +116,43 @@ namespace Disk
 				if (entries[i].type == PMBRPartitionType)
 				{
 					// this is a protective MBR: search GPT
+					GPTHeader *gpt = (GPTHeader *)new byte[512];
+					uint lbaStart = entries[i].lbaStart;
 					delete[] bootSector;
+					if (access(accessDir::read, lbaStart, 1, (byte *)gpt) != result::success)
+						return;
+					if (string(gpt->signature, 8) != "EFI PART" || lbaStart != gpt->headerLba || gpt->partitionEntrySize != sizeof(GPTEntry))
+					{
+						delete gpt;
+						return;
+					}
+					ull partitionArrayLbaLen = integerCeilDivide(gpt->partitionCount * gpt->partitionEntrySize, 0x200);
+					GPTEntry *gptEntries = (GPTEntry *)new byte[partitionArrayLbaLen * 0x200];
+					if (access(accessDir::read, gpt->partitionArrayLba, partitionArrayLbaLen, (byte *)gptEntries) != result::success)
+					{
+						delete gpt;
+						return;
+					}
+					for (int p = 0; p < gpt->partitionCount; p++)
+					{
+						bool unused = true;
+						for (char c : gptEntries[p].partitionTypeGuid)
+							if (c)
+							{
+								unused = false;
+								break;
+							}
+						if (unused) // or if attributes & 1, firmware required, or if attributes & 2, required by OS to boot
+							continue;
+						Partition *part = new Partition();
+						part->disk = this;
+						part->lbaStart = gptEntries[p].startLba;
+						part->lbaLen = gptEntries[p].endLba - gptEntries[p].startLba + 1;
+						part->letter = nextLetter++;
+						partitions.push_back(part);
+					}
+					delete gpt;
+					delete[] gptEntries;
 					return;
 				}
 				if (entries[i].type)
