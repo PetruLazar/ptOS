@@ -27,7 +27,7 @@ namespace Memory
 		{
 			// cheat to get the allocation size
 			ull size = ((ull *)i)[2];
-			cout << "Allocation of " << size << "bytes at " << (void *)i << ":\n";
+			cout << "Allocation of " << size << " bytes at " << (void *)i << ", data at " << (void *)i->getAllocatedBlock() << ":\n";
 			DisplyMemoryBlock((byte *)i->getAllocatedBlock(), 0x30);
 		}
 	}
