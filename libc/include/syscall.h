@@ -21,6 +21,9 @@
 #define SYSCALL_KEYBOARD_KEYEVENT 0
 #define SYSCALL_KEYBOARD_KEYPRESSEDEVENT 1
 #define SYSCALL_KEYBOARD_KEYRELEASEDEVENT 2
+#define SYSCALL_KEYBOARD_KEYEVENT_CHAR 3
+#define SYSCALL_KEYBOARD_KEYPRESSEDEVENT_CHAR 4
+#define SYSCALL_KEYBOARD_KEYRELEASEDEVENT_CHAR 5
 
 #define SYSCALL_FILESYSTEM_READFILE 0
 #define SYSCALL_FILESYSTEM_WRITEFILE 1
@@ -28,9 +31,10 @@
 
 #define SYSCALL_PROGENV_EXIT 0
 #define SYSCALL_PROGENV_WAITFORTASK 1
-// #define SYSCALL_PROGENV_ALLOCHEAP 2
-// #define SYSCALL_PROGENV_HEAPFULL 3
-// #define SYSCALL_PROGENV_HEAPCORRUPTION 4
+#define SYSCALL_PROGENV_WAITFORTHREAD 2
+// #define SYSCALL_PROGENV_ALLOCHEAP 3
+// #define SYSCALL_PROGENV_HEAPFULL 4
+// #define SYSCALL_PROGENV_HEAPCORRUPTION 5
 
 #define SYSCALL_CURSOR_ENABLE 0
 #define SYSCALL_CURSOR_DISABLE 1
@@ -145,11 +149,21 @@ namespace Time
 
 namespace Scheduler
 {
-	inline void waitForTask(void *task)
+	inline int waitForThread(void *thread)
 	{
+		int returnValue;
 		asm("int $0x30"
-			:
+			: "=a"(returnValue)
+			: "a"(SYSCALL_PROGENV), "b"(SYSCALL_PROGENV_WAITFORTHREAD), "D"(thread));
+		return returnValue;
+	}
+	inline int waitForTask(void *task)
+	{
+		int returnValue;
+		asm("int $0x30"
+			: "=a"(returnValue)
 			: "a"(SYSCALL_PROGENV), "b"(SYSCALL_PROGENV_WAITFORTASK), "D"(task));
+		return returnValue;
 	}
 }
 

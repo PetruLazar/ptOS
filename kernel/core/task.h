@@ -2,25 +2,22 @@
 #include "../cpu/idt.h"
 #include <string.h>
 
+class Thread;
+#include "thread.h"
+
 class Task
 {
-	registers_t regs;
-	byte *pageSpace, *fileContent, *stack, *heap;
+	byte *pageSpace, *fileContent, *heap;
 	std::vector<byte *> programResources;
-	bool m_isKernelTask;
+	Thread *mainThread = nullptr;
+	int threadCount = 0;
+	bool m_isKernelTask, m_isDead = false;
 
 public:
-	class TaskInfo
+	inline Task(bool isKernelTask = false, byte *pageSpace = nullptr, byte *fileContent = nullptr, byte *heap = nullptr)
+		: pageSpace(pageSpace), fileContent(fileContent), heap(heap), m_isKernelTask(isKernelTask)
 	{
-	public:
-		ull data;
-
-		inline TaskInfo() {}
-		inline TaskInfo(ull data) : data(data) {}
-	} taskInfo;
-
-	inline Task(const registers_t &regs, bool isKernelTask = false, byte *pageSpace = nullptr, byte *fileContent = nullptr, byte *stack = nullptr, byte *heap = nullptr)
-		: regs(regs), pageSpace(pageSpace), fileContent(fileContent), stack(stack), heap(heap), m_isKernelTask(isKernelTask) {}
+	}
 	inline ~Task()
 	{
 		for (auto ptr : programResources)
@@ -29,27 +26,18 @@ public:
 			delete[] pageSpace;
 		if (fileContent)
 			delete[] fileContent;
-		if (stack)
-			delete[] stack;
 		if (heap)
 			delete[] heap;
 	}
 
 	static Task *createTask(const std::string16 &executableFileName);
 
-	inline static void switchContext(Task *currentTask, Task *targetTask, registers_t &regs)
-	{
-		// save the state of the currentTask
-		if (currentTask)
-			currentTask->regs = regs;
-		// switch context to the selected task
-		regs = targetTask->regs;
-		// enable interrupts for the new task
-		regs.rflags |= 1 << 9;
-	}
-
-	inline registers_t &getRegs() { return regs; }
 	inline bool isKernelTask() { return m_isKernelTask; }
+	inline Thread *getMainThread() { return mainThread; }
+	inline bool isDead() { return m_isDead; }
+	inline void kill() { m_isDead = true; }
 
 	inline void bindResource(byte *resource) { programResources.push_back(resource); }
+
+	friend Thread;
 };

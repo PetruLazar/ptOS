@@ -81,6 +81,7 @@ void Syscall_Screen(registers_t &regs)
 		{
 			// error
 			cout << "Syscall error: address not mapped\n";
+			regs.rdi = (ull)-1;
 			return Scheduler::preempt(regs, Scheduler::preemptReason::taskExited);
 		}
 		// for now, everything is identity mapped, no translation from physical to kernel virtual space
@@ -136,6 +137,42 @@ void Syscall_Keyboard(registers_t &regs)
 			regs.rax = *(ushort *)&event;
 	}
 	break;
+	case SYSCALL_KEYBOARD_KEYEVENT_CHAR:
+	{
+		Keyboard::KeyEvent event = Keyboard::getKeyEvent_direct();
+		if (event.keyCode == Keyboard::KeyCode::unknown && regs.rdi)
+		{
+			regs.rip -= 2;
+			Scheduler::waitForIrq(regs, IDT::Irq_no::ps2_keyboard);
+		}
+		else
+			regs.rax = event.getChar();
+	}
+	break;
+	case SYSCALL_KEYBOARD_KEYPRESSEDEVENT_CHAR:
+	{
+		Keyboard::KeyEvent event = Keyboard::getKeyPressedEvent_direct();
+		if (event.keyCode == Keyboard::KeyCode::unknown && regs.rdi)
+		{
+			regs.rip -= 2;
+			Scheduler::waitForIrq(regs, IDT::Irq_no::ps2_keyboard);
+		}
+		else
+			regs.rax = event.getChar();
+	}
+	break;
+	case SYSCALL_KEYBOARD_KEYRELEASEDEVENT_CHAR:
+	{
+		Keyboard::KeyEvent event = Keyboard::getKeyReleasedEvent_direct();
+		if (event.keyCode == Keyboard::KeyCode::unknown && regs.rdi)
+		{
+			regs.rip -= 2;
+			Scheduler::waitForIrq(regs, IDT::Irq_no::ps2_keyboard);
+		}
+		else
+			regs.rax = event.getChar();
+	}
+	break;
 	}
 }
 void Syscall_Cursor(registers_t &regs)
@@ -167,14 +204,8 @@ void Syscall_ProgEnv(registers_t &regs)
 		cout << "A task is exiting with code " << (int)regs.rdi << '\n';
 		return Scheduler::preempt(regs, Scheduler::preemptReason::taskExited);
 	case SYSCALL_PROGENV_WAITFORTASK:
-		return Scheduler::waitForTask(regs, (Task *)regs.rdi);
-		/*case SYSCALL_PROGENV_ALLOCHEAP:
-		{
-			Memory::Allocate(0x3000, 0x1000);
-			Memory::Allocate(0x10000, 0x1000);
-			regs.cr3->mapRegion()
-				regs.rax = (qword)Memory::Heap::build(0x800000000000, 0x10000);
-			return;
-		}*/
+		return Scheduler::waitForThread(regs, ((Task *)regs.rdi)->getMainThread());
+	case SYSCALL_PROGENV_WAITFORTHREAD:
+		return Scheduler::waitForThread(regs, (Thread *)regs.rdi);
 	}
 }

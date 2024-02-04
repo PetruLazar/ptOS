@@ -49,5 +49,7 @@ Task *Task::createTask(const std::string16 &executableFileName)
 	regs.rbp = regs.rsp = 0x50000;
 	regs.fs = regs.gs = regs.ss = GDT::USER_DS | 3;
 	regs.rflags = 0;
-	return new Task(regs, false, pageSpace, content, stack, heap);
+	Task *task = new Task(false, pageSpace, content, heap);
+	Thread *thread = new Thread(task, regs, stack);
+	return task;
 }

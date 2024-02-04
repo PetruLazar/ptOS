@@ -283,7 +283,7 @@ namespace IDT
 			break;
 		}
 
-		if (!Scheduler::isEnabled() || Scheduler::getCurrentTask()->isKernelTask())
+		if (!Scheduler::isEnabled() || Scheduler::getCurrentThread()->getParentTask()->isKernelTask())
 		{
 			cout << "kernel exception\n";
 			System::blueScreen();
@@ -291,6 +291,7 @@ namespace IDT
 		else
 		{
 			cout << "non-kernel exception\n";
+			regs.rdi = (ull)-1;
 			Scheduler::preempt(regs, Scheduler::preemptReason::taskExited);
 		}
 	}

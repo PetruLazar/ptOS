@@ -55,7 +55,8 @@ extern void main()
 	PCI::InitializeDevices();
 
 	// get terminal task ready and initialize scheduler
-	Task *terminalTask = new Task(registers_t(), true);
+	Task *terminalTask = new Task(true);
+	Thread *terminalThread = new Thread(terminalTask, registers_t());
 	Scheduler::Initialize(terminalTask);
 
 	enableInterrupts();
@@ -65,7 +66,8 @@ extern void main()
 	disableInterrupts();
 
 	Scheduler::CleanUp();
-	delete terminalTask;
+	delete terminalThread;
+	// delete terminalTask;
 	Filesystem::CleanUp();
 	Disk::CleanUp();
 	Keyboard::CleanUp();
@@ -189,9 +191,9 @@ void terminal()
 					Task *task = Task::createTask((char16_t)part->letter + string16(u":/programs/") + filename + u".bin");
 					if (task)
 					{
-						Scheduler::add(task);
+						Scheduler::add(task->getMainThread());
 						if (subCmd == "call")
-							Scheduler::waitForTask(task);
+							Scheduler::waitForThread(task->getMainThread());
 						found = true;
 						break;
 					}
@@ -281,7 +283,8 @@ void terminal()
 		}
 		else if (subCmd == "debug")
 		{
-			cout << "Function to debug is at " << (void *)((char *)main - 0x8000 + 0x200) << '\n';
+			cout << "Function to debug is at file " << (void *)((char *)Screen::scrollUp - 0x8000 + 0x200) << '\n';
+			cout << "Function to debug is at " << (void *)((char *)Screen::scrollUp) << '\n';
 		}
 		else if (subCmd == "pci")
 		{
@@ -461,7 +464,7 @@ void terminal()
 									Task *task = Task::createTask((char16_t)part->letter + string16(u":/programs/") + program + u".bin");
 									if (task)
 									{
-										Scheduler::add(task);
+										Scheduler::add(task->getMainThread());
 										found = true;
 										break;
 									}
@@ -471,6 +474,36 @@ void terminal()
 							}
 						}
 					}
+					break;
+				}
+				case 2:
+				{
+					const char16_t *programs[2] = {
+						u"test1",
+						u"test2"};
+					vector<Task *> tasks;
+					for (auto *program : programs)
+					{
+						bool found = false;
+						for (auto &disk : *Disk::devices)
+						{
+							for (auto &part : disk->partitions)
+							{
+								Task *task = Task::createTask((char16_t)part->letter + string16(u":/programs/") + program + u".bin");
+								if (task)
+								{
+									tasks.push_back(task);
+									Scheduler::add(task->getMainThread());
+									found = true;
+									break;
+								}
+							}
+							if (found)
+								break;
+						}
+					}
+					while (tasks.getSize())
+						Scheduler::waitForThread(tasks.pop_back());
 					break;
 				}
 				default:
