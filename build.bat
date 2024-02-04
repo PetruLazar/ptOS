@@ -13,7 +13,7 @@ rem compile and assemble kernel
 compileall src/kernel obj/kernel "-I src/libc/include" || (echo Build failed! & exit)
 
 rem link kernel
-linkall obj/kernel bin/kernel.bin "--oformat binary -Ttext 0x8000 -e 0x8000 -T linker.ld" src/libc/obj/globals || (echo Build failed! & exit)
+linkall obj/kernel bin/kernel.bin "--oformat binary -Ttext 0x8000 -e 0x8000 -T linker.ld -Map bin/ptos.map" src/libc/obj/globals || (echo Build failed! & exit)
 
 rem build binaries
 if not exist bin\boot.bin (echo Build failed! & exit)
@@ -24,6 +24,3 @@ rem filepad.exe 0x40000000 image.vhd
 rem 1gb disk image - filepad.exe 0x40000000 image.vhd
 rem 1mb disk image - 
 filepad.exe 0x100000 image.vhd
-
-cd src
-run.bat
