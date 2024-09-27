@@ -151,6 +151,6 @@ namespace GDT
 		inline TSSDescriptor(TSS &tss) : SystemSegmentDescriptor((ull)&tss, sizeof(tss)) {}
 	};
 
-	void Initialize();
+	void Initialize(byte *GDT_address, byte *TSS_address, byte *interruptStack);
 	void testGDT();
 }

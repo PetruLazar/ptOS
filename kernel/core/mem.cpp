@@ -36,8 +36,7 @@ namespace Memory
 		}
 	}
 
-	byte &mapLength = *(byte *)0x5000,
-		 &mapEntrySize = *(byte *)0x5001;
+	byte mapLength, mapEntrySize;
 	class MapEntry
 	{
 	public:
@@ -45,7 +44,7 @@ namespace Memory
 		qword length;
 		RegionType type;
 		uint acpiExtendableAttributes;
-	} *memoryMap = (MapEntry *)(0x5000) + 1;
+	} *memoryMap;
 
 	void swapEntries(byte i, byte j)
 	{
@@ -213,8 +212,12 @@ namespace Memory
 		}
 		return ret;
 	}
-	void Initialize()
+	void Initialize(byte *mapEntryDescriptor, byte *mapEntries)
 	{
+		mapLength = *mapEntryDescriptor;
+		mapEntrySize = *(mapEntryDescriptor + 1);
+		memoryMap = (MapEntry *)mapEntries;
+
 		// return;
 		sortMap();
 
@@ -222,7 +225,6 @@ namespace Memory
 		for (i = 0; i < mapLength; i++)
 			if (memoryMap[i].type == RegionType::usable && memoryMap[i].base_address != 0x0)
 				break;
-		// cout << "Selected usable memory map entry: " << i << '\n';
 		MapEntry &entry = memoryMap[i];
 
 		PageMapLevel4 *pml4 = (PageMapLevel4 *)entry.base_address;

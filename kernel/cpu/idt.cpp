@@ -97,7 +97,7 @@ namespace IDT
 			return *(qword *)offset;
 		}
 	};
-	Gate *gates = (Gate *)0x1000;
+	Gate *gates;
 	IrqHandler irqHandlers[16];
 	byte irqOffset;
 
@@ -121,8 +121,10 @@ namespace IDT
 		flags |= 0b10001111 | (dpl << 5);
 		IST = ist;
 	}
-	void Initialize()
+	void Initialize(byte *IDT_address)
 	{
+		gates = (Gate *)IDT_address;
+
 		// build idt
 		// exception interrupts
 		gates[0x00].setInterruptGate(isr_0, 1, 0);

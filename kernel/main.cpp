@@ -37,18 +37,29 @@ extern "C" void testCompMode();
 void terminal();
 void shutdown();
 
-extern void main()
+static constexpr ull IDT_ADDRESS = (ull)0x1000;
+static constexpr ull GDT_ADDRESS = (ull)0x2000;
+static constexpr ull TSS_ADDRESS = (ull)0x38000;
+static constexpr ull INT_RING0_STACK = (ull)0x40000;
+
+struct KernelInfo
 {
-	Memory::Initialize();
+	byte *memoryMapDescriptorAddress; // 0x7000 - entry count + entry size
+	byte *memoryMapAddress;			  // 0x7010
+};
+
+extern void main(KernelInfo &info)
+{
+	Memory::Initialize(info.memoryMapDescriptorAddress, info.memoryMapAddress);
 
 	Screen::Initialize();
 
-	IDT::Initialize();
+	IDT::Initialize((byte *)IDT_ADDRESS);
 
 	Time::Initialize();
 	Keyboard::Initialize();
 
-	GDT::Initialize();
+	GDT::Initialize((byte *)GDT_ADDRESS, (byte *)TSS_ADDRESS, (byte *)INT_RING0_STACK);
 
 	Disk::Initialize();
 	Filesystem::Initialize();
@@ -89,6 +100,7 @@ extern void main()
 	shutdown();
 
 	/*
+	update driver blocking mechanism
 	cli and sti is not needed in the interrupt handlers, since they are not trap gates
 	test compatibility mode
 	implement syscall maybe?

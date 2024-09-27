@@ -45,7 +45,7 @@ namespace IDT
 		void setTrapGate(voidf offset, byte ist, byte dpl);
 	};
 
-	void Initialize();
+	void Initialize(byte *IDT_address);
 
 	void registerIrqHandler(byte irq_no, IrqHandler handler);
 };

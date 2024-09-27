@@ -33,7 +33,7 @@ namespace GDT
 		}
 	};
 
-	SegmentDescriptor *globalDescriptorTable = (SegmentDescriptor *)0x2000;
+	SegmentDescriptor *globalDescriptorTable;
 
 	extern "C" void loadGDT(GDT::Descriptor &descriptor);
 	extern "C" void getCurrentGDT(GDT::Descriptor &descriptor);
@@ -42,10 +42,13 @@ namespace GDT
 
 	TSS *tss = (TSS *)0x38000;
 
-	void Initialize()
+	void Initialize(byte *GDT_address, byte *TSS_address, byte *interruptStack)
 	{
+		globalDescriptorTable = (SegmentDescriptor *)GDT_address;
+		tss = (TSS *)TSS_address;
+
 		tss->clear();
-		tss->rsp[0] = tss->ist[0] = 0x40000;
+		tss->rsp[0] = tss->ist[0] = (ull)interruptStack;
 
 		TSSDescriptor tssDesc(*tss);
 
