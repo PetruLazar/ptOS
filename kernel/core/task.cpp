@@ -31,7 +31,11 @@ Task *Task::createTask(const std::string16 &executableFileName)
 	paging->mapRegion(freeSpace, 0x100000, (qword)content, alignValueUpwards(len, 0x1000), true, true); // page loaded code
 	paging->mapRegion(freeSpace, 0x40000, (ull)stack, 0x10000, true, true);								// page stack
 	paging->mapRegion(freeSpace, 0x7f0000000000, (ull)heap, 0x10000, true, true);						// page heap
-	paging->mapRegion(freeSpace, 0x1000, 0x1000, 0x40000 - 0x1000, false, false);						// page kernel
+	paging->mapRegion(freeSpace, 0xFFFFFFFF80000000, 0x0000, 0x80000, false, false);					// page kernel
+	// get interrupt stack physical address and map it
+	ull interruptStackPhysical;
+	paging->getCurrent().getPhysicalAddress(0xFFFFFFFF80080000, interruptStackPhysical, false);
+	paging->mapRegion(freeSpace, 0xFFFFFFFF80080000, interruptStackPhysical, 0x10000, false, false);
 	if (freeSpace > (qword)(pageSpace + 0x10000))
 	{
 		cout << "Ran out of space for the paging structure.\n";

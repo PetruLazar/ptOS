@@ -9,90 +9,6 @@
 ; set up stack
 mov sp, 0x7c00
 
-; check a20 line
-call check_a20 ; this function only works once !!!!
-jnz a20_enabled
-; to-do: try turning on the a20 line
-jmp a20_disabled ; all attempts to turn on a20 line failed
-a20_enabled:
-
-; check for cpuid: flip bit 21 (0x200000) of eflags
-pushfd ; bp + 4 bytes
-
-pushfd ; bp bytes
-mov bp, sp
-xor word [bp + 2], 0x20
-popfd
-
-pushfd
-mov ax, word [bp + 6]
-xor ax, word [bp + 2]
-popfd
-
-popfd
-test al, 0x20
-jz nocpuid ; no cpuid
-
-; check long mode compatibility
-mov edi, 0x80000000
-mov eax, edi
-inc edi
-cpuid
-cmp eax, edi
-jz nolongmode
-mov eax, edi
-cpuid
-test edx, 1 << 29 
-jz nolongmode
-
-; get memory map
-xor ebx, ebx
-mov byte [MEMMAP_ENTRYCOUNT], 0
-mov es, bx
-mov di, MEMMAP_ENTRYLIST
-mov edx, 0x534d4150
-memmaploop:
-mov eax, 0xe820
-mov ecx, 24
-int 0x15
-jc memmapend
-test ebx, ebx
-jz memmapend
-mov byte [MEMMAP_ENTRYSIZE], cl
-add di, 24
-inc byte [MEMMAP_ENTRYCOUNT]
-jmp memmaploop
-memmapend:
-
-; set up paging
-; free 16kb = 4 * 4kb: PAGING_LOW to (PAGING_LOW + 0x3fff)
-xor ax, ax
-mov es, ax
-mov di, PAGING_LOW
-mov cx, 0x4000 / 2
-cld
-rep stosw
-
-; set up page map level 4, page directory pointer table and page directory, 
-;	each with 1 entry pointing to the next level
-mov di, PAGING_LOW ; start at PAGING_LOW
-mov cx, 3 ; 3 iterations
-lea ax, [di + 0x1000 + PAGE_PRESENT + PAGE_READWRITE] ; address of next page + page flags set
-paging_setup_loop1:
-mov [di], ax ; store the pointer to the next page as the first entry of the current page
-add di, 0x1000 ; advance to the next memory page
-add ax, 0x1000 ; advance to the next virtual address
-loop paging_setup_loop1 ; loop until all 3 iterations are finished
-
-; set up pt: all entries to one page: 2mb of paging
-mov eax, PAGE_PRESENT | PAGE_READWRITE ; set flags for each entry
-paging_setup_loop2:
-mov [di], eax ; set pointer in page table
-add eax, 0x1000 ; advance to the next 4kb memory block
-add di, 8 ; advance one entry in the page table
-cmp eax, 0x200000 ; check if not all 2mb have been mapped
-jb paging_setup_loop2 ; if not, continue to loop
-
 ; cluster size at most 0x4000, checked by VBR code
 ; set up cluster size
 mov al, byte [FAT_SECTORS_PER_CLUSTERS]
@@ -168,7 +84,7 @@ cmp edi, 0x30000 ; temporarily limited to 0x30000 instead of
 				 ; kernel from 0x8000 to 0x38000
 ja KERNEL_TOO_BIG ; force size not above limit
 
-; get sector size in segments
+; get cluster size in segments
 mov dx, cx
 shr dx, 4 ; /= 0x10
 
@@ -187,6 +103,7 @@ jz INCONSISTENT_FS ; if no more clusters, but file bytes left
 jmp BOOTX16_CLUSTER_CHAIN
 BOOTX16_LOADING_FINISHED: ; no file bytes left, check cluster chain
 
+LONG_MODE_SWITCH_START_1:
 ; disable interrupts
 cli
 
@@ -213,6 +130,7 @@ mov cr0, eax
 
 jmp CODE64_SEG:after_longmode_switch
 
+LONG_MODE_SWITCH_FINISH_1:
 ; di, dx - destination, size
 ; si, cx - source, size
 ; assumption: dx >= cx
@@ -388,12 +306,6 @@ check_a20: ; this only works once !!!!
 DISK_READING_ERROR: ; failed to read from disk
 	mov ax, DISK_READING_ERROR_STR
 	jmp PRINT_STR
-a20_disabled: ; failed to enabled a20 line
-	mov ax, a20_disabled_STR
-	jmp PRINT_STR
-nocpuid: ; cpuid instruction not supported
-	mov ax, nocpuid_STR
-	jmp PRINT_STR
 nolongmode: ; long mode not supported
 	mov ax, nolongmode_STR
 	jmp PRINT_STR
@@ -423,6 +335,7 @@ PRINT_STR:
 	jmp $
 
 ; set up gdt
+LONG_MODE_SWITCH_START_2:
 gdt_null:
 dq 0x0
 
@@ -447,6 +360,7 @@ dq gdt_null
 
 CODE64_SEG equ gdt_code64 - gdt_null ;  0x8
 DATA_SEG equ gdt_data - gdt_null ; 0x10
+LONG_MODE_SWITCH_FINISH_2:
 
 ; Disk Address Packet
 DISK_ADDRESS_PACKET:
@@ -472,6 +386,7 @@ DISK_ADDRESS_PACKET_FAT_SECTOR:
 
 [bits 64]
 
+LONG_MODE_SWITCH_START_3:
 after_longmode_switch:
 
 ; load registers for long mode
@@ -485,6 +400,8 @@ mov ss, ax
 mov rsp, 0x50000
 push qword 0
 mov rbp, rsp
+
+LONG_MODE_SWITCH_FINISH_3:
 
 ; move paging structures to higher address
 mov rsi, PAGING_LOW
@@ -504,6 +421,7 @@ mov rdi, KERNEL_RELOCATED
 mov rcx, 0x70000 / 8
 rep movsq
 
+LONG_MODE_SWITCH_START_4:
 ; prepare data structure for kernel to take over
 push qword MEMMAP_ENTRYLIST ; pointer to mem map entries
 push qword MEMMAP_ENTRYCOUNT ; pointer to mem map descriptor (count + entry size)
@@ -511,6 +429,7 @@ mov rdi, rsp ; argument for kernel's main function
 
 ; transfer control to the kernel
 jmp 0x8000
+LONG_MODE_SWITCH_FINISH_4:
 
 ; strings
 DIRNAME_PTOS: db "PTOS       ", 0x14 ; PTOS DIR
@@ -518,8 +437,6 @@ DIRNAME_SYS: db "SYS        ", 0x14 ; SYS DIR
 FILENAME_KERNEL: db "KERNEL  BIN", 0x04 ; kernel.bin FILE
 
 DISK_READING_ERROR_STR: db "Error reading from disk", 0
-a20_disabled_STR: db "Could not enable A20 line", 0
-nocpuid_STR: db "This machine does not support CPUID", 0
 nolongmode_STR: db "This machine does not support Long mode", 0
 KERNEL_NOT_FOUND_STR: db "Could not locate kernel", 0
 KERNEL_TOO_BIG_STR: db "Kernel file is too big", 0
@@ -529,9 +446,9 @@ INCONSISTENT_FS_STR: db "Filesystem is inconsistent/corrupted", 0
 PAGE_PRESENT equ 1 << 0
 PAGE_READWRITE equ 1 << 1
 
-MEMMAP_ENTRYCOUNT equ 0x7000
+MEMMAP_ENTRYCOUNT equ 0x5000
 MEMMAP_ENTRYSIZE equ MEMMAP_ENTRYCOUNT + 1
-MEMMAP_ENTRYLIST equ 0x7010
+MEMMAP_ENTRYLIST equ 0x5010
 FAT_SECTOR_BUFFER equ 0x0c00
 KERNEL_RELOCATED equ 0x8000
 PAGING_LOW equ 0xa000
@@ -560,3 +477,5 @@ FAT_DIR_ENTRY:
 
 ; times 0 - ($ - $$) nop
 ; times 0x1000 - ($ - $$) db 0xcc
+
+dw (LONG_MODE_SWITCH_FINISH_1 - LONG_MODE_SWITCH_START_1) + (LONG_MODE_SWITCH_FINISH_2 - LONG_MODE_SWITCH_START_2) + (LONG_MODE_SWITCH_FINISH_3 - LONG_MODE_SWITCH_START_3) + (LONG_MODE_SWITCH_FINISH_4 - LONG_MODE_SWITCH_START_4)

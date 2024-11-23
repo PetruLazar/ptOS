@@ -7,8 +7,8 @@ extern "C" void setCR3(PageMapLevel4 *pml4_ptr);
 extern "C" PageMapLevel4 &getCR3();
 
 // in pt: 4kb pages (0x1000)
-// in pd: 2mb pages (0x)
-// in pdpt: 1gb pages (0x)
+// in pd: 2mb pages (0x200000)
+// in pdpt: 1gb pages (0x40000000)
 
 void PageMapLevel4::mapRegion(qword &freeSpace, qword virtualAddress, qword physicalAddress, qword len, bool writeAccess, bool userPage)
 {

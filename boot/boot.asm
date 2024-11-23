@@ -9,12 +9,11 @@
 ; set up registers
 xor ax, ax
 mov ds, ax
-mov es, ax
 mov ss, ax
 
 ; relocate code
-mov si, 0x7c00 ; current location
-mov di, 0x1000 ; relocation target
+mov si, LOADED_CODE_LOCATION ; current location
+mov di, CODE_RELOCATION_TARGET ; relocation target
 cld ; go forwards while copying
 mov cx, 0x100 ; 256 words (sector is 512 bytes)
 rep movsw ; copy the bootsector
@@ -24,11 +23,55 @@ jmp 0x0:bootloader_orig
 bootloader_orig:
 
 ; initialize stack
-mov sp, 0x7c00
+mov sp, MBR_STACK
 
-; check a20 line
+; check a20 line - sets es, has to come before es is initialized with correct value
+call check_a20 ; this function only works once !!!!
+jz A_20_ERR ; A20 is disabled, halt
 
-; check for long mode
+; clear screen
+mov ax, 0xb800
+mov es, ax ; es = 0xb800
+xor di, di
+cld
+
+mov ax, (00000111b << 8) | ' ' ; = 0x0720 ; fill with spaces, black background, light gray foreground
+mov cx, 80 * 25
+rep stosw
+mov es, cx
+
+
+; check for cpuid: flip bit 21 (0x200000) of eflags
+pushfd ; bp + 4 bytes
+
+pushfd ; bp bytes
+mov bp, sp
+xor word [bp + 2], 0x20
+popfd
+
+pushfd
+mov ax, word [bp + 6]
+xor ax, word [bp + 2]
+popfd
+
+popfd
+test al, 0x20
+jz NO_LM_ERR ; no cpuid
+
+push dx ; save boot disk nr
+; check long mode compatibility
+mov edi, 0x80000000
+mov eax, edi
+inc edi
+cpuid
+cmp eax, edi
+jz NO_LM_ERR
+mov eax, edi
+cpuid
+test edx, 1 << 29
+jz NO_LM_ERR
+
+pop dx ; restore boot disk nr
 
 MBR_LOOKUP:
 	mov si, DISK_ADDRESS_PACKET
@@ -168,8 +211,19 @@ PRINT_STR:
 	int 0x10
 	jmp $
 
+check_a20: ; this only works once !!!!
+	; check 0000:1000 against ffff:1010
+	mov ax, 0xffff
+	mov es, ax
+	mov [es:0x1010], al
+	mov bl, byte [0x1000]
+	xor al, bl
+	ret
+
 DISK_ERR_STR: db 8, "DISK ERR"
-NO_VALID_PART_STR: db 13, "NO VALID PART"
+NO_VALID_PART_STR: db 7, "NO PART"
+NO_LM_ERR_STR: db 5, "NO LM"
+A_20_ERR_STR: db 6, "NO A20"
 
 DISK_ERR:
 	mov bp, DISK_ERR_STR
@@ -177,6 +231,14 @@ DISK_ERR:
 
 NO_VALID_PART:
 	mov bp, NO_VALID_PART_STR
+	jmp PRINT_STR
+
+NO_LM_ERR:
+	mov bp, NO_LM_ERR_STR
+	jmp PRINT_STR
+
+A_20_ERR:
+	mov bp, A_20_ERR_STR
 	jmp PRINT_STR
 
 DISK_ADDRESS_PACKET:
@@ -195,6 +257,9 @@ times 446 - ($ - $$) int3
 
 ; MBR partition table will be put in later
 
+MBR_STACK equ 0x7c00
+LOADED_CODE_LOCATION equ 0x7c00
+CODE_RELOCATION_TARGET equ 0x1000
 PARTITION_ENTRY_SIZE equ 0x10 ; size of an MBR partition table entry
 ; offset for the fields of a partition table entry
 PARTITION_STATUS equ 0x0

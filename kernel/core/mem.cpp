@@ -212,7 +212,7 @@ namespace Memory
 		}
 		return ret;
 	}
-	void Initialize(byte *mapEntryDescriptor, byte *mapEntries)
+	void Initialize(byte *kernelPhysicalAddress, byte *mapEntryDescriptor, byte *mapEntries)
 	{
 		mapLength = *mapEntryDescriptor;
 		mapEntrySize = *(mapEntryDescriptor + 1);
@@ -233,6 +233,11 @@ namespace Memory
 
 		// identity map the first 2MB of ram
 		pml4->mapRegion(nextFree, 0x1000, 0x1000, 0x200000 - 0x1000, true, false);
+
+		// map gdt, idt, 64-bit TSS and kernel stack and kernel image
+		pml4->mapRegion(nextFree, 0xFFFFFFFF80000000, 0x0000, 0x80000, true, false);
+
+		// apply virtual map
 		pml4->setAsCurrent();
 
 		// identity map the rest of RAM
@@ -247,5 +252,10 @@ namespace Memory
 
 		selectedHeap = Heap::build(entry.base_address, entry.length);
 		// Heap::selectHeap(Heap::build(entry.base_address + diff, entry.length - diff));
+
+		byte *interruptStack = (byte *)Memory::Allocate(0x10000, 0x1000);
+
+		// map interrupt stack
+		pml4->mapRegion(nextFree, 0xFFFFFFFF80080000, (ull)interruptStack, 0x10000, true, false);
 	}
 }

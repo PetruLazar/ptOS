@@ -40,7 +40,7 @@ namespace GDT
 	extern "C" void updateSegmentRegisters();
 	extern "C" void loadTSS(word gdtEntry);
 
-	TSS *tss = (TSS *)0x38000;
+	TSS *tss;
 
 	void Initialize(byte *GDT_address, byte *TSS_address, byte *interruptStack)
 	{

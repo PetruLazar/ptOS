@@ -8,7 +8,7 @@ namespace Memory
 {
 	void DisplayMap();
 	std::string getStringMemoryMap();
-	void Initialize(byte *mapEntryDescriptor, byte *mapEntries);
+	void Initialize(byte *kernelPhysicalAddress, byte *mapEntryDescriptor, byte *mapEntries);
 }
 
 extern "C" void memcpy(void *dest, const void *src, ull len);

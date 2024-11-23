@@ -43,19 +43,6 @@ FAT32_HEADER:
 	.ID_string: db "FAT32   "
 
 VBR_BOOTCODE:
-	mov ax, 0xb800
-	mov es, ax ; es = 0xb800
-	xor ax, ax
-	mov di, ax ; di = 0x0
-	mov ds, ax
-	cld
-
-	; clear screen
-	mov ax, (00000111b << 8) | ' ' ; = 0x0720 ; fill with spaces, black background, light gray foreground
-	mov cx, 80 * 25
-	rep stosw
-	mov es, cx
-
 	; set up registers
 	; dl already set to disk index
 	mov byte [DISK_NR], dl
@@ -79,7 +66,9 @@ VBR_BOOTCODE:
 	mov si, DISK_ADDRESS_PACKET
 	DISK_READ
 	jc DISK_READING_ERROR
-	mov byte [DISK_ADDRESS_PACKET.BUFFER_OFFSET + 1], 0x10 ; 7E 00 -> 10 00
+	mov ax, CLUSTER_BUFFER_SEGMENT
+	mov fs, ax
+	mov word [DISK_ADDRESS_PACKET.BUFFER_SEGMENT], ax
 
 	; check if cluster is at most 0x4000, aka sectors per cluster at most 0x20
 	movzx ax, byte [FAT_HEADER.sectors_per_cluster]
@@ -145,6 +134,20 @@ VBR_BOOTCODE:
 
 	; jump to second sector of VBR
 	jmp SECOND_SECTOR
+
+
+; compare two 11-byte strings
+; si, di - the two strings
+FILENAME_CMP:
+	pusha
+	push ds
+	mov cx, fs
+	mov ds, cx
+	mov cx, 12 ;  8.3 std filename + entry type
+	repe cmpsb
+	pop ds
+	popa
+	ret
 
 ; func to load cluster in bx:ax
 LOAD_CLUSTER:
@@ -237,12 +240,16 @@ CLUSTER_TOO_BIG:
 	mov ax, CLUSTER_TOO_BIG_STR
 	jmp PRINT_STR
 
-BOOT16_NOT_FOUND:
-	mov ax, BOOT16_NOT_FOUND_STR
+KERNEL_NOT_FOUND:
+	mov ax, KERNEL_NOT_FOUND_STR
 	jmp PRINT_STR
 
-BOOT16_INCOMPATIBLE:
-	mov ax, BOOT16_INCOMPATIBLE_STR
+KERNEL_INCOMPATIBLE:
+	mov ax, KERNEL_INCOMPATIBLE_STR
+	jmp PRINT_STR
+
+INCONSISTENT_FS:
+	mov ax, INCONSISTENT_FS_STR
 	jmp PRINT_STR
 
 ; ax - string addr
@@ -263,12 +270,13 @@ PRINT_STR:
 ; initialized variables and strings
 DIRNAME_PTOS: db "PTOS       ", 0x14 ; PTOS DIR
 DIRNAME_SYS: db "SYS        ", 0x14 ; SYS DIR
-FILENAME_BOOT: db "BOOTX16 BIN", 0x04 ; BOOTX16.bin FILE
+FILENAME_KERNEL: db "KERNEL  BIN", 0x04 ; KERNEL.bin FILE
 DISK_READING_ERROR_STR: db "DISK ERR", 0
-INVALID_SIGNATURE_ERROR_STR: db "INVAL PART", 0
-CLUSTER_TOO_BIG_STR: db "CLUSTER TOO BIG", 0
-BOOT16_NOT_FOUND_STR: db "NO BL", 0
-BOOT16_INCOMPATIBLE_STR: db "BL INCOMPAT", 0
+INVALID_SIGNATURE_ERROR_STR: db "PART ERR", 0
+CLUSTER_TOO_BIG_STR: db "CLUSTER ERR", 0
+KERNEL_NOT_FOUND_STR: db "NO KERNEL", 0
+KERNEL_INCOMPATIBLE_STR: db "KERNEL ERR", 0
+INCONSISTENT_FS_STR: db "FS ERR", 0
 
 ; Disk Address Packet
 DISK_ADDRESS_PACKET:
@@ -276,18 +284,11 @@ DISK_ADDRESS_PACKET:
 	.SECTOR_COUNT:
 	dw 0x01
 	.BUFFER_OFFSET:
-	dw 0x7e00
-	.BUFFER_SEGMENT:
 	dw 0x0
+	.BUFFER_SEGMENT:
+	dw 0x07e0
 	.START_LBA:
 	dq 0x01
-
-; uninitialized variables
-SECTOR_MULT_BUFFER equ 0xf00 ; 8 bytes
-DISK_NR equ 0xf08 ; 1 byte
-FAT_SECTORS_PER_CLUSTERS equ 0xf09 ; 1 byte, 6-byte gap
-FAT_OFFSET equ 0xf10 ; 8 bytes
-CLUSTER_OFFSET equ FAT_OFFSET + 0x8 ; = 0xf18, 8 bytes
 
 FAT_DIR_ENTRY:
 	.FILENAME83 equ 0x00
@@ -311,18 +312,18 @@ dw 0xaa55
 
 ; second sector
 SECOND_SECTOR:
-	; look for the ptOS/sys/bootx16.bin file
+	; look for the ptOS/sys/kernel.bin file
 
 	; set file to look for and root cluster
 	; read cluster previously set
 	; look through all dir entries
 	;	if entry found
 	;		if directory, get cluster and jump back to reading cluster
-	;		if file, then bootX16 has been found; load and jump to it
+	;		if file, then kernel has been found; load and jump to it
 	; entry not found, read next cluster
 	;	if next cluster exists, jump back to reading cluster
 	;	if next cluster does not exist
-			; bootX16 not found; display error and freeze
+			; kernel not found; display error and freeze
 
 	; ax, bx = root dir cluster
 	mov ax, word [FAT32_HEADER.root_dir_cluster]     ; low word
@@ -332,25 +333,24 @@ SECOND_SECTOR:
 	; dx = end of cluster addr
 	movzx dx, byte [FAT_HEADER.sectors_per_cluster]  
 	shl dx, 9 ; *0x200 bytes per sector
-	add dh, 0x10 ; dx += 0x1000 ; cluster starts at 0x1000
 	; dx = upper limit of cluster
 
 	.LOAD_CLUSTER_LOOP: ; load next cluster
 	call LOAD_CLUSTER
-	mov si, 0x1000
+	xor si, si
 	.DIR_ENTRIES_LOOP: ; check dir entries
-	cmp byte [si], 0 ; no more dir entries
+	cmp byte [fs:si], 0 ; no more dir entries
 	je .NO_MORE_CLUSTERS
-	cmp byte [si], 0xe5 ; unused entry
+	cmp byte [fs:si], 0xe5 ; unused entry
 	je .SKIP_DIR_ENTRY
 	.VALID_DIR_ENTRY: ; entry used
 	call FILENAME_CMP ; compare current entry with target entry (filename + type)
 	jne .SKIP_DIR_ENTRY ; not the entry needed
 	add di, 12 ; move to searching the next string
-	mov ax, word [si + FAT_DIR_ENTRY.START_CLUSTER_LOW_WORD] ; start cluster - low word
-	mov bx, word [si + FAT_DIR_ENTRY.START_CLUSTER_HIGH_WORD] ; start cluster - high word
-	cmp byte [si + FAT_DIR_ENTRY.ATTRIBUTES], 0x04 ; entry is file entry: bootX16 found
-	je .BOOTX16_FOUND
+	mov ax, word [fs:si + FAT_DIR_ENTRY.START_CLUSTER_LOW_WORD] ; start cluster - low word
+	mov bx, word [fs:si + FAT_DIR_ENTRY.START_CLUSTER_HIGH_WORD] ; start cluster - high word
+	cmp byte [fs:si + FAT_DIR_ENTRY.ATTRIBUTES], 0x04 ; entry is file entry: kernel found
+	je .KERNEL_FOUND
 	jmp .LOAD_CLUSTER_LOOP; next dir found, go search in it
 	.SKIP_DIR_ENTRY:
 	add si, 0x20 ; dir entries are 0x20 bytes
@@ -364,65 +364,197 @@ SECOND_SECTOR:
 	jnz .LOAD_CLUSTER_LOOP
 
 	.NO_MORE_CLUSTERS: ; file not found, no more clusters to load
-	jmp BOOT16_NOT_FOUND
+	jmp KERNEL_NOT_FOUND
 
-	.BOOTX16_FOUND:
-	; si - bootX16 file dir entry
-	; bx:ax = bootX16 file start cluster
+	.KERNEL_FOUND:
+	; si - kernel file dir entry
+	; bx:ax = kernel file start cluster
 	
 	; check file size to make sure it fits in memory
 	; get cluster size in bytes
-	cmp word [si + FAT_DIR_ENTRY.FILE_SIZE + 2], 0 ; high word
-	jne BOOT16_INCOMPATIBLE ; must be 0
-	mov dx, word [si + FAT_DIR_ENTRY.FILE_SIZE] ; dx - file size
-	movzx cx, byte [FAT_HEADER.sectors_per_cluster]
-	shl cx, 9 ; *= 0x200 bytes per cluster
+	mov edx, dword [fs:si + FAT_DIR_ENTRY.FILE_SIZE] ; dx - file size
+	movzx ecx, byte [FAT_HEADER.sectors_per_cluster]
+	shl ecx, 9 ; *= 0x200 bytes per cluster
 	; align size in bytes upwards to cluster size
-	xor di, di
+	xor edi, edi
 	.ALIGN_UP_LOOP:
-	add di, cx ; add increments of cluster size in bytes
-	jc BOOT16_INCOMPATIBLE ; if it overflows, freeze
-	cmp di, dx ; while di < dx
+	add edi, ecx ; add increments of cluster size in bytes
+	jc KERNEL_INCOMPATIBLE ; if it overflows, freeze
+	cmp edi, edx ; while di < dx
 	jb .ALIGN_UP_LOOP
-	; di = size of file on disk
-	; di at most from 0x1000 until 0x7000 = 0x6000 bytes
-	cmp di, 0x6000
-	ja BOOT16_INCOMPATIBLE ; force size not above limit
+	; edi = size of file on disk
+	; edi at most from 0x10000 until 0x80000 = 0x70000 bytes
+	cmp edi, 0x70000
+	;cmp edi, 0x28000 ; temporarily limited to 0x28000 instead of
+					 ; 0x70000 until kernel memmap is also updated
+					 ; kernel from 0x10000 to 0x38000
+	ja KERNEL_INCOMPATIBLE ; force size not above limit
 
 	; cx already cluster size
-	; DAP buffer already 0x1000
+
+	; get cluster size in segments
+	mov dx, cx
+	shr dx, 4 ; /= 0x10
 
 	; load cluster chain
 	; cx = size of cluster in bytes
 	; di - size of file, aligned upwards to cluster size
 	; bx:ax - first cluster of file
-	.BOOTX16_CLUSTER_CHAIN:
+	.KERNEL_CLUSTER_CHAIN:
  	call LOAD_CLUSTER ; bx:ax already set
-
-	sub di, cx ; decrement file size left
-	jz .BOOTX16_LOADING_FINISHED ; if no more bytes in file
-	add word [DISK_ADDRESS_PACKET.BUFFER_OFFSET], cx 	; increment address in DAP
+	sub edi, ecx ; decrement file size left
+	jz .KERNEL_LOADING_FINISHED ; if no more bytes in file
+	add word [DISK_ADDRESS_PACKET.BUFFER_SEGMENT], dx 	; increment address in DAP
 	call GET_FAT_ENTRY ; next cluster
 	jz INCONSISTENT_FS ; if no more clusters, but file bytes left
-	jmp .BOOTX16_CLUSTER_CHAIN
-	.BOOTX16_LOADING_FINISHED: ; no file bytes left, check cluster chain
+	jmp .KERNEL_CLUSTER_CHAIN
+	.KERNEL_LOADING_FINISHED: ; no file bytes left, check cluster chain
 
 	; sanity checks
 	call GET_FAT_ENTRY
 	jnz INCONSISTENT_FS ; clusters left in chain, an error occured
 
-	; jump to boot16 code
-	jmp 0x0:0x1000
+	; get memory map
+	xor ebx, ebx
+	mov byte [MEMMAP_ENTRYCOUNT], 0
+	mov es, bx
+	mov di, MEMMAP_ENTRYLIST
+	mov edx, 0x534d4150
+	memmaploop:
+	mov eax, 0xe820
+	mov ecx, 24
+	int 0x15
+	jc memmapend
+	test ebx, ebx
+	jz memmapend
+	mov byte [MEMMAP_ENTRYSIZE], cl
+	add di, 24
+	inc byte [MEMMAP_ENTRYCOUNT]
+	jmp memmaploop
+	memmapend:
 
+	; set up paging
+	; free 12kb = 3 * 4kb: PAGING_LOW to (PAGING_LOW + 0x2fff)
+	xor ax, ax
+	mov es, ax
+	mov di, PAGING_LOW
+	mov cx, 0x3000 / 2
+	cld
+	push di ; save di = PAGING_LOW
+	rep stosw
 
-; compare two 11-byte strings
-; si, di - the two strings
-FILENAME_CMP:
-	pusha
-	mov cx, 12 ;  8.3 std filename + entry type
-	repe cmpsb
-	popa
-	ret
+	; set up page map level 4
+	pop di ; PAGING_LOW
+	lea cx, [di + 0x1000 + PAGE_PRESENT + PAGE_READWRITE]
+	mov word [di], cx ; map lower half
+	add ch, 0x10 ; cx += 0x1000
+	mov word [di + 0x1ff * 8], cx ; map higher half
+
+	; set up lower half page directory pointer table
+	add di, 0x1000 ; PAGING_LOW + 0x1000
+	mov cx, PAGE_PRESENT | PAGE_READWRITE | PAGE_BIGPAGE
+	mov word [di], cx
+
+	; set up higher half page directory pointer table
+	add di, 0x1000 ; PAGING_LOW + 0x2000
+	mov word [di + 0x1fe * 8], cx
+
+	; ; set up page map level 4, page directory pointer table and page directory, 
+	; ;	each with 1 entry pointing to the next level
+	; mov di, PAGING_LOW ; start at PAGING_LOW
+	; mov cx, 3 ; 3 iterations
+	; lea ax, [di + 0x1000 + PAGE_PRESENT + PAGE_READWRITE] ; address of next page + page flags set
+	; paging_setup_loop1:
+	; mov [di], ax ; store the pointer to the next page as the first entry of the current page
+	; add di, 0x1000 ; advance to the next memory page
+	; add ax, 0x1000 ; advance to the next virtual address
+	; loop paging_setup_loop1 ; loop until all 3 iterations are finished
+
+	; ; set up pt: all entries to one page: 2mb of paging
+	; mov eax, PAGE_PRESENT | PAGE_READWRITE ; set flags for each entry
+	; paging_setup_loop2:
+	; mov [di], eax ; set pointer in page table
+	; add eax, 0x1000 ; advance to the next 4kb memory block
+	; add di, 8 ; advance one entry in the page table
+	; cmp eax, 0x200000 ; check if not all 2mb have been mapped
+	; jb paging_setup_loop2 ; if not, continue to loop
+
+	; disable interrupts
+	cli
+
+	; go to long mode
+	mov eax, 10100000b ; set "physical address extension" and "page global enabled"
+	mov cr4, eax
+
+	mov eax, PAGING_LOW ; point cr3 to pml4
+	mov cr3, eax
+
+	; enable long mode by setting EFER.LME
+	mov ecx, 0xC0000080
+	rdmsr
+	or eax, 0x00000100
+	wrmsr
+
+	; load global descriptor table
+	lgdt [gdt_descriptor]
+
+	; enable paging
+	mov eax, cr0
+	or eax, 0x80000001
+	mov cr0, eax
+
+	jmp CODE64_SEG:after_longmode_switch
+
+[bits 64]
+after_longmode_switch:
+	; load registers for long mode
+	mov ax, 0x10
+	mov ds, ax
+	mov es, ax
+	mov fs, ax
+	mov gs, ax
+	mov ss, ax
+
+	mov rsp, 0xFFFFFFFF80010000
+	push qword 0
+	mov rbp, rsp
+
+	mov rax, KERNEL_BASE
+
+	push qword MEMMAP_ENTRYLIST ; pointer to mem map entries
+	push qword MEMMAP_ENTRYCOUNT ; pointer to mem map descriptor (count + entry size)
+	push rax
+	mov rdi, rsp ; argument for kernel's main function
+
+	; transfer control to the kernel
+	jmp rax
+
+[bits 16]
+; GDT
+gdt_null:
+dq 0x0
+
+gdt_code64: ; len 64 bits
+	dd 0x0 ; limit low 0 - 15 and base high 0 - 15
+	db 0x0 ; base 16 - 23
+	db 10011010b ; access byte
+	db 00100000b ; flags and limit 16 - 19
+	db 0x0 ; base 24 - 31
+
+gdt_data:
+	dw 0xffff
+	dw 0x0000
+	db 0x00
+	db 10010010b
+	db 00000000b
+	db 0x0
+
+gdt_descriptor:
+dw gdt_descriptor - gdt_null - 1
+dq gdt_null
+
+CODE64_SEG equ gdt_code64 - gdt_null ;  0x8
+DATA_SEG equ gdt_data - gdt_null ; 0x10
 
 ; func to get FAT entry corresponding to cluster bx:ax
 ; bx:ax - next cluster in chain
@@ -494,13 +626,24 @@ GET_FAT_ENTRY:
 	lea sp, [bp + 2] ; add 2
 	ret
 
-INCONSISTENT_FS:
-	mov ax, INCONSISTENT_FS_STR
-	jmp PRINT_STR
-
+; uninitialized variables and constants
 FAT_SECTOR_BUFFER equ 0x0c00
+SECTOR_MULT_BUFFER equ 0xf00 ; 8 bytes
+DISK_NR equ 0xf08 ; 1 byte
+FAT_SECTORS_PER_CLUSTERS equ 0xf09 ; 1 byte, 6-byte gap
+FAT_OFFSET equ 0xf10 ; 8 bytes
+CLUSTER_OFFSET equ FAT_OFFSET + 0x8 ; = 0xf18, 8 bytes
+CLUSTER_BUFFER_SEGMENT equ 0x1000
+MEMMAP_ENTRYCOUNT equ 0x5000
+MEMMAP_ENTRYSIZE equ MEMMAP_ENTRYCOUNT + 1
+MEMMAP_ENTRYLIST equ 0x5010
+PAGING_LOW equ 0xa000
+KERNEL_BASE equ 0x10000
 
-INCONSISTENT_FS_STR: db "INCONSISTENT FS", 0
+PAGE_PRESENT equ 1 << 0
+PAGE_READWRITE equ 1 << 1
+PAGE_BIGPAGE equ 1 << 7
+
 DISK_ADDRESS_PACKET_FAT_SECTOR:
 	db 0x10, 0x00			; signature
 	dw 0x01					; sector count

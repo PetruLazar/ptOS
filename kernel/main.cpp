@@ -37,20 +37,21 @@ extern "C" void testCompMode();
 void terminal();
 void shutdown();
 
-static constexpr ull IDT_ADDRESS = (ull)0x1000;
-static constexpr ull GDT_ADDRESS = (ull)0x2000;
-static constexpr ull TSS_ADDRESS = (ull)0x38000;
-static constexpr ull INT_RING0_STACK = (ull)0x40000;
+static constexpr ull IDT_ADDRESS = (ull)0xFFFFFFFF80001000;
+static constexpr ull GDT_ADDRESS = (ull)0xFFFFFFFF80000500;
+static constexpr ull TSS_ADDRESS = (ull)0xFFFFFFFF80002000;
+static constexpr ull INT_RING0_STACK = (ull)0xFFFFFFFF80090000;
 
 struct KernelInfo
 {
+	byte *kernelPhysicalAddress;	  // 0x10000
 	byte *memoryMapDescriptorAddress; // 0x7000 - entry count + entry size
 	byte *memoryMapAddress;			  // 0x7010
 };
 
 extern void main(KernelInfo &info)
 {
-	Memory::Initialize(info.memoryMapDescriptorAddress, info.memoryMapAddress);
+	Memory::Initialize(info.kernelPhysicalAddress, info.memoryMapDescriptorAddress, info.memoryMapAddress);
 
 	Screen::Initialize();
 
@@ -205,7 +206,10 @@ void terminal()
 					{
 						Scheduler::add(task->getMainThread());
 						if (subCmd == "call")
-							Scheduler::waitForThread(task->getMainThread());
+						{
+							int retVal = Scheduler::waitForThread(task->getMainThread());
+							cout << "Called task returned " << retVal << '\n';
+						}
 						found = true;
 						break;
 					}
@@ -516,6 +520,13 @@ void terminal()
 					}
 					while (tasks.getSize())
 						Scheduler::waitForThread(tasks.pop_back());
+					break;
+				}
+				case 3:
+				{
+					cout << "Test commencing:\n";
+					vector<int> v;
+					cout << v.getSize() << '\n';
 					break;
 				}
 				default:

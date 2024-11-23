@@ -1,4 +1,5 @@
 [bits 64]
+[default rel]
 [extern exceptionHandler]
 [extern irqHandler]
 [extern os_serviceHandler]

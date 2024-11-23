@@ -1,2 +1,2 @@
-compileall src obj "-I include" || (echo Build failed! & exit)
+compileall src obj "-I include -mcmodel=kernel" || (echo Build failed! & exit)
 echo Finished

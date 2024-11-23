@@ -3,7 +3,7 @@ idleTask:
 hlt
 mov rax, 1
 mov rax, 2
-lea rdi, [afterhltmsg]
+lea rdi, [rel afterhltmsg]
 here:
 jmp here
 afterhltmsg:
