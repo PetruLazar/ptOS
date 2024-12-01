@@ -527,6 +527,7 @@ after_longmode_switch:
 	mov rdi, rsp ; argument for kernel's main function
 
 	; transfer control to the kernel
+	add rax, 0xFFFFFFFF80000000
 	jmp rax
 
 [bits 16]
