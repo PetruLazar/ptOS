@@ -21,4 +21,4 @@ if %kernel%==2 (echo "Failed to link the kernel!")
 if %kernel%==3 (echo "Failed to install the kernel into the disk image!")
 
 rem exit
-if %kernel%==0 (echo "Finished!" & exit 0) else (exit 1)
+if %kernel%==0 (echo "Finished!" & exit /b 0) else (exit /b 1)
