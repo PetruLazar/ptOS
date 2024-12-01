@@ -1,4 +1,5 @@
 #include "explorer.h"
+#include <syscall.h>
 #include "filesystem.h"
 #include <screen.h>
 

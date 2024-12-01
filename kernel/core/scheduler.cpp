@@ -2,6 +2,7 @@
 #include "../utils/time.h"
 #include <vector.h>
 #include "../cpu/gdt.h"
+#include "../utils/isriostream.h"
 
 using namespace std;
 
@@ -87,10 +88,10 @@ namespace Scheduler
 
 		delete executingThreads;
 		if (sleepingThreads->getSize() > 0)
-			cout << "oh no, sleeping\n";
+			cout << "oh no, sleeping tasks left\n";
 		delete sleepingThreads;
 		if (waitingThreads->getSize() > 0)
-			cout << "oh no, blocked\n";
+			cout << "oh no, blocked tasks left\n";
 		delete waitingThreads;
 	}
 
@@ -108,7 +109,8 @@ namespace Scheduler
 
 		// go through sleeping tasks and see if any are to be waked up
 		bool awakened = false;
-		ull currTime = Time::time();
+		ull currTime = Time::driver_time();
+
 		for (ull i = sleepingThreads->getSize() - 1; i != (ull)-1; i--)
 		{
 			Thread *thread = sleepingThreads->at(i);
@@ -216,6 +218,7 @@ namespace Scheduler
 	{
 		if (!enabled)
 			return;
+
 		//  cycle through all threads, or idle if there are none
 		Thread *current = getCurrentThread(); // get current thread
 		switch (reason)
@@ -253,13 +256,13 @@ namespace Scheduler
 				Thread::switchContext(current, target, regs);
 				if (regs.cs == GDT::USER_CS)
 				{
-					cout << "Entering user mode:\n"
-							"cs:rip = "
-						 << ostream::base::hex
-						 << regs.cs << ':' << regs.rip << "\nss:rsp = " << regs.ss << ':' << regs.rsp << '\n'
-						 << ostream::base::dec;
-					cout << "regs:\n";
-					DisplyMemoryBlock((byte *)&regs - 0x20, sizeof(regs) + 0x40);
+					ISR::std::cout << "Entering user mode:\n"
+									  "cs:rip = "
+								   << ostream::base::hex
+								   << regs.cs << ':' << regs.rip << "\nss:rsp = " << regs.ss << ':' << regs.rsp << '\n'
+								   << ostream::base::dec;
+					ISR::std::cout << "regs:\n";
+					isr_DisplyMemoryBlock((byte *)&regs - 0x20, sizeof(regs) + 0x40);
 				}
 				if (!current)
 					idling = false;
@@ -327,5 +330,5 @@ namespace Scheduler
 				return waitForThreadUnchecked(regs, thread);
 	}
 
-	inline Thread *getCurrentThread() { return currentThread == noExecutingThread ? nullptr : executingThreads->at(currentThread); }
+	Thread *getCurrentThread() { return currentThread == noExecutingThread ? nullptr : executingThreads->at(currentThread); }
 }

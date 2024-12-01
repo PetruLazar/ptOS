@@ -44,7 +44,7 @@ namespace Keyboard
 	bool checkCharQueue();
 	bool checkFullQueue();
 
-	KeyEvent getKeyEvent_direct();
-	KeyEvent getKeyPressedEvent_direct();
-	KeyEvent getKeyReleasedEvent_direct();
+	KeyEvent driver_getKeyEvent();
+	KeyEvent driver_getKeyPressedEvent();
+	KeyEvent driver_getKeyReleasedEvent();
 };

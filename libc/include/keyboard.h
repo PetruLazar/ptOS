@@ -1,5 +1,5 @@
 #pragma once
-#include "types.h"
+#include <types.h>
 
 namespace Keyboard
 {
@@ -271,8 +271,6 @@ namespace Keyboard
 			return 0;
 		}
 	};
-
-	KeyEvent getKeyEvent(bool blocking = true);
-	KeyEvent getKeyPressedEvent(bool blocking = true);
-	KeyEvent getKeyReleasedEvent(bool blocking = true);
 }
+
+#include <syscall.h>

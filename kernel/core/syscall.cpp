@@ -1,14 +1,10 @@
+#include "../utils/isriostream.h"
 #include "../cpu/idt.h"
-#include <iostream.h>
 #include "../utils/time.h"
 #include "scheduler.h"
 #include "mem.h"
-#include "../drivers/keyboard.h"
 
-#define OMIT_FUNCS
-#include <syscall.h>
-
-using namespace std;
+using namespace ISR::std;
 
 extern "C" qword getRSP();
 extern "C" qword getRBP();
@@ -50,7 +46,7 @@ void Syscall_Breakpoint(registers_t &regs)
 	enableInterrupts();
 	while (keepGoing)
 	{
-		switch (Keyboard::getKeyPressedEvent().getKeyCode())
+		switch (Keyboard::driver_getKeyPressedEvent().getKeyCode())
 		{
 		case Keyboard::KeyCode::C:
 			keepGoing = false;
@@ -71,27 +67,28 @@ void Syscall_Screen(registers_t &regs)
 	switch (regs.rbx)
 	{
 	case SYSCALL_SCREEN_CLEAR:
-		return Screen::clear();
+		return Screen::driver_clear();
 	case SYSCALL_SCREEN_PRINTSTR:
 	{
 		// get the physical address of the string from regs.rdi and the paging structures
 		qword physical;
+		bool user = (regs.cs & 0b11) == 0b11;
 		// check that the task has access to the entire string
-		if (!regs.cr3->getPhysicalAddress((qword)regs.rdi, physical, true))
+		if (!regs.cr3->getPhysicalAddress((qword)regs.rdi, physical, user))
 		{
 			// error
-			cout << "Syscall error: address not mapped\n";
+			cout << "Syscall error: address \"0x" << ::std::ostream::base::hex << regs.rdi << "\"not mapped\n";
 			regs.rdi = (ull)-1;
 			return Scheduler::preempt(regs, Scheduler::preemptReason::taskExited);
 		}
 		// for now, everything is identity mapped, no translation from physical to kernel virtual space
 		// PageMapLevel4::getCurrent().mapRegion(...);
-		return Screen::print((const char *)physical);
+		return Screen::driver_print((const char *)physical);
 	}
 	case SYSCALL_SCREEN_PRINTCH:
-		return Screen::print((char)regs.rdi);
+		return Screen::driver_print((char)regs.rdi);
 	case SYSCALL_SCREEN_PAINT:
-		return Screen::paint((byte)regs.rdi, (byte)regs.rsi, (Screen::Cell::Color)regs.rdx);
+		return Screen::driver_paint((byte)regs.rdi, (byte)regs.rsi, (Screen::Cell::Color)regs.rdx);
 	}
 }
 void Syscall_Keyboard(registers_t &regs)
@@ -100,7 +97,7 @@ void Syscall_Keyboard(registers_t &regs)
 	{
 	case SYSCALL_KEYBOARD_KEYEVENT:
 	{
-		Keyboard::KeyEvent event = Keyboard::getKeyEvent_direct();
+		Keyboard::KeyEvent event = Keyboard::driver_getKeyEvent();
 		if (event.keyCode == Keyboard::KeyCode::unknown && regs.rdi)
 		{
 			// no key in buffer, sleep
@@ -113,7 +110,7 @@ void Syscall_Keyboard(registers_t &regs)
 	break;
 	case SYSCALL_KEYBOARD_KEYPRESSEDEVENT:
 	{
-		Keyboard::KeyEvent event = Keyboard::getKeyPressedEvent_direct();
+		Keyboard::KeyEvent event = Keyboard::driver_getKeyPressedEvent();
 		if (event.keyCode == Keyboard::KeyCode::unknown && regs.rdi)
 		{
 			// no key in buffer, sleep
@@ -126,7 +123,7 @@ void Syscall_Keyboard(registers_t &regs)
 	break;
 	case SYSCALL_KEYBOARD_KEYRELEASEDEVENT:
 	{
-		Keyboard::KeyEvent event = Keyboard::getKeyReleasedEvent_direct();
+		Keyboard::KeyEvent event = Keyboard::driver_getKeyReleasedEvent();
 		if (event.keyCode == Keyboard::KeyCode::unknown && regs.rdi)
 		{
 			// no key in buffer, sleep
@@ -139,7 +136,7 @@ void Syscall_Keyboard(registers_t &regs)
 	break;
 	case SYSCALL_KEYBOARD_KEYEVENT_CHAR:
 	{
-		Keyboard::KeyEvent event = Keyboard::getKeyEvent_direct();
+		Keyboard::KeyEvent event = Keyboard::driver_getKeyEvent();
 		if (event.keyCode == Keyboard::KeyCode::unknown && regs.rdi)
 		{
 			regs.rip -= 2;
@@ -151,7 +148,7 @@ void Syscall_Keyboard(registers_t &regs)
 	break;
 	case SYSCALL_KEYBOARD_KEYPRESSEDEVENT_CHAR:
 	{
-		Keyboard::KeyEvent event = Keyboard::getKeyPressedEvent_direct();
+		Keyboard::KeyEvent event = Keyboard::driver_getKeyPressedEvent();
 		if (event.keyCode == Keyboard::KeyCode::unknown && regs.rdi)
 		{
 			regs.rip -= 2;
@@ -163,7 +160,7 @@ void Syscall_Keyboard(registers_t &regs)
 	break;
 	case SYSCALL_KEYBOARD_KEYRELEASEDEVENT_CHAR:
 	{
-		Keyboard::KeyEvent event = Keyboard::getKeyReleasedEvent_direct();
+		Keyboard::KeyEvent event = Keyboard::driver_getKeyReleasedEvent();
 		if (event.keyCode == Keyboard::KeyCode::unknown && regs.rdi)
 		{
 			regs.rip -= 2;
@@ -180,9 +177,9 @@ void Syscall_Cursor(registers_t &regs)
 	switch (regs.rbx)
 	{
 	case SYSCALL_CURSOR_ENABLE:
-		return Screen::Cursor::enable(regs.rdi, regs.rsi);
+		return Screen::Cursor::driver_enable(regs.rdi, regs.rsi);
 	case SYSCALL_CURSOR_DISABLE:
-		return Screen::Cursor::disable();
+		return Screen::Cursor::driver_disable();
 	}
 }
 void Syscall_Time(registers_t &regs)
@@ -190,10 +187,10 @@ void Syscall_Time(registers_t &regs)
 	switch (regs.rbx)
 	{
 	case SYSCALL_TIME_GET:
-		regs.rax = Time::time();
+		regs.rax = Time::driver_time();
 		return;
 	case SYSCALL_TIME_SLEEP:
-		return Scheduler::sleep(regs, regs.rdi + Time::time());
+		return Scheduler::sleep(regs, regs.rdi + Time::driver_time());
 	}
 }
 void Syscall_ProgEnv(registers_t &regs)

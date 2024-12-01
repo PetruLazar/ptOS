@@ -1,6 +1,6 @@
 #pragma once
-#include "types.h"
-#include "vector.h"
+#include <types.h>
+#include <vector.h>
 
 namespace Screen
 {
@@ -43,10 +43,7 @@ namespace Screen
 	void clear();
 	void scrollUp();
 	void scrollDown();
-	void print(char ch);
 	void print(char ch, short pos);
-	void paint(byte line, byte col, Cell::Color color);
-	void print(const char *msg);
 	void print(const char *msg, short pos);
 	inline void print(const char *msg, byte line, byte col) { return print(msg, line * screenWidth + col); }
 	inline void print(const char *msg, Vector2b pos) { return print(msg, Vec2ToLinear(pos)); }
@@ -63,9 +60,8 @@ namespace Screen
 		short get();
 		inline Vector2b getV2() { return LinToVec2(get()); }
 
-		void enable(byte start = 0xf, byte end = 0xd);
-		void disable();
-
 		bool isEnabled();
 	}
 }
+
+#include <syscall.h>

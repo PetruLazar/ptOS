@@ -2,7 +2,7 @@
 #include "../cpu/idt.h"
 #include "../core/scheduler.h"
 
-#include "iostream.h"
+#include <iostream.h>
 using namespace std;
 
 namespace Time
@@ -20,7 +20,7 @@ namespace Time
 		IDT::registerIrqHandler(0, IrqHandler);
 	}
 
-	qword time()
+	qword driver_time()
 	{
 		return irqCount * ms_per_timeint;
 	}

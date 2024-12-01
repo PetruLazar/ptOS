@@ -1,14 +1,12 @@
 #include "idt.h"
+#include "../utils/isriostream.h"
 #include "pic.h"
-#include "../drivers/screen.h"
-#include <string.h>
-#include <iostream.h>
 #include "../core/sys.h"
 #include "../core/paging.h"
 #include "../core/scheduler.h"
 #include "gdt.h"
 
-using namespace std;
+using namespace ISR::std;
 
 extern PageMapLevel4 *kernelPaging;
 
@@ -254,16 +252,16 @@ namespace IDT
 
 		word irqIsr = PIC::getISR();
 		if (irqIsr)
-			cout << "Could be an irq: " << ostream::base::bin << irqIsr << '\n';
+			cout << "Could be an irq: " << std::ostream::base::bin << irqIsr << '\n';
 		cout
-			<< "Exception: " << exceptionMessages[int_no] << " (0x" << ostream::base::hex << int_no
+			<< "Exception: " << exceptionMessages[int_no] << " (0x" << std::ostream::base::hex << int_no
 			<< ")\nInfo:\n   Return address: " << regs.cs << ':' << (void *)regs.rip
-			<< "\n   Return file offset: " << regs.rip - 0x8000 + 0x200 << ostream::base::dec
+			<< "\n   Return file offset: " << regs.rip - 0x8000 + 0x200 << std::ostream::base::dec
 			<< "\nReturn address memory contents:\n";
 		qword pysAddress;
 		if (regs.cr3->getPhysicalAddress(regs.rip, pysAddress))
 		{
-			DisplyMemoryBlock((byte *)pysAddress - 0x10, 0x20);
+			isr_DisplyMemoryBlock((byte *)pysAddress - 0x10, 0x20);
 		}
 		else
 			cout << "Invalid virtual address.\n";
@@ -277,7 +275,7 @@ namespace IDT
 		switch (int_no)
 		{
 		case 0xd: // general protection fault
-			cout << "Error code: " << err_no << " (0x" << ostream::base::hex << err_no << ")\n";
+			cout << "Error code: " << err_no << " (0x" << std::ostream::base::hex << err_no << ")\n";
 			break;
 		case 0xe: // page fault
 			cout << "Error code: " << err_no;

@@ -1,9 +1,8 @@
 #pragma once
-#include "types.h"
-#include "screen.h"
-#include "keyboard.h"
-#include "time.h"
-#include "mem.h"
+#include <types.h>
+#include <screen.h>
+#include <keyboard.h>
+#include <mem.h>
 
 #define SYSCALL_BREAKPOINT 0
 #define SYSCALL_SCREEN 1
@@ -42,8 +41,6 @@
 #define SYSCALL_TIME_GET 0
 #define SYSCALL_TIME_SLEEP 1
 
-#ifndef OMIT_FUNCS
-
 inline void syscall_breakpoint()
 {
 	asm("int $0x30"
@@ -80,7 +77,7 @@ namespace Screen
 
 	namespace Cursor
 	{
-		inline void enable(byte start, byte end)
+		inline void enable(byte start = 0xf, byte end = 0xd)
 		{
 			asm("int $0x30"
 				:
@@ -105,13 +102,17 @@ namespace Time
 			: "a"(SYSCALL_TIME), "b"(SYSCALL_TIME_GET));
 		return result;
 	}
+	inline void sleep(ull ms)
+	{
+		asm("int $0x30"
+			:
+			: "a"(SYSCALL_TIME), "b"(SYSCALL_TIME_SLEEP), "D"(ms));
+	}
 }
-
-#endif
 
 namespace Keyboard
 {
-	inline KeyEvent getKeyEvent(bool blocking)
+	inline KeyEvent getKeyEvent(bool blocking = true)
 	{
 		ushort result;
 		asm("int $0x30"
@@ -119,31 +120,21 @@ namespace Keyboard
 			: "a"(SYSCALL_KEYBOARD), "b"(SYSCALL_KEYBOARD_KEYEVENT), "D"(blocking));
 		return *(KeyEvent *)&result;
 	}
-	inline KeyEvent getKeyPressedEvent(bool blocking)
+	inline KeyEvent getKeyPressedEvent(bool blocking = true)
 	{
 		ushort result;
-		asm("int $0x30"
-			: "=a"(result)
-			: "a"(SYSCALL_KEYBOARD), "b"(SYSCALL_KEYBOARD_KEYPRESSEDEVENT), "D"(blocking));
+		asm volatile("int $0x30"
+					 : "=a"(result)
+					 : "a"(SYSCALL_KEYBOARD), "b"(SYSCALL_KEYBOARD_KEYPRESSEDEVENT), "D"(blocking));
 		return *(KeyEvent *)&result;
 	}
-	inline KeyEvent getKeyReleasedEvent(bool blocking)
+	inline KeyEvent getKeyReleasedEvent(bool blocking = true)
 	{
 		ushort result;
 		asm("int $0x30"
 			: "=a"(result)
 			: "a"(SYSCALL_KEYBOARD), "b"(SYSCALL_KEYBOARD_KEYRELEASEDEVENT), "D"(blocking));
 		return *(KeyEvent *)&result;
-	}
-}
-
-namespace Time
-{
-	inline void sleep(ull ms)
-	{
-		asm("int $0x30"
-			:
-			: "a"(SYSCALL_TIME), "b"(SYSCALL_TIME_SLEEP), "D"(ms));
 	}
 }
 

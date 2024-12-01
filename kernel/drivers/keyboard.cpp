@@ -1,11 +1,9 @@
 #include "keyboard.h"
-#include "screen.h"
 #include "../cpu/idt.h"
-#include <string.h>
-#include <iostream.h>
+#include "../utils/isriostream.h"
 #include "../core/sys.h"
 
-using namespace std;
+using namespace ISR::std;
 
 namespace Keyboard
 {
@@ -374,6 +372,13 @@ namespace Keyboard
 					byte releasedFlag = scanCode & 0x80;
 					scanCode &= 0x7f;
 					KeyCode key = scancodeToKeycodeMap[extendedScancode][scanCode];
+					if (key == KeyCode::unknown && !releasedFlag)
+					{
+						cout << "Unknown keycode: 0x";
+						if (extendedScancode)
+							cout << "e0";
+						cout << std::ostream::base::hex << scanCode << std::ostream::base::dec << '\n';
+					}
 					key = KeyCode((byte)key | releasedFlag);
 					KeyEvent event = KeyEvent(key, currModKeys);
 					insertEvent(event);
@@ -429,13 +434,13 @@ namespace Keyboard
 	inline bool checkCharQueue() { return queueStart != queueEnd; }
 	inline bool checkFullQueue() { return byte(queueEnd + 1) == queueStart; }
 
-	KeyEvent getKeyEvent_direct()
+	KeyEvent driver_getKeyEvent()
 	{
 		if (checkCharQueue())
 			return eventQueue[queueStart++];
 		return KeyEvent();
 	}
-	KeyEvent getKeyPressedEvent_direct()
+	KeyEvent driver_getKeyPressedEvent()
 	{
 		while (checkCharQueue())
 		{
@@ -445,7 +450,7 @@ namespace Keyboard
 		}
 		return KeyEvent();
 	}
-	KeyEvent getKeyReleasedEvent_direct()
+	KeyEvent driver_getKeyReleasedEvent()
 	{
 		while (checkCharQueue())
 		{

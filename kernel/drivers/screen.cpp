@@ -22,13 +22,13 @@ namespace Screen
 		bufferSize = screenSize * 10; // 10 screens
 		buffer = new Cell[bufferSize];
 
-		clear();
+		driver_clear();
 	}
 	void Cleanup()
 	{
 		delete[] buffer;
 	}
-	void clear()
+	void driver_clear()
 	{
 		for (word i = 0; i < bufferSize; i++)
 			buffer[i] = Cell();
@@ -37,7 +37,7 @@ namespace Screen
 		applyBuffer();
 		Cursor::set(0);
 		if (!Cursor::isEnabled())
-			Cursor::enable();
+			Cursor::driver_enable();
 	}
 	void applyBuffer()
 	{
@@ -79,13 +79,13 @@ namespace Screen
 		if (screenCursor >= screenSize)
 		{
 			if (Cursor::isEnabled())
-				Cursor::disable();
+				Cursor::driver_disable();
 		}
 		else if (screenCursor >= 0)
 		{
 			Cursor::set(screenCursor);
 			if (!Cursor::isEnabled())
-				Cursor::enable();
+				Cursor::driver_enable();
 		}
 		applyBuffer();
 	}
@@ -98,17 +98,17 @@ namespace Screen
 		if (screenCursor < 0)
 		{
 			if (Cursor::isEnabled())
-				Cursor::disable();
+				Cursor::driver_disable();
 		}
 		else if (screenCursor < screenSize)
 		{
 			Cursor::set(screenCursor);
 			if (!Cursor::isEnabled())
-				Cursor::enable();
+				Cursor::driver_enable();
 		}
 		applyBuffer();
 	}
-	void print(const char *msg)
+	void driver_print(const char *msg)
 	{
 		while (screenCursor < 0)
 		{
@@ -174,10 +174,10 @@ namespace Screen
 		}
 		Cursor::set(screenCursor);
 		if (!Cursor::isEnabled())
-			Cursor::enable();
+			Cursor::driver_enable();
 		applyBuffer();
 	}
-	void print(char ch)
+	void driver_print(char ch)
 	{
 		while (screenCursor < 0)
 		{
@@ -241,7 +241,7 @@ namespace Screen
 		}
 		Cursor::set(screenCursor);
 		if (!Cursor::isEnabled())
-			Cursor::enable();
+			Cursor::driver_enable();
 		applyBuffer();
 	}
 	void print(char ch, short pos)
@@ -255,7 +255,7 @@ namespace Screen
 		buffer[pos].character = ch;
 		applyBuffer();
 	}
-	void paint(byte line, byte col, Cell::Color color)
+	void driver_paint(byte line, byte col, Cell::Color color)
 	{
 		short linear = line * screenWidth + col;
 		byte cclr = video_memory[linear].color;
@@ -355,7 +355,7 @@ namespace Screen
 		}
 		short get() { return screenCursor; }
 
-		void enable(byte start, byte end)
+		void driver_enable(byte start, byte end)
 		{
 			outb(0x3d4, 0x0a);
 			outb(0x3d5, inb(0x3d5) & 0xc0 | start);
@@ -363,7 +363,7 @@ namespace Screen
 			outb(0x3d5, inb(0x3d5) & 0xe0 | end);
 			enabled = true;
 		}
-		void disable()
+		void driver_disable()
 		{
 			outb(0x3d4, 0x0a);
 			outb(0x3d5, 0x20);
