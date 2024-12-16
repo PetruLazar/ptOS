@@ -255,30 +255,33 @@ namespace IDT
 			cout << "Could be an irq: " << std::ostream::base::bin << irqIsr << '\n';
 		cout
 			<< "Exception: " << exceptionMessages[int_no] << " (0x" << std::ostream::base::hex << int_no
-			<< ")\nInfo:\n   Return address: " << regs.cs << ':' << (void *)regs.rip
-			<< "\n   Return file offset: " << regs.rip - 0x8000 + 0x200 << std::ostream::base::dec
+			<< " - err " << err_no
+			<< ")\nReturn address: " << regs.cs << ':' << (void *)regs.rip
+			<< "\nRegisters:"
+			<< "\nrax=" << (void *)regs.rax << " rbx=" << (void *)regs.rbx << " rcx=" << (void *)regs.rcx
+			<< "\nrdx=" << (void *)regs.rdx << " rdi=" << (void *)regs.rdi << " rsi=" << (void *)regs.rsi
+			<< "\nrsp=" << (void *)regs.rsp << " rbp=" << (void *)regs.rbp
 			<< "\nReturn address memory contents:\n";
-		qword pysAddress;
-		if (regs.cr3->getPhysicalAddress(regs.rip, pysAddress))
+		qword physAddress;
+		if (regs.cr3->getPhysicalAddress(regs.rip, physAddress))
 		{
-			isr_DisplyMemoryBlock((byte *)pysAddress - 0x10, 0x20);
+			cout << "\tTemporarily disabled for security and stability purposes.\n";
+			// isr_DisplyMemoryBlock((byte *)physAddress - 0x10, 0x20);
 		}
 		else
-			cout << "Invalid virtual address.\n";
+			cout << "\tInvalid virtual address.\n";
 
 		cout << "Call stack:\n";
-		for (qword *rbp = (qword *)regs.rbp; rbp[0]; rbp = (qword *)rbp[0])
-		{
-			cout << "\t0x" << (void *)rbp[1] << " (file offset: 0x" << (void *)(rbp[1] - 0x8000 + 0x200) << ")\n";
-		}
+		cout << "\tTemporarily disabled for security and stability purposes.\n";
+		// for (qword *rbp = (qword *)regs.rbp; rbp[0]; rbp = (qword *)rbp[0])
+		// {
+		// 	cout << "\t0x" << (void *)rbp[1] << " (file offset: 0x" << (void *)(rbp[1] - 0x8000 + 0x200) << ")\n";
+		// }
 
+		// exception specific information
 		switch (int_no)
 		{
-		case 0xd: // general protection fault
-			cout << "Error code: " << err_no << " (0x" << std::ostream::base::hex << err_no << ")\n";
-			break;
 		case 0xe: // page fault
-			cout << "Error code: " << err_no;
 			cout << "\nAccessing address: " << (void *)getCR2() << '\n';
 			break;
 		}
