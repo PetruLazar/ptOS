@@ -1,8 +1,7 @@
 [bits 64]
 [default rel]
-[extern exceptionHandler]
-[extern irqHandler]
-[extern os_serviceHandler]
+
+[section .data]
 
 interruptNr: db 0
 errCode: dq 0
@@ -10,6 +9,12 @@ errCode: dq 0
 global kernelPaging
 kernelPaging:
 dq 0
+
+[section .text]
+
+[extern exceptionHandler]
+[extern irqHandler]
+[extern os_serviceHandler]
 
 isr_common:
 call pushCpuState
