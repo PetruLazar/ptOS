@@ -217,7 +217,7 @@ void inline isr_displayMemoryRow(byte *block)
 	ISR::std::cout << (void *)block << ':' << std::ostream::base::hex;
 	for (int i = 0; i < 16; i++)
 	{
-		std::cout << (i == 8 ? "  " : " ");
+		ISR::std::cout << (i == 8 ? "  " : " ");
 		isr_displayMemoryByte(block + i);
 	}
 	ISR::std::cout << '\n'
