@@ -19,6 +19,8 @@ namespace System
 	void blueScreen()
 	{
 		disableInterrupts();
+		Screen::paint(Vector2b(0, 0), Vector2b(Screen::screenWidth, Screen::screenHeight), Screen::Cell::Color::blue);
+
 		while (true)
 			;
 	}
