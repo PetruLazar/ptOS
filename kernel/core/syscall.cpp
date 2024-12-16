@@ -77,7 +77,7 @@ void Syscall_Screen(registers_t &regs)
 		if (!regs.cr3->getPhysicalAddress((qword)regs.rdi, physical, user))
 		{
 			// error
-			cout << "Syscall error: address \"0x" << ::std::ostream::base::hex << regs.rdi << "\"not mapped\n";
+			cout << "Syscall error: address \"0x" << ::std::ostream::base::hex << regs.rdi << "\" not mapped\n";
 			regs.rdi = (ull)-1;
 			return Scheduler::preempt(regs, Scheduler::preemptReason::taskExited);
 		}
@@ -198,7 +198,6 @@ void Syscall_ProgEnv(registers_t &regs)
 	switch (regs.rbx)
 	{
 	case SYSCALL_PROGENV_EXIT:
-		cout << "A task is exiting with code " << (int)regs.rdi << '\n';
 		return Scheduler::preempt(regs, Scheduler::preemptReason::taskExited);
 	case SYSCALL_PROGENV_WAITFORTASK:
 		return Scheduler::waitForThread(regs, ((Task *)regs.rdi)->getMainThread());
