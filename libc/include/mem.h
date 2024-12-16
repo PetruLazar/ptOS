@@ -1,6 +1,6 @@
 #pragma once
-#include "types.h"
-#include "math.h"
+#include <types.h>
+#include <math.h>
 
 namespace Memory
 {

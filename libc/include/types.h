@@ -10,7 +10,9 @@ typedef unsigned short word, ushort, uint16_t;
 typedef unsigned int dword, uint, uint32_t;
 typedef unsigned long long qword, ullong, ull, uint64_t;
 
+#ifndef SKIP_SIZE_T
 typedef long unsigned size_t;
+#endif
 
 template <typename T>
 class UnalignedField

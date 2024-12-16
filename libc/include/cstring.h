@@ -1,7 +1,5 @@
 #pragma once
-#include "types.h"
-// #include "vector.h"
-// #include "iostream.h"
+#include <types.h>
 
 inline char digit(int v) { return v < 10 ? v + '0' : v - 10 + 'A'; }
 inline ull sign(char *&str, llong value)

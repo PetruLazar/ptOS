@@ -1,11 +1,5 @@
 #pragma once
-#include "types.h"
-// #include "../core/crl.h"
-//  #include "../core/exception.h"
-//  #include "../core/mem.h"
-
-// #include "iostream.h"
-// #include "../core/sys.h"
+#include <types.h>
 
 template <class T>
 class Vector3

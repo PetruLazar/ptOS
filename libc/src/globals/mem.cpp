@@ -1,6 +1,5 @@
 #include <mem.h>
 #include <iostream.h>
-#include <syscall.h>
 
 using namespace std;
 
