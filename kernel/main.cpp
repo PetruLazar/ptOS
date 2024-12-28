@@ -57,6 +57,7 @@ extern void main(KernelInfo &info)
 
 	IDT::Initialize((byte *)IDT_ADDRESS);
 
+	Scheduler::Initialize();
 	Time::Initialize();
 	Keyboard::Initialize();
 
@@ -66,23 +67,16 @@ extern void main(KernelInfo &info)
 	Filesystem::Initialize();
 	PCI::InitializeDevices();
 
-	// get terminal task ready and initialize scheduler
-	Task *terminalTask = new Task(true);
-	Thread *terminalThread = new Thread(terminalTask, registers_t());
-	Scheduler::Initialize(terminalTask);
-
 	enableInterrupts();
 
 	terminal();
 
 	disableInterrupts();
 
-	Scheduler::CleanUp();
-	delete terminalThread;
-	// delete terminalTask;
 	Filesystem::CleanUp();
 	Disk::CleanUp();
 	Keyboard::CleanUp();
+	Scheduler::CleanUp();
 	Screen::Cleanup();
 
 	ull currAllocCount = Memory::Heap::getAllocationCountFromSelected();
@@ -462,6 +456,8 @@ void terminal()
 				}
 				case 1:
 				{
+					// int *ptr = nullptr;
+					// *ptr = 5;
 					uint count;
 					cout << "How many of each? ";
 					cin >> count;
@@ -519,7 +515,8 @@ void terminal()
 						}
 					}
 					while (tasks.getSize())
-						Scheduler::waitForThread(tasks.pop_back());
+						Scheduler::waitForThread(tasks.pop_back()->getMainThread());
+
 					break;
 				}
 				case 3:
