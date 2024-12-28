@@ -13,7 +13,7 @@ rem link kernel
 if %kernel%==0 (linkall obj/kernel bin/kernel.bin "--oformat binary -Ttext 0xFFFFFFFF80010000 -e 0xFFFFFFFF80010000 -T linker.ld -Map bin/ptos.map" src/libc/obj/globals || (set /A kernel = 2))
 
 rem install kernel in the filesystem
-if %kernel%==0 (bin-install fs bootable\imageGPT_testing.vhd /ptos/sys/kernel.bin bin/kernel.bin || (set /A kernel = 3))
+if %kernel%==0 (bin-install fs bootable\imageGPT.vhd /ptos/sys/kernel.bin bin/kernel.bin || (set /A kernel = 3))
 
 rem display errors
 if %kernel%==1 (echo "Failed to compile or assemble the kernel!")
