@@ -3,18 +3,86 @@
 
 [section .data]
 
-interruptNr: db 0
-errCode: dq 0
-
+; symbols for .data
+global interruptNr
+global errCode
 global kernelPaging
-kernelPaging:
-dq 0
+
+errCode: dq 0
+kernelPaging: dq 0
+interruptNr: db 0
 
 [section .text]
 
+; externals for .text
 [extern exceptionHandler]
 [extern irqHandler]
 [extern os_serviceHandler]
+
+; symbols for .text
+global isr_0
+global isr_1
+global isr_2
+global isr_3
+global isr_4
+global isr_5
+global isr_6
+global isr_7
+global isr_8
+global isr_9
+global isr_a
+global isr_b
+global isr_c
+global isr_d
+global isr_e
+global isr_f
+global isr_10
+global isr_11
+global isr_12
+global isr_13
+global isr_14
+global isr_15
+global isr_16
+global isr_17
+global isr_18
+global isr_19
+global isr_1a
+global isr_1b
+global isr_1c
+global isr_1d
+global isr_1e
+global isr_1f
+
+global isr_30
+
+global irq_0
+global irq_1
+global irq_2
+global irq_3
+global irq_4
+global irq_5
+global irq_6
+global irq_7
+global irq_8
+global irq_9
+global irq_10
+global irq_11
+global irq_12
+global irq_13
+global irq_14
+global irq_15
+
+global getRSP
+global getRBP
+global loadidt
+global disableInterrupts
+global enableInterrupts
+global getCR2
+global pushCpuState
+global popCpuState
+global isr_common
+global irq_common
+global popCpuState
 
 isr_common:
 call pushCpuState
@@ -208,11 +276,9 @@ cli
 mov byte [interruptNr], 0x1f
 jmp isr_common
 
-global getRSP
 getRSP:
 lea rax, [rsp+8]
 ret
-global getRBP
 getRBP:
 lea rax, [rbp]
 ret
@@ -307,57 +373,6 @@ cli
 mov byte [interruptNr], 15
 jmp irq_common
 
-global isr_0
-global isr_1
-global isr_2
-global isr_3
-global isr_4
-global isr_5
-global isr_6
-global isr_7
-global isr_8
-global isr_9
-global isr_a
-global isr_b
-global isr_c
-global isr_d
-global isr_e
-global isr_f
-global isr_10
-global isr_11
-global isr_12
-global isr_13
-global isr_14
-global isr_15
-global isr_16
-global isr_17
-global isr_18
-global isr_19
-global isr_1a
-global isr_1b
-global isr_1c
-global isr_1d
-global isr_1e
-global isr_1f
-
-global isr_30
-
-global irq_0
-global irq_1
-global irq_2
-global irq_3
-global irq_4
-global irq_5
-global irq_6
-global irq_7
-global irq_8
-global irq_9
-global irq_10
-global irq_11
-global irq_12
-global irq_13
-global irq_14
-global irq_15
 
 disableInterrupts:
 cli
@@ -372,11 +387,6 @@ loadidt:
 lidt [rdi]
 ret
 
-global loadidt
-global disableInterrupts
-global enableInterrupts
-
-global getCR2
 getCR2:
 mov rax, cr2
 ret
