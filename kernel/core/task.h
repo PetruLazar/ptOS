@@ -7,15 +7,15 @@ class Thread;
 
 class Task
 {
-	byte *pageSpace, *fileContent, *heap;
+	byte *pageSpace, *programImage, *heap;
 	std::vector<byte *> programResources;
 	Thread *mainThread = nullptr;
 	int threadCount = 0;
 	bool m_isKernelTask, m_isDead = false;
 
 public:
-	inline Task(bool isKernelTask = false, byte *pageSpace = nullptr, byte *fileContent = nullptr, byte *heap = nullptr)
-		: pageSpace(pageSpace), fileContent(fileContent), heap(heap), m_isKernelTask(isKernelTask)
+	inline Task(bool isKernelTask = false, byte *pageSpace = nullptr, byte *programImage = nullptr, byte *heap = nullptr)
+		: pageSpace(pageSpace), programImage(programImage), heap(heap), m_isKernelTask(isKernelTask)
 	{
 	}
 	inline ~Task()
@@ -24,8 +24,8 @@ public:
 			delete[] ptr;
 		if (pageSpace)
 			delete[] pageSpace;
-		if (fileContent)
-			delete[] fileContent;
+		if (programImage)
+			delete[] programImage;
 		if (heap)
 			delete[] heap;
 	}

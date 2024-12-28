@@ -15,7 +15,7 @@ namespace Scheduler
 	void disable();
 	bool isEnabled();
 
-	void Initialize(Task *terminalTask);
+	void Initialize();
 	void CleanUp();
 
 	void add(Thread *thread);
@@ -26,11 +26,10 @@ namespace Scheduler
 	// void finish(registers_t &regs);
 
 	void tick(registers_t &regs);
-	void irqReceived(int irq_no);
 
 	void sleep(registers_t &regs, ull untilTime);
-	void waitForIrq(registers_t &regs, IDT::Irq_no irq_no);
-	void waitForThread(registers_t &regs, Thread *thread);
+	bool waitForThread(registers_t &regs, Thread *thread);
+	void unblockThread(Thread *blockingThread, Thread *blockedThread);
 
 	Thread *getCurrentThread();
 }

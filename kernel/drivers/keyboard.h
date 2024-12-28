@@ -1,6 +1,7 @@
 #pragma once
 #include <keyboard.h>
 #include "../cpu/ports.h"
+#include "../cpu/idt.h"
 
 namespace Keyboard
 {
@@ -44,7 +45,9 @@ namespace Keyboard
 	bool checkCharQueue();
 	bool checkFullQueue();
 
-	KeyEvent driver_getKeyEvent();
-	KeyEvent driver_getKeyPressedEvent();
-	KeyEvent driver_getKeyReleasedEvent();
+	void driver_getKeyEvent(registers_t &regs, bool expectingCharOnly);
+	void driver_getKeyPressedEvent(registers_t &regs, bool expectingCharOnly);
+	void driver_getKeyReleasedEvent(registers_t &regs, bool expectingCharOnly);
+
+	void Syscall(registers_t &);
 };

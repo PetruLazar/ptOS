@@ -11,7 +11,6 @@ extern "C" qword getRBP();
 
 void Syscall_Breakpoint(registers_t &);
 void Syscall_Screen(registers_t &);
-void Syscall_Keyboard(registers_t &);
 void Syscall_Filesystem(registers_t &);
 void Syscall_Cursor(registers_t &);
 void Syscall_Time(registers_t &);
@@ -26,7 +25,7 @@ extern "C" void os_serviceHandler(registers_t &regs)
 	case SYSCALL_SCREEN:
 		return Syscall_Screen(regs);
 	case SYSCALL_KEYBOARD:
-		return Syscall_Keyboard(regs);
+		return Keyboard::Syscall(regs);
 	case SYSCALL_FILESYSTEM:
 		break;
 	case SYSCALL_CURSOR:
@@ -46,7 +45,7 @@ void Syscall_Breakpoint(registers_t &regs)
 	enableInterrupts();
 	while (keepGoing)
 	{
-		switch (Keyboard::driver_getKeyPressedEvent().getKeyCode())
+		switch (/* Keyboard::driver_getKeyPressedEvent().getKeyCode() */ Keyboard::KeyCode::C)
 		{
 		case Keyboard::KeyCode::C:
 			keepGoing = false;
@@ -55,7 +54,7 @@ void Syscall_Breakpoint(registers_t &regs)
 			constexpr int bytesPerRow = 16;
 			// for (byte *i = (byte *)regs.rsp; i <= (byte *)regs.rbp; i += bytesPerRow)
 			for (byte *i = (byte *)currRsp; i <= (byte *)regs.rbp; i += bytesPerRow)
-				displayMemoryRow(i);
+				isr_displayMemoryRow(i);
 			cout << "RBP: " << (void *)regs.rbp << "   RSP: " << (void *)regs.rsp << "   Current RSP: " << (void *)currRsp << '\n';
 			break;
 		}
@@ -91,87 +90,6 @@ void Syscall_Screen(registers_t &regs)
 		return Screen::driver_paint((byte)regs.rdi, (byte)regs.rsi, (Screen::Cell::Color)regs.rdx);
 	}
 }
-void Syscall_Keyboard(registers_t &regs)
-{
-	switch (regs.rbx)
-	{
-	case SYSCALL_KEYBOARD_KEYEVENT:
-	{
-		Keyboard::KeyEvent event = Keyboard::driver_getKeyEvent();
-		if (event.keyCode == Keyboard::KeyCode::unknown && regs.rdi)
-		{
-			// no key in buffer, sleep
-			regs.rip -= 2; // return to the interrupt instruction after sleep instead of after the instruction
-			Scheduler::waitForIrq(regs, IDT::Irq_no::ps2_keyboard);
-		}
-		else
-			regs.rax = *(ushort *)&event;
-	}
-	break;
-	case SYSCALL_KEYBOARD_KEYPRESSEDEVENT:
-	{
-		Keyboard::KeyEvent event = Keyboard::driver_getKeyPressedEvent();
-		if (event.keyCode == Keyboard::KeyCode::unknown && regs.rdi)
-		{
-			// no key in buffer, sleep
-			regs.rip -= 2; // return to the interrupt instruction after sleep instead of after the instruction
-			Scheduler::waitForIrq(regs, IDT::Irq_no::ps2_keyboard);
-		}
-		else
-			regs.rax = *(ushort *)&event;
-	}
-	break;
-	case SYSCALL_KEYBOARD_KEYRELEASEDEVENT:
-	{
-		Keyboard::KeyEvent event = Keyboard::driver_getKeyReleasedEvent();
-		if (event.keyCode == Keyboard::KeyCode::unknown && regs.rdi)
-		{
-			// no key in buffer, sleep
-			regs.rip -= 2; // return to the interrupt instruction after sleep instead of after the instruction
-			Scheduler::waitForIrq(regs, IDT::Irq_no::ps2_keyboard);
-		}
-		else
-			regs.rax = *(ushort *)&event;
-	}
-	break;
-	case SYSCALL_KEYBOARD_KEYEVENT_CHAR:
-	{
-		Keyboard::KeyEvent event = Keyboard::driver_getKeyEvent();
-		if (event.keyCode == Keyboard::KeyCode::unknown && regs.rdi)
-		{
-			regs.rip -= 2;
-			Scheduler::waitForIrq(regs, IDT::Irq_no::ps2_keyboard);
-		}
-		else
-			regs.rax = event.getChar();
-	}
-	break;
-	case SYSCALL_KEYBOARD_KEYPRESSEDEVENT_CHAR:
-	{
-		Keyboard::KeyEvent event = Keyboard::driver_getKeyPressedEvent();
-		if (event.keyCode == Keyboard::KeyCode::unknown && regs.rdi)
-		{
-			regs.rip -= 2;
-			Scheduler::waitForIrq(regs, IDT::Irq_no::ps2_keyboard);
-		}
-		else
-			regs.rax = event.getChar();
-	}
-	break;
-	case SYSCALL_KEYBOARD_KEYRELEASEDEVENT_CHAR:
-	{
-		Keyboard::KeyEvent event = Keyboard::driver_getKeyReleasedEvent();
-		if (event.keyCode == Keyboard::KeyCode::unknown && regs.rdi)
-		{
-			regs.rip -= 2;
-			Scheduler::waitForIrq(regs, IDT::Irq_no::ps2_keyboard);
-		}
-		else
-			regs.rax = event.getChar();
-	}
-	break;
-	}
-}
 void Syscall_Cursor(registers_t &regs)
 {
 	switch (regs.rbx)
@@ -200,8 +118,14 @@ void Syscall_ProgEnv(registers_t &regs)
 	case SYSCALL_PROGENV_EXIT:
 		return Scheduler::preempt(regs, Scheduler::preemptReason::taskExited);
 	case SYSCALL_PROGENV_WAITFORTASK:
-		return Scheduler::waitForThread(regs, ((Task *)regs.rdi)->getMainThread());
+		// if waitForThread fails, there is no way the return value
+		// can be distinguished from the return value of the blocking thread
+		return (void)Scheduler::waitForThread(regs, ((Task *)regs.rdi)->getMainThread());
 	case SYSCALL_PROGENV_WAITFORTHREAD:
-		return Scheduler::waitForThread(regs, (Thread *)regs.rdi);
+		// if waitForThread fails, there is no way the return value
+		// can be distinguished from the return value of the blocking thread
+		return (void)Scheduler::waitForThread(regs, (Thread *)regs.rdi);
+	case SYSCALL_PROGENV_CREATETHREAD:
+		return;
 	}
 }

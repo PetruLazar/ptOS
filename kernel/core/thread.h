@@ -3,6 +3,14 @@
 class Task;
 #include "task.h"
 
+union ThreadActivationCondition
+{
+	// maybe support for sleeping with a timeout?
+	// so that this union can be removed
+	Thread *blockedBy;
+	ull sleepingUntil;
+};
+
 class Thread
 {
 	Task *parentTask;
@@ -10,16 +18,9 @@ class Thread
 
 	registers_t regs;
 
+	ThreadActivationCondition activationCondition;
+
 public:
-	class ThreadInfo
-	{
-	public:
-		ull data;
-
-		inline ThreadInfo() {}
-		inline ThreadInfo(ull data) : data(data) {}
-	} threadInfo;
-
 	Thread(Task *parentTask, const registers_t &regs, byte *stack = nullptr);
 	~Thread();
 
@@ -34,7 +35,13 @@ public:
 		regs.rflags |= 1 << 9;
 	}
 
-	Task *getParentTask() { return parentTask; }
+	inline Task *getParentTask() { return parentTask; }
 	inline registers_t &getRegs() { return regs; }
 	bool IsMainThread();
+
+	inline void block(Thread *blocker) { activationCondition.blockedBy = blocker; }
+	inline Thread *getBlocker() { return activationCondition.blockedBy; }
+
+	inline void sleepUntil(ull targetTime) { activationCondition.sleepingUntil = targetTime; }
+	inline bool finishedSleeping(ull currentTime) { return activationCondition.sleepingUntil <= currentTime; }
 };

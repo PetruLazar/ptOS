@@ -11,8 +11,18 @@ namespace System
 	{
 		if (echo)
 			cout << "Press any key to continue...";
-		while (Keyboard::driver_getKeyPressedEvent().getKeyCode() == Keyboard::KeyCode::unknown)
-			;
+
+		registers_t regs;
+		regs.rdi = false; // use non-blocking calls, as this will be used in kernel code, with shcheduler disabled
+		Keyboard::KeyEvent *event = (Keyboard::KeyEvent *)&regs.rax;
+		while (true)
+		{
+			Keyboard::driver_getKeyPressedEvent(regs, false);
+
+			if (event->getKeyCode() != Keyboard::KeyCode::unknown)
+				break;
+		}
+
 		if (echo)
 			cout << '\n';
 	}

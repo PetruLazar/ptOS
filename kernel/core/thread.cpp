@@ -8,8 +8,6 @@ Thread::Thread(Task *parentTask, const registers_t &regs, byte *stack)
 		parentTask->mainThread = this;
 
 	parentTask->threadCount++;
-
-	// std::cout << "Created thread at " << (void *)this << '\n';
 }
 Thread::~Thread()
 {

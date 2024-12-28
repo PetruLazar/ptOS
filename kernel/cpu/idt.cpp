@@ -307,8 +307,6 @@ namespace IDT
 		if (irqHandlers[irq_no])
 			irqHandlers[irq_no](regs);
 
-		Scheduler::irqReceived(irq_no);
-
 		PIC::EndOfInterrupt(irq_no);
 	}
 

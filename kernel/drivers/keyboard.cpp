@@ -2,6 +2,7 @@
 #include "../cpu/idt.h"
 #include "../utils/isriostream.h"
 #include "../core/sys.h"
+#include "../core/scheduler.h"
 
 using namespace ISR::std;
 
@@ -11,16 +12,40 @@ namespace Keyboard
 						 statusPort = 0x64,
 						 cmdPort = 0x64;
 
+	class KeyboardDriverRequest
+	{
+	public:
+		Thread *blockedThread;
+		enum EventType : byte
+		{
+			any,
+			pressed,
+			released
+		} eventRequested;
+		enum ValueType : byte
+		{
+			event,
+			character
+		} valueRequested;
+
+		KeyboardDriverRequest(Thread *blockedThread, EventType eventRequested, ValueType valueRequested)
+			: blockedThread(blockedThread), eventRequested(eventRequested), valueRequested(valueRequested) {}
+		KeyboardDriverRequest() {}
+	};
+
 	bool expectingCommandResult = false,
 		 sendDataNext;
+	byte queueStart = 0, queueEnd = 0;
 	word lastCommand;
 	KeyEvent *eventQueue;
-	byte queueStart = 0, queueEnd = 0;
+	Thread *keyboardDriverThread;
+	std::vector<KeyboardDriverRequest> *requests;
 
 	void EventListener(registers_t &);
 
 	void Initialize()
 	{
+		// initialize event queue
 		eventQueue = new KeyEvent[256];
 		if (eventQueue == nullptr)
 		{
@@ -28,10 +53,18 @@ namespace Keyboard
 			System::blueScreen();
 		}
 		IDT::registerIrqHandler(1, EventListener);
+
+		// initialize keyboard driver thread
+		// for now, use main kernel thread as keyboard thread
+		keyboardDriverThread = Scheduler::getCurrentThread();
+
+		// initialize request queue for threads that will be blocking on this driver
+		requests = new std::vector<KeyboardDriverRequest>(4);
 	}
 	void CleanUp()
 	{
 		delete[] eventQueue;
+		delete requests;
 	}
 
 	void waitForWrite()
@@ -44,7 +77,32 @@ namespace Keyboard
 	}
 
 	ModKeys currModKeys;
-	void insertEvent(const KeyEvent &event) { eventQueue[queueEnd++] = event; }
+	void insertEvent(const KeyEvent &event)
+	{
+		eventQueue[queueEnd++] = event;
+
+		// check if any thread waiting for an event needs to be unblocked
+		if (requests->getSize() == 0)
+			return; // no threads waiting for a KeyEvent
+
+		KeyboardDriverRequest &req = requests->at(0);
+		KeyEvent *returnValue = (KeyEvent *)&req.blockedThread->getRegs().rax;
+		*returnValue = eventQueue[queueStart++]; // threads waiting, immediately dequeue event
+		if (req.eventRequested == KeyboardDriverRequest::any ||
+			(req.eventRequested == KeyboardDriverRequest::pressed) == returnValue->isPressed())
+		{
+			// unblock thread
+			// update return value if needed
+			if (req.valueRequested == KeyboardDriverRequest::character)
+				req.blockedThread->getRegs().rax = returnValue->getChar();
+
+			// call scheduler
+			Scheduler::unblockThread(keyboardDriverThread, req.blockedThread);
+
+			// dequeue request
+			requests->erase(0);
+		}
+	}
 	KeyCode scancodeToKeycodeMap[2][0x80]{
 		{
 			/*0x00*/ KeyCode::unknown, // '?',
@@ -434,31 +492,122 @@ namespace Keyboard
 	inline bool checkCharQueue() { return queueStart != queueEnd; }
 	inline bool checkFullQueue() { return byte(queueEnd + 1) == queueStart; }
 
-	KeyEvent driver_getKeyEvent()
+	void driver_getKeyEvent(registers_t &regs, bool expectingCharOnly)
 	{
+		KeyEvent *returnValue = (KeyEvent *)&regs.rax;
+		bool blocking = regs.rdi;
 		if (checkCharQueue())
-			return eventQueue[queueStart++];
-		return KeyEvent();
+		{
+			// key event queue not empty, return immediately
+			*returnValue = eventQueue[queueStart++];
+			if (expectingCharOnly)
+				regs.rax = returnValue->getChar();
+			return;
+		}
+
+		// key event queue is empty
+		if (blocking)
+		{
+			// block on the keyboard driver thread
+			requests->push_back(KeyboardDriverRequest(Scheduler::getCurrentThread(), KeyboardDriverRequest::any, expectingCharOnly ? KeyboardDriverRequest::character : KeyboardDriverRequest::event));
+			Scheduler::waitForThread(regs, keyboardDriverThread);
+		}
+		else
+		{
+			// return default value, do NOT block
+			*returnValue = KeyEvent();
+			if (expectingCharOnly)
+				regs.rax = returnValue->getChar();
+		}
 	}
-	KeyEvent driver_getKeyPressedEvent()
+	void driver_getKeyPressedEvent(registers_t &regs, bool expectingCharOnly)
 	{
+		KeyEvent *returnValue = (KeyEvent *)&regs.rax;
+		bool blocking = regs.rdi;
 		while (checkCharQueue())
 		{
 			KeyEvent &event = eventQueue[queueStart++];
-			if (event.isPressed())
-				return event;
+			if (event.isPressed()) // skip any event that is not a KeyPressedEvent
+			{
+				// key queue contains a KeyPressedEvent, return immediately
+				*returnValue = event;
+				if (expectingCharOnly)
+					regs.rax = returnValue->getChar();
+				return;
+			}
 		}
-		return KeyEvent();
+
+		// key event queue does not contain the desired event
+		if (blocking)
+		{
+			// block on the keyboard driver thread
+			requests->push_back(KeyboardDriverRequest(Scheduler::getCurrentThread(), KeyboardDriverRequest::pressed, expectingCharOnly ? KeyboardDriverRequest::character : KeyboardDriverRequest::event));
+			Scheduler::waitForThread(regs, keyboardDriverThread);
+		}
+		else
+		{
+			// return default value, do NOT block
+			*returnValue = KeyEvent();
+			if (expectingCharOnly)
+				regs.rax = returnValue->getChar();
+		}
 	}
-	KeyEvent driver_getKeyReleasedEvent()
+	void driver_getKeyReleasedEvent(registers_t &regs, bool expectingCharOnly)
 	{
+		KeyEvent *returnValue = (KeyEvent *)&regs.rax;
+		bool blocking = regs.rdi;
 		while (checkCharQueue())
 		{
 			KeyEvent &event = eventQueue[queueStart++];
-			if (event.isReleased())
-				return event;
+			if (event.isReleased()) // skip any event that is not a KeyReleasedEvent
+			{
+				// key queue contains a KeyReleasedEvent, return immediately
+				*returnValue = event;
+				if (expectingCharOnly)
+					regs.rax = returnValue->getChar();
+				return;
+			}
 		}
-		return KeyEvent();
+
+		// key event queue does not contain the desired event
+		if (blocking)
+		{
+			// block on the keyboard driver thread
+			requests->push_back(KeyboardDriverRequest(Scheduler::getCurrentThread(), KeyboardDriverRequest::released, expectingCharOnly ? KeyboardDriverRequest::character : KeyboardDriverRequest::event));
+			Scheduler::waitForThread(regs, keyboardDriverThread);
+		}
+		else
+		{
+			// return default value, do NOT block
+			*returnValue = KeyEvent();
+			if (expectingCharOnly)
+				regs.rax = returnValue->getChar();
+		}
+	}
+
+	void Syscall(registers_t &regs)
+	{
+		switch (regs.rbx)
+		{
+		case SYSCALL_KEYBOARD_KEYEVENT:
+		case SYSCALL_KEYBOARD_KEYEVENT_CHAR:
+		{
+			return driver_getKeyEvent(regs, regs.rbx == SYSCALL_KEYBOARD_KEYEVENT_CHAR);
+		}
+		break;
+		case SYSCALL_KEYBOARD_KEYPRESSEDEVENT:
+		case SYSCALL_KEYBOARD_KEYPRESSEDEVENT_CHAR:
+		{
+			return driver_getKeyPressedEvent(regs, regs.rbx == SYSCALL_KEYBOARD_KEYPRESSEDEVENT_CHAR);
+		}
+		break;
+		case SYSCALL_KEYBOARD_KEYRELEASEDEVENT:
+		case SYSCALL_KEYBOARD_KEYRELEASEDEVENT_CHAR:
+		{
+			return driver_getKeyReleasedEvent(regs, regs.rbx == SYSCALL_KEYBOARD_KEYRELEASEDEVENT_CHAR);
+		}
+		break;
+		}
 	}
 
 	void sendCommand()

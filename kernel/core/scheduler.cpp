@@ -6,47 +6,10 @@
 
 using namespace std;
 
-class SleepingThreadInfo : public Thread::ThreadInfo // info about a task that is sleeping
-{
-public:
-	inline SleepingThreadInfo(ull sleepUntil) : ThreadInfo(sleepUntil) {}
-	inline SleepingThreadInfo(ThreadInfo info) : ThreadInfo(info) {}
-
-	inline bool shouldWake(ull currTime) { return currTime >= data; }
-};
-
-enum class WaitCondition
-{
-	thread,
-	task,
-	irq,
-};
-class ThreadWaitingThreadInfo : public Thread::ThreadInfo // info about a thread that waits for another thread to finish
-{
-public:
-	inline ThreadWaitingThreadInfo(Thread *thread) : ThreadInfo(((ull)WaitCondition::thread << 56) | ((ull)thread & 0xffffffffffffff)) {}
-
-	inline bool operator==(ThreadInfo info) { return data == info.data; }
-};
-class IrqWaitingThreadInfo : public Thread::ThreadInfo // info about a thread that waits for an irq
-{
-public:
-	inline IrqWaitingThreadInfo(int irq_no) : ThreadInfo(((ull)WaitCondition::irq << 56) | irq_no) {}
-
-	inline bool operator==(ThreadInfo info) { return data == info.data; }
-};
-class TaskWaitingThreadInfo : public Thread::ThreadInfo // info about a thread that waits for a task
-{
-public:
-	inline TaskWaitingThreadInfo(Task *task) : ThreadInfo(((ull)WaitCondition::task << 56) | ((ull)task & 0xffffffffffffff)) {}
-
-	inline bool operator==(ThreadInfo info) { return data == info.data; }
-};
-
 namespace Scheduler
 {
 	static constexpr ull noExecutingThread = (ull)-1;
-	static constexpr int preempt_interval = 5;
+	static constexpr int preempt_interval = 5; // aka time-slice in terms of IRQ0 interrupt count
 	word preempt_timer;
 
 	vector<Thread *> *executingThreads;
@@ -57,7 +20,6 @@ namespace Scheduler
 	bool enabled = false, idling = false;
 
 	extern "C" void idleTask();
-	// registers_t idleTask;
 
 	void enable()
 	{
@@ -70,14 +32,15 @@ namespace Scheduler
 	}
 	bool isEnabled() { return enabled; }
 
-	void Initialize(Task *terminalTask)
+	void Initialize()
 	{
-		// terminal task is currently always running, so an idle task is not needed
+		Task *kernelTask = new Task(true);
+		Thread *kernelMainThread = new Thread(kernelTask, registers_t());
 
 		executingThreads = new vector<Thread *>();
 		sleepingThreads = new vector<Thread *>();
 		waitingThreads = new vector<Thread *>();
-		executingThreads->push_back(terminalTask->getMainThread());
+		executingThreads->push_back(kernelMainThread);
 		currentThread = 0;
 
 		enable();
@@ -86,12 +49,21 @@ namespace Scheduler
 	{
 		disable();
 
+		// CleanUp is assumed to be called from kernalMainThread
+		Thread *kernelMainThread = getCurrentThread();
+		delete kernelMainThread;
+		executingThreads->erase(currentThread);
+
+		if (executingThreads->getSize() > 0)
+			cout << "Executing threads left!\n";
 		delete executingThreads;
+
 		if (sleepingThreads->getSize() > 0)
-			cout << "oh no, sleeping tasks left\n";
+			cout << "Sleeping threads left!\n";
 		delete sleepingThreads;
+
 		if (waitingThreads->getSize() > 0)
-			cout << "oh no, blocked tasks left\n";
+			cout << "Blocked threads left!\n";
 		delete waitingThreads;
 	}
 
@@ -107,20 +79,26 @@ namespace Scheduler
 		if (!enabled)
 			return;
 
-		// go through sleeping tasks and see if any are to be waked up
-		bool awakened = false;
+		// check if any sleeping threads should be waked up
 		ull currTime = Time::driver_time();
 
-		for (ull i = sleepingThreads->getSize() - 1; i != (ull)-1; i--)
+		// since the array of sleeping threads is ordered from soonest to latest to wake up
+		// only check first threads until one still needs to sleep
+		ull sleepingThreadCount = sleepingThreads->getSize(),
+			wakeUpCount = 0;
+		for (ull i = 0; i < sleepingThreadCount; i++)
 		{
 			Thread *thread = sleepingThreads->at(i);
-			if (SleepingThreadInfo(thread->threadInfo).shouldWake(currTime))
-			{
-				sleepingThreads->erase(i);
-				executingThreads->push_back(thread);
-				awakened = true;
-			}
+			if (!thread->finishedSleeping(currTime))
+				break; // encountered a thread that still needs to sleep, exit loop
+
+			executingThreads->push_back(thread);
+			wakeUpCount++;
 		}
+
+		// remove all threads that have been waked up from the sleeping list
+		if (wakeUpCount)
+			sleepingThreads->erase(0, wakeUpCount);
 
 		preempt_timer--;
 		if (!preempt_timer)
@@ -135,40 +113,32 @@ namespace Scheduler
 			regs.cr3 = &PageMapLevel4::getCurrent();
 		}
 	}
-	void irqReceived(int irq_no)
+
+	void wakeupBlockedThreads(Thread *blockingThread, int returnedValue)
 	{
-		if (!enabled)
-			return;
-
-		if (!irq_no)
-			return; // IRQ0 is not handled here
-
-		// go from 0 and go up, so the first function who started waiting will be awakened
-		ull limit = waitingThreads->getSize();
-		for (ull i = 0; i < limit; i++)
+		for (ull i = waitingThreads->getSize() - 1; i != (ull)-1; i--)
 		{
 			Thread *thread = waitingThreads->at(i);
-			if (IrqWaitingThreadInfo(irq_no) == thread->threadInfo)
+			if (thread->getBlocker() == blockingThread)
 			{
 				waitingThreads->erase(i);
-				executingThreads->push_back(thread);
-				return;
+				// if task is alive, move to executing threads list
+				// otherwise, it is time for cleanup
+				if (!thread->getParentTask()->isDead())
+				{
+					thread->getRegs().rax = returnedValue;
+					executingThreads->push_back(thread);
+				}
+				else
+				{
+					delete thread;
+				}
 			}
 		}
 	}
-
-	void wakeupBlockedThreads(Thread::ThreadInfo threadInfo, int returnedValue)
-	{
-		for (ull i = waitingThreads->getSize() - 1; i != (ull)-1; i--)
-			if (threadInfo.data == waitingThreads->at(i)->threadInfo.data)
-			{
-				waitingThreads->at(i)->getRegs().rax = returnedValue;
-				executingThreads->push_back(waitingThreads->at(i));
-				waitingThreads->erase(i);
-			}
-	}
 	void kill(Task *task, int returnedValue)
 	{
+		// mark task as dead
 		task->kill();
 
 		// keep a list of threads belonging to the task
@@ -193,21 +163,37 @@ namespace Scheduler
 				sleepingThreads->erase(i);
 			}
 		}
+
+		// wake up every thread waiting for task threads and cleanup
+		for (auto *&thread : taskThreads)
+		{
+			wakeupBlockedThreads(thread, -1);
+			delete thread;
+		}
+
+		// reset list of threads
+		taskThreads.resize(0);
+
 		for (ull i = waitingThreads->getSize() - 1; i != (ull)-1; i--)
 		{
 			Thread *thread = waitingThreads->at(i);
 			if (thread->getParentTask() == task)
 			{
 				taskThreads.push_back(thread);
-				waitingThreads->erase(i);
+				// do not erase threads from here so that cleanup
+				// can take place later, when blocking threads finished or unblocks
 			}
 		}
 
-		// wake up every thread waiting for task threads and cleanup
-		for (auto *&t : taskThreads)
+		// wake up every thread waiting for task threads, but skip cleanup
+		for (auto *&thread : taskThreads)
 		{
-			wakeupBlockedThreads(ThreadWaitingThreadInfo(t), -1);
-			delete t;
+			wakeupBlockedThreads(thread, -1);
+			// ignore cleanup because this might block on another thread
+			// the blocking thread might be a thread that uses data from this task
+			// by not cleaning up the thread now, we ensure that the thread's data is available
+			// to the blocking thread, which might be a driver thread
+			// only cleanup thread when it is unblocked
 		}
 	}
 	void kill(Thread *thread, int returnValue)
@@ -227,9 +213,9 @@ namespace Scheduler
 			currentThread++;
 			break;
 		case preemptReason::startedSleeping: // move task from executing to sleeping list
-			// currentTask++;
 			executingThreads->erase(currentThread);
-			sleepingThreads->push_back(current);
+			// skip updating sleepingThreads, as it will be updated in
+			// the sleep function, the caller of this one
 			break;
 		case preemptReason::waitingIO: // move task from executing to io blocked list
 			executingThreads->erase(currentThread);
@@ -281,7 +267,7 @@ namespace Scheduler
 		if (reason == preemptReason::taskExited)
 		{
 			// check for threads waiting for this thread to finish
-			wakeupBlockedThreads(ThreadWaitingThreadInfo(current), (int)current->getRegs().rdi);
+			wakeupBlockedThreads(current, (int)current->getRegs().rdi);
 
 			// if thread is main thread
 			Task *parentTask = current->getParentTask();
@@ -296,27 +282,28 @@ namespace Scheduler
 
 	void sleep(registers_t &regs, ull untilTime)
 	{
-		getCurrentThread()->threadInfo = SleepingThreadInfo(untilTime);
+		Thread *thread = getCurrentThread();
+		thread->sleepUntil(untilTime);
+		// the preempt function will NOT update sleepingThreads
 		preempt(regs, preemptReason::startedSleeping);
+
+		// put thread in at the correct position
+		ull pos, sleepingTheadCount = sleepingThreads->getSize();
+		for (pos = 0; pos < sleepingTheadCount; pos++)
+			if (sleepingThreads->at(pos)->finishedSleeping(untilTime) == false)
+				break;
+
+		sleepingThreads->insert(thread, pos);
 		preempt_timer = preempt_interval;
 	}
-	// WARNING: only ONE task will be awakened if multiple tasks are waiting for the same irq
-	// cannot wait for irq 0
-	void waitForIrq(registers_t &regs, IDT::Irq_no irq_no)
+	bool waitForThreadUnchecked(registers_t &regs, Thread *thread)
 	{
-		if (irq_no == IDT::Irq_no::timer)
-			return;
-		getCurrentThread()->threadInfo = IrqWaitingThreadInfo((int)irq_no);
+		getCurrentThread()->block(thread);
 		preempt(regs, preemptReason::waitingIO);
 		preempt_timer = preempt_interval;
+		return true;
 	}
-	void waitForThreadUnchecked(registers_t &regs, Thread *thread)
-	{
-		getCurrentThread()->threadInfo = ThreadWaitingThreadInfo(thread);
-		preempt(regs, preemptReason::waitingIO);
-		preempt_timer = preempt_interval;
-	}
-	void waitForThread(registers_t &regs, Thread *thread)
+	bool waitForThread(registers_t &regs, Thread *thread)
 	{
 		// check that the task exists, do nothing otherwise
 		for (auto &t : *executingThreads)
@@ -328,6 +315,38 @@ namespace Scheduler
 		for (auto &t : *waitingThreads)
 			if (thread == t)
 				return waitForThreadUnchecked(regs, thread);
+
+		// thread not found, blocking failed
+		return false;
+	}
+	void unblockThread(Thread *blockingThread, Thread *blockedThread)
+	{
+		// do the actual unblocking
+		ull waitingThreadsCount = waitingThreads->getSize();
+		for (ull i = 0; i < waitingThreadsCount; i++)
+		{
+			Thread *waitingThread = waitingThreads->at(i);
+			if (waitingThread == blockedThread && waitingThread->getBlocker() == blockingThread)
+			{
+				waitingThreads->erase(i);
+				executingThreads->push_back(blockedThread);
+
+				break;
+			}
+		}
+
+		// do the cleanup if blockedThread is already dead
+	}
+	bool createThread(registers_t &regs)
+	{
+		Thread *parentThread = getCurrentThread();
+
+		byte *stack = (byte *)Memory::Allocate(0x10000, 0x1000);
+		// WIP:
+		// stack will NOT be mapped into the virtual space of the parent task
+		// this means that this function only works for kernel task, where the heap is identity mapped
+
+		Thread *thread = new Thread(parentThread->getParentTask(), regs, stack);
 	}
 
 	Thread *getCurrentThread() { return currentThread == noExecutingThread ? nullptr : executingThreads->at(currentThread); }
