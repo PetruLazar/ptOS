@@ -242,7 +242,7 @@ namespace Keyboard
 			KeyCode::unknown,		   // '?',
 		},
 		{
-			// extended keycodes
+			// extended scancodes
 
 			/*0x00*/ KeyCode::unknown,
 			KeyCode::unknown,

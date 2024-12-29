@@ -7,10 +7,10 @@ as long as CPU is in real mode:
 
 during MBR execution:
  0x1000	->  0x11ff	- bootloader code, relocated from 0x7c00
- 0x1200	->  0x13ff	- buffer for GPT header 
+ 0x1200	->  0x13ff	- buffer for GPT header
   ????	<-  0x7c00	- bootloader stack
- 0x8000	->			- buffer for GPT partition array
  0x7c00	->  0x7fff	- partition VBR
+ 0x8000	->			- buffer for GPT partition array
  0x8000	->  0x85ff	- debug code
  0x8800	->  0x9fff	- debug module un-initialized data
 
@@ -24,53 +24,41 @@ during VBR execution:
  0x0f18	->  0x0f1f	- cluster offset of boot FS
  0x1000	->  0x4fff	- buffer for cluster reading (at most 0x4000 long, for biggest 
 						allowed cluster size)
+ 0x5000	->  0x5001	- memmap entry count + size of last entry
+ 0x5010	->   ????	- memory map stored for the kernel
  0x7c00	->  0x7fff	- partition VBR
  0x8000	->  0x85ff	- debug code
  0x8800	->  0x9fff	- debug module un-initialized data
-
-
-
-during OS bootloader execution (file in filesystem, real mode):
- 0x0c00	->  0x0dff	- buffer for FAT sector
- 0x0f08	->  0x0f08	- boot disk number
- 0x0f10	->  0x0f17	- FAT offset of boot FS
- 0x0f18	->  0x0f1f	- cluster offset of boot FS
- 0x1000	->  0x6fff	- bootx16 code, maximum of 0x6000 bytes
- 0x7000	->  0x7001	- memmap entry count + size of last entry
- 0x7010	->  0x7bff	- memory map stored for the kernel
-  ????	<-  0x7c00	- bootloader stack
- 0x7c00	->  0x7fff	- partition VBR
- 0x8000	->  0x85ff	- debug code
- 0x8800	->  0x9fff	- debug module un-initialized data
- 0xa000	->  0xdfff	- low address paging structures
+ 0xa000	->  0xcfff	- paging structures
 0x10000	-> 0x7ffff	- space for kernel binary
 
 
 
-during OS bootloader execution (file in filesystem, long mode):
- 0x1000	->  0x6fff	- bootx16 code, maximum of 0x6000 bytes
- 0x7000	->  0x7001	- memmap entry count + size of last entry
- 0x7010	->  0x7bff	- memory map stored for the kernel
- 0xa000	->  0xdfff	- low address paging structures
-0x10000 -> 0x7ffff	- kernel image, later relocated to 0x8000
-  ????	<-  0x50000	- bootloader + kernel stack
-0x100000-> 0x103fff	- high address paging structures
-
-
-
-during kernel execution:
+during kernel execution (physical addresses):
+ 0x0500	->  0x0fff	- gdt
  0x1000	->  0x1fff	- idt
- 0x2000	-> 0x2fff	- gdt
- 0x7000	->  0x7001	- memmap entry count + size of last entry
- 0x7010	->  0x7bff	- memory map stored for the kernel
-0x8000	-> 0x37fff	- kernel
-0x38000	-> 0x38067	- 64-bit TSS
-  ????	<- 0x40000	- interrupt stack
-  ????	<-  0x50000	- terminal task stack
+ 0x2000 ->  0x2068	- tss
+ 0x5000	->  0x5001	- memmap entry count + size of last entry
+ 0x5010	->  0x5bff	- memory map stored for the kernel
+  ????	<- 0x10000	- kernel task's main thread stack
+0x10000 -> 0x7ffff	- kernel image
 
 
 
-task virtual space:
-0x1000 	-> 0x40000	- kernel
-0x40000	<- 0x50000	- private stack
-0x100000->  ????	- program image
+user task virtual space (48 bits of addressing):
+0x           40000 <- 0x           50000 - private stack
+0x          100000 -> 0x         ??????? - program image
+0x    7f0000000000 -> 0x    7f0000000000 - program heap
+
+0xffffffff80000000 -> 0xffffffff80090000 - kernel image, data, stacks (read-write protected)
+
+
+
+kernel task virtual space (48 bits of addressing):
+0x         0x00000 -> 0x       ????????? - identity mapped physical memory
+0xffffffff80000500 -> 0xffffffff80000FFF - gdt
+0xffffffff80001000 -> 0xffffffff80001FFF - idt
+0xffffffff80002000 -> 0xffffffff80002FFF - 64-bit TSS
+0xffffffff80003000 -> 0xffffffff8000FFFF - kernel stack
+0xffffffff80010000 -> 0xffffffff8007FFFF - kernel image
+0xffffffff80080000 -> 0xffffffff8008FFFF - interrupt stack

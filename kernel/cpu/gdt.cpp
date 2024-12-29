@@ -60,7 +60,7 @@ namespace GDT
 		globalDescriptorTable[count++] = CodeSegmentDescriptor(3, true);  // compatibility user code (ring 3)
 		globalDescriptorTable[count++] = DataSegmentDescriptor(3);		  // user data
 		word tssEntry = count;
-		globalDescriptorTable[count++] = tssDesc.low;  // 64 bit tss - low entry
+		globalDescriptorTable[count++] = tssDesc.low;  // 64 bit TSS - low entry
 		globalDescriptorTable[count++] = tssDesc.high; // 64 bit TSS - high entry
 
 		Descriptor descriptor((qword)globalDescriptorTable, sizeof(SegmentDescriptor) * count - 1);

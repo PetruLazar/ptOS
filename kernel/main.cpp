@@ -37,16 +37,16 @@ extern "C" void testCompMode();
 void terminal();
 void shutdown();
 
-static constexpr ull IDT_ADDRESS = (ull)0xFFFFFFFF80001000;
 static constexpr ull GDT_ADDRESS = (ull)0xFFFFFFFF80000500;
+static constexpr ull IDT_ADDRESS = (ull)0xFFFFFFFF80001000;
 static constexpr ull TSS_ADDRESS = (ull)0xFFFFFFFF80002000;
 static constexpr ull INT_RING0_STACK = (ull)0xFFFFFFFF80090000;
 
 struct KernelInfo
 {
 	byte *kernelPhysicalAddress;	  // 0x10000
-	byte *memoryMapDescriptorAddress; // 0x7000 - entry count + entry size
-	byte *memoryMapAddress;			  // 0x7010
+	byte *memoryMapDescriptorAddress; // 0x5000 - entry count + entry size
+	byte *memoryMapAddress;			  // 0x5010
 };
 
 extern void main(KernelInfo &info)
@@ -87,11 +87,11 @@ extern void main(KernelInfo &info)
 
 		cout << "Memory leaks detected: " << currAllocCount << " allocations!\n";
 		Memory::Heap::displayAllocationSummaryFromSelected();
-		enableInterrupts();
-		System::pause();
-		disableInterrupts();
 	}
 
+	enableInterrupts();
+	System::pause();
+	disableInterrupts();
 	shutdown();
 
 	/*
