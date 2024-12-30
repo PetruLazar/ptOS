@@ -18,12 +18,12 @@ inline void ulltos2(char *str, uint64_t value)
 	if (!value)
 		digits = 1;
 	else
-		for (uint64_t i = value; i; i >>= 2)
+		for (uint64_t i = value; i; i >>= 1)
 			digits++;
 
 	str += digits;
 	*str = 0;
-	for (; digits; digits--, value >>= 2)
+	for (; digits; digits--, value >>= 1)
 		*--str = digit(value & 1);
 }
 inline void lltos2(char *str, int64_t value) { ulltos2(str, sign(str, value)); }
