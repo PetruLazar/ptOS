@@ -546,15 +546,16 @@ namespace IDE
 			delete controller;
 		delete controllers;
 	}
-	void ControllerDetected(PCILocation location, DeviceHeader *header)
+	void ControllerDetected(PCIDevice &device)
 	{
 		// init controller structure
 		IDEController *controller = new IDEController;
-		controller->channels[0].ioBase = header->bar0 ? header->bar0 : primary_io;
+		PCIDeviceHeader *header = &device.header;
+		controller->channels[0].ioBase = device.header.bar0 ? header->bar0 : primary_io;
 		controller->channels[0].ctrl = header->bar1 ? header->bar1 : primary_ctrl;
 		controller->channels[1].ioBase = header->bar2 ? header->bar2 : secondary_io;
 		controller->channels[1].ctrl = header->bar3 ? header->bar3 : secondary_ctrl;
-		controller->pciLocation = location;
+		controller->pciLocation = device.location;
 
 		// stop the controller from triggering interrupts
 		controller->writeReg(0, ATAreg::control, 2);

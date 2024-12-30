@@ -883,22 +883,18 @@ namespace PCI
 				for (byte funcNr = 0; funcNr < funcLim; funcNr++)
 					if (deviceExists(busNr, deviceNr, funcNr))
 					{
-						deviceFunction func = getFunction(busNr, deviceNr, funcNr);
+						PCIDevice device;
+						device.location = PCILocation(busNr, deviceNr, funcNr);
+						device.loadHeader();
 
-						dword *configSpace = new dword[0x10];
-						for (dword i = 0; i < 0x10; i++)
-							configSpace[i] = getConfigReg(busNr, deviceNr, funcNr, i << 2);
-						DeviceHeader *header = (DeviceHeader *)configSpace;
-
-						switch (func.classCode)
+						switch (device.header.classCode)
 						{
 						case (byte)DeviceClass::massStorageController:
-							Disk::ControllerDetected(PCILocation(busNr, deviceNr, funcNr), header);
+							Disk::ControllerDetected(device);
 							break;
 						default:
 							break;
 						}
-						delete[] configSpace;
 					}
 			}
 	}
@@ -917,26 +913,25 @@ namespace PCI
 				for (byte funcNr = 0; funcNr < funcLim; funcNr++)
 					if (deviceExists(busNr, deviceNr, funcNr))
 					{
-						deviceFunction func = getFunction(busNr, deviceNr, funcNr);
-
-						dword *configSpace = new dword[0x10];
-						for (dword i = 0; i < 0x10; i++)
-							configSpace[i] = getConfigReg(busNr, deviceNr, funcNr, i << 2);
+						PCIDevice device;
+						device.location = PCILocation(busNr, deviceNr, funcNr);
+						device.loadHeader();
 
 						// display device...
 						const char *strings[3];
-						classSubclassProgIF_toString(func.classCode, func.subclass, func.progIF, strings);
+						classSubclassProgIF_toString(device.header.classCode, device.header.subclass, device.header.progIF, strings);
 						if (first)
 							first = false;
 						else
 							System::pause(false);
 						cout << "Device found on bus " << busNr << ", device " << deviceNr << ", function " << funcNr
-							 << ":\n    Header type: 0x" << ostream::base::hex << headerType
-							 << "\n    Class code: " << strings[0] << " (0x" << func.classCode << "),\n"
-							 << "    Subclass: " << strings[1] << " (0x" << func.subclass << "),\n"
-							 << "    ProgIF: " << strings[2] << " (0x" << func.progIF << ostream::base::dec << ")\n";
+							 << ostream::base::hex
+							 << " (" << device.header.vendorId << ':' << device.header.deviceId
+							 << "):\n    Header type: 0x" << headerType
+							 << "\n    Class code: " << strings[0] << " (0x" << device.header.classCode << "),\n"
+							 << "    Subclass: " << strings[1] << " (0x" << device.header.subclass << "),\n"
+							 << "    ProgIF: " << strings[2] << " (0x" << device.header.progIF << ostream::base::dec << ")\n";
 
-						delete[] configSpace;
 						/*while (!Keyboard::getChar())
 							;*/
 					}

@@ -112,5 +112,5 @@ namespace Disk
 
 	void Initialize();
 	void CleanUp();
-	void ControllerDetected(PCI::PCILocation location, PCI::DeviceHeader *header);
+	void ControllerDetected(PCI::PCIDevice &device);
 }

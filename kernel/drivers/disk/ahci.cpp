@@ -367,12 +367,12 @@ namespace AHCI
 		delete controllers;
 	}
 
-	void ControllerDetected(PCILocation location, DeviceHeader *header)
+	void ControllerDetected(PCIDevice &device)
 	{
 		Controller *controller = new Controller;
 		controllers->push_back(controller);
 		controller->regs = (Registers *)(ull)header->bar5;
-		controller->pciLocation = location;
+		controller->pciLocation = device.location;
 
 		controller->pageSpace = (byte *)Memory::Allocate(0x8000, 0x1000);
 		ull freeSpace = (ull)controller->pageSpace;

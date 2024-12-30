@@ -8,9 +8,26 @@ namespace PCI
 	static constexpr word configAddressPort = 0xcf8,
 						  configDataPort = 0xcfc;
 
+	inline dword getConfigReg(byte busNr, byte deviceNr, byte funcNr, byte regOffsest)
+	{
+		deviceNr &= 0x1f;
+		funcNr &= 0x7;
+		dword val = (1u << 31) | (dword(busNr) << 16) | (dword(deviceNr) << 11) | (dword(funcNr) << 8) | (regOffsest & 0xfc);
+		outdw(configAddressPort, val);
+		return indw(configDataPort);
+	}
+	inline void setConfigReg(byte busNr, byte deviceNr, byte funcNr, byte regOffsest, dword newValue)
+	{
+		deviceNr &= 0x1f;
+		funcNr &= 0x7;
+		dword val = (1u << 31) | (dword(busNr) << 16) | (dword(deviceNr) << 11) | (dword(funcNr) << 8) | (regOffsest & 0xfc);
+		outdw(configAddressPort, val);
+		outdw(configDataPort, newValue);
+	}
+
 	struct deviceFunction
 	{
-		byte unused, progIF;
+		byte revisionID, progIF;
 		byte subclass, classCode;
 	};
 	struct PCILocation
@@ -27,19 +44,8 @@ namespace PCI
 		}
 	};
 
-	void Initialize();
-	inline dword getConfigReg(byte busNr, byte deviceNr, byte funcNr, byte regOffsest)
-	{
-		deviceNr &= 0x1f;
-		funcNr &= 0x7;
-		dword val = (1u << 31) | (dword(busNr) << 16) | (dword(deviceNr) << 11) | (dword(funcNr) << 8) | (regOffsest & 0xfc);
-		outdw(configAddressPort, val);
-		return indw(configDataPort);
-	}
-	// inline void setConfigReg(byte busNr, byte deviceNr, byte funcNr, byte regOffset, uint val)
-
 	// header with type 0x0
-	struct DeviceHeader
+	struct PCIDeviceHeader
 	{
 		word vendorId, deviceId,
 			command, status;
@@ -59,14 +65,31 @@ namespace PCI
 		byte interruptLine, interruptPin, minGrant, maxLatency;
 	};
 
+	struct PCIDevice
+	{
+		PCILocation location;
+		PCIDeviceHeader header;
+
+		inline void flushHeader()
+		{
+			dword *rawHeader = (dword *)&header;
+			for (dword i = 0; i < 0x10; i++)
+				setConfigReg(location.busNr, location.deviceNr, location.funcNr, i << 2, rawHeader[i]);
+		}
+		inline void loadHeader()
+		{
+			dword *rawHeader = (dword *)&header;
+			for (dword i = 0; i < 0x10; i++)
+				rawHeader[i] = getConfigReg(location.busNr, location.deviceNr, location.funcNr, i << 2);
+		}
+	};
+
+	void Initialize();
+	// inline void setConfigReg(byte busNr, byte deviceNr, byte funcNr, byte regOffset, uint val)
+
 	inline word getVendorId(byte busNr, byte deviceNr, byte funcNr)
 	{
 		return getConfigReg(busNr, deviceNr, funcNr, 0) & 0xffff;
-	}
-	inline deviceFunction getFunction(byte busNr, byte deviceNr, byte funcNr)
-	{
-		dword val = getConfigReg(busNr, deviceNr, funcNr, 0x8);
-		return *(deviceFunction *)(&val);
 	}
 	inline bool deviceExists(byte busNr, byte deviceNr, byte funcNr)
 	{
@@ -121,6 +144,15 @@ namespace PCI
 		nonVolatileMemoryController = 0x8,
 
 		other = 0x80,
+	};
+	enum class MultimediaController : byte
+	{
+		videoController = 0x0,
+		audioController = 0x1,
+		computerTelephonyDevice = 0x2,
+		audioDevice = 0x3,
+
+		other = 0x80
 	};
 	enum class NetworkController : byte
 	{

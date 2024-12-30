@@ -74,15 +74,15 @@ namespace Disk
 		}
 		delete devices;
 	}
-	void ControllerDetected(PCILocation pciLocation, DeviceHeader *header)
+	void ControllerDetected(PCIDevice &device)
 	{
-		switch ((MassStorageController)header->subclass)
+		switch ((MassStorageController)device.header.subclass)
 		{
 		case MassStorageController::IDEController:
-			IDE::ControllerDetected(pciLocation, header);
+			IDE::ControllerDetected(device);
 			break;
 		case MassStorageController::SATAcontroller:
-			AHCI::ControllerDetected(pciLocation, header);
+			AHCI::ControllerDetected(device);
 			break;
 		default:
 			// unsupported device
