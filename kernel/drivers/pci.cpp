@@ -1,5 +1,7 @@
 #include "pci.h"
 #include "disk/disk.h"
+#include "audio.h"
+#include "net.h"
 #include "../core/sys.h"
 
 using namespace std;
@@ -891,6 +893,14 @@ namespace PCI
 						{
 						case (byte)DeviceClass::massStorageController:
 							Disk::ControllerDetected(device);
+							break;
+						case (byte)DeviceClass::multimediaController:
+							if (device.header.subclass == (byte)MultimediaController::audioDevice)
+								Audio::DeviceDetected(device);
+							break;
+						case (byte)DeviceClass::networkController:
+							if (device.header.subclass == (byte)NetworkController::ethernetCotnroller)
+								Network::ControllerDetected(device);
 							break;
 						default:
 							break;
