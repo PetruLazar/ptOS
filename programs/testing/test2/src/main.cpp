@@ -12,7 +12,7 @@ int main()
 		if (keyCode == Keyboard::KeyCode::Escape)
 			break;
 
-		cout << '1';
+		cout << '2';
 	}
 	cout << '\n';
 	return 0;
