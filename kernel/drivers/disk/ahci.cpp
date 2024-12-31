@@ -3,7 +3,7 @@
 #include <iostream.h>
 #include "../../core/paging.h"
 #include "../../core/mem.h"
-#include "../../core/filesystem.h"
+#include "../../core/filesystem/filesystem.h"
 
 using namespace Disk;
 using namespace PCI;

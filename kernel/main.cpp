@@ -11,7 +11,7 @@
 #include "cpu/cpuid.h"
 #include "cpu/gdt.h"
 #include "drivers/pci.h"
-#include "core/filesystem.h"
+#include "core/filesystem/filesystem.h"
 #include "core/sys.h"
 #include <math.h>
 #include "core/paging.h"

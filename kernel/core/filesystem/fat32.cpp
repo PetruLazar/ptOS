@@ -1,70 +1,11 @@
-#include "filesystem.h"
-#include "sys.h"
-#include "mem.h"
+#include "fat32.h"
+#include "../mem.h"
 
 using namespace Disk;
 using namespace std;
 
 namespace Filesystem
 {
-	template <typename T>
-	using Unalg = UnalignedField<T>;
-
-	class Partition : public Disk::Partition
-	{
-	public:
-		// virtual void formatPartition() = 0;
-
-		virtual result CreateFile(string16 &path, byte *contents, ull length) = 0;
-		virtual result RemoveFile(string16 &path) = 0;
-
-		virtual result ReadFile(string16 &path, byte *&contents, ull &length) = 0;
-		virtual result WriteFile(string16 &path, byte *contents, ull length) = 0;
-
-		virtual DirectoryIterator *GetDirectoryIterator(string16 &path) = 0;
-		virtual result RemoveDirectory(string16 &path) = 0;
-		virtual result CreateDirectory(string16 &path) = 0;
-	};
-
-	vector<Partition *> *partitions;
-
-	class BiosParameterBlock
-	{
-	public:
-		byte jumpCode[3];
-		char identifier[8];
-		UnalignedField<word> bytesPerSector;
-		byte sectorsPerCluster;
-		word nrOfReservedSectors;
-		byte nrOfFATs;
-		UnalignedField<word> nrOfRootDirEntries,
-			sectorsInVolume;
-		byte mediaDescriptorType;
-		word sectorsPerFat, // unused
-			sectorsPerTrack,
-			headCount;
-		uint nrOfHiddenSectors,
-			largeSectorCount;
-	};
-	class ExtendedBootRecord
-	{
-	public:
-		UnalignedField<uint> sectorsPerFAT;
-		ushort flags,
-			FATversion;
-		UnalignedField<uint> rootDirClusterNr;
-		ushort FSinfoSectNr,
-			backupBootsectorSectNr;
-		byte reserved[12];
-		byte driveNr;
-		byte reservedOrFlags;
-		byte signature;
-		UnalignedField<uint> volSerialNr;
-		char volumeLabelString[11];
-		char systemIdString[8];
-		//..boot code and 0xaa55 for the rest of the sector
-	};
-
 	namespace FAT32
 	{
 		static constexpr int maxShortFilenameSuffix = 100000; // the max value of a suffix for short filename entrie that have a corresponding long name, value not included
@@ -330,7 +271,7 @@ namespace Filesystem
 
 		public:
 			byte order;
-			Unalg<char16_t> namePart1[5];
+			UnalignedField<char16_t> namePart1[5];
 			FileAttributes attributes;
 			byte longEntryType,
 				shortNameChecksum;
@@ -1352,7 +1293,7 @@ namespace Filesystem
 				return false;
 			}
 
-			// do something
+			// create FAT32 partition
 			FAT32::Partition *ptr = new FAT32::Partition();
 
 			// data about the partition
@@ -1372,158 +1313,15 @@ namespace Filesystem
 			ptr->fsInfoSect = part->lbaStart + ebr.FSinfoSectNr;
 			ptr->fsInfo = (FSInfoStruct *)fsInfoSector;
 
-			partitions->push_back(ptr);
+			// put partition in FAT32 partition list
+			registerPartition(ptr);
 
-			delete[] bootRecord;
+			// replace partition pointer in Disk::StorageDevice
 			delete part;
 			part = ptr;
+
+			delete[] bootRecord;
 			return true;
-		}
-	}
-
-	void Initialize()
-	{
-		partitions = new vector<Partition *>();
-	}
-	void CleanUp()
-	{
-		// each partition will be deleted by the disk driver
-		delete partitions;
-	}
-	static constexpr byte fat32PartType = 0xc; // fat32 with lba
-	bool tryLoadPartition(Disk::Partition *&part)
-	{
-		// try load partition by type
-		if (FAT32::tryLoadPartition(part))
-			return true;
-		return false;
-	}
-	void detectPartitions(StorageDevice *disk)
-	{
-		for (auto &part : disk->partitions)
-			tryLoadPartition(part);
-	}
-
-	Partition *getPartition(char letter)
-	{
-		for (auto &part : *partitions)
-			if (part->letter == letter)
-				return part;
-		return nullptr;
-	}
-
-	result CreateFile(const string16 &path, byte *contents, ull length)
-	{
-		if (path.length() > 1 && path[1] != ':')
-			// path does not contain a drive letter
-			return result::invalidPath;
-
-		auto part = getPartition(toLower(path[0]));
-		if (part == nullptr)
-			return result::invalidPartition;
-
-		string16 path_copy(path.data() + 2);
-		return part->CreateFile(path_copy, contents, length);
-	}
-	result RemoveFile(const string16 &path)
-	{
-		if (path.length() > 1 && path[1] != ':')
-			return result::invalidPath;
-
-		auto part = getPartition(toLower(path[0]));
-		if (part == nullptr)
-			return result::invalidPartition;
-
-		string16 path_copy(path.data() + 2);
-		return part->RemoveFile(path_copy);
-	}
-
-	result ReadFile(const string16 &path, byte *&contents, ull &length)
-	{
-		if (path.length() > 1 && path[1] != ':')
-			return result::invalidPath;
-
-		auto part = getPartition(toLower(path[0]));
-		if (part == nullptr)
-			return result::invalidPartition;
-
-		string16 path_copy(path.data() + 2);
-		return part->ReadFile(path_copy, contents, length);
-	}
-	result WriteFile(const string16 &path, byte *contents, ull length)
-	{
-		if (path.length() > 1 && path[1] != ':')
-			return result::invalidPath;
-
-		auto part = getPartition(toLower(path[0]));
-		if (part == nullptr)
-			return result::invalidPartition;
-
-		string16 path_copy(path.data() + 2);
-		return part->WriteFile(path_copy, contents, length);
-	}
-
-	DirectoryIterator *GetDirectoryIterator(const string16 &path)
-	{
-		if (path.length() > 1 && path[1] != ':')
-			return nullptr;
-
-		auto part = getPartition(toLower(path[0]));
-		if (part == nullptr)
-			return nullptr;
-
-		string16 path_copy(path.data() + 2);
-		return part->GetDirectoryIterator(path_copy);
-	}
-	result RemoveDirectory(const string16 &path)
-	{
-		if (path.length() > 1 && path[1] != ':')
-			return result::invalidPath;
-
-		auto part = getPartition(toLower(path[0]));
-		if (part == nullptr)
-			return result::invalidPartition;
-
-		string16 path_copy(path.data() + 2);
-		return part->RemoveDirectory(path_copy);
-	}
-	result CreateDirectory(const string16 &path)
-	{
-		if (path.length() > 1 && path[1] != ':')
-			return result::invalidPath;
-
-		auto part = getPartition(toLower(path[0]));
-		if (part == nullptr)
-			return result::invalidPartition;
-
-		string16 path_copy(path.data() + 2);
-		return part->CreateDirectory(path_copy);
-	}
-
-	result Move(const string16 &src, const string16 &dest)
-	{
-		return (result)-1;
-	}
-	result Copy(const string16 &src, const string16 &dest)
-	{
-		return (result)-1;
-	}
-
-	string partitionList()
-	{
-		string ret;
-		for (auto &part : *partitions)
-		{
-			ret += toUpper(part->letter);
-		}
-		return ret;
-	}
-	void displayPartitions()
-	{
-		cout << "List of " << partitions->getSize() << ":\n";
-		for (auto &part : *partitions)
-		{
-			cout << "\n\t" << toUpper(part->letter) << ": " << part->lbaLen << " sectors at " << part->lbaStart << ".\n";
 		}
 	}
 }
