@@ -29,7 +29,7 @@ namespace Scheduler
 
 	void sleep(registers_t &regs, ull untilTime);
 	bool waitForThread(registers_t &regs, Thread *thread);
-	void unblockThread(Thread *blockingThread, Thread *blockedThread);
+	void unblockThread(registers_t &regs, Thread *blockingThread, Thread *blockedThread);
 
 	Thread *getCurrentThread();
 }

@@ -12,56 +12,63 @@ extern PageMapLevel4 *kernelPaging;
 
 namespace IDT
 {
-	extern "C" void isr_0();
-	extern "C" void isr_1();
-	extern "C" void isr_2();
-	extern "C" void isr_3();
-	extern "C" void isr_4();
-	extern "C" void isr_5();
-	extern "C" void isr_6();
-	extern "C" void isr_7();
-	extern "C" void isr_8();
-	extern "C" void isr_9();
-	extern "C" void isr_a();
-	extern "C" void isr_b();
-	extern "C" void isr_c();
-	extern "C" void isr_d();
-	extern "C" void isr_e();
-	extern "C" void isr_f();
-	extern "C" void isr_10();
-	extern "C" void isr_11();
-	extern "C" void isr_12();
-	extern "C" void isr_13();
-	extern "C" void isr_14();
-	extern "C" void isr_15();
-	extern "C" void isr_16();
-	extern "C" void isr_17();
-	extern "C" void isr_18();
-	extern "C" void isr_19();
-	extern "C" void isr_1a();
-	extern "C" void isr_1b();
-	extern "C" void isr_1c();
-	extern "C" void isr_1d();
-	extern "C" void isr_1e();
-	extern "C" void isr_1f();
-	extern "C" void isr_30();
+	namespace IntEntryPoints
+	{
+		// exceptions
+		extern "C" void isr_0();
+		extern "C" void isr_1();
+		extern "C" void isr_2();
+		extern "C" void isr_3();
+		extern "C" void isr_4();
+		extern "C" void isr_5();
+		extern "C" void isr_6();
+		extern "C" void isr_7();
+		extern "C" void isr_8();
+		extern "C" void isr_9();
+		extern "C" void isr_a();
+		extern "C" void isr_b();
+		extern "C" void isr_c();
+		extern "C" void isr_d();
+		extern "C" void isr_e();
+		extern "C" void isr_f();
+		extern "C" void isr_10();
+		extern "C" void isr_11();
+		extern "C" void isr_12();
+		extern "C" void isr_13();
+		extern "C" void isr_14();
+		extern "C" void isr_15();
+		extern "C" void isr_16();
+		extern "C" void isr_17();
+		extern "C" void isr_18();
+		extern "C" void isr_19();
+		extern "C" void isr_1a();
+		extern "C" void isr_1b();
+		extern "C" void isr_1c();
+		extern "C" void isr_1d();
+		extern "C" void isr_1e();
+		extern "C" void isr_1f();
 
-	extern "C" void irq_0();
-	extern "C" void irq_1();
-	extern "C" void irq_2();
-	extern "C" void irq_3();
-	extern "C" void irq_4();
-	extern "C" void irq_5();
-	extern "C" void irq_6();
-	extern "C" void irq_7();
-	extern "C" void irq_8();
-	extern "C" void irq_9();
-	extern "C" void irq_10();
-	extern "C" void irq_11();
-	extern "C" void irq_12();
-	extern "C" void irq_13();
-	extern "C" void irq_14();
-	extern "C" void irq_15();
+		// irqs
+		extern "C" void irq_0();
+		extern "C" void irq_1();
+		extern "C" void irq_2();
+		extern "C" void irq_3();
+		extern "C" void irq_4();
+		extern "C" void irq_5();
+		extern "C" void irq_6();
+		extern "C" void irq_7();
+		extern "C" void irq_8();
+		extern "C" void irq_9();
+		extern "C" void irq_10();
+		extern "C" void irq_11();
+		extern "C" void irq_12();
+		extern "C" void irq_13();
+		extern "C" void irq_14();
+		extern "C" void irq_15();
+
+		// syscall interrupt
+		extern "C" void isr_30();
+	}
 
 	extern "C" void loadidt(void *);
 	extern "C" void clearint();
@@ -96,7 +103,8 @@ namespace IDT
 		}
 	};
 	Gate *gates;
-	IrqHandler irqHandlers[16];
+	std::vector<IrqHandler> *irqHandlers;
+	// IrqHandler irqHandlers[16];
 	byte irqOffset;
 
 	void Gate::setInterruptGate(voidf funOffset, byte ist, byte dpl)
@@ -124,60 +132,62 @@ namespace IDT
 		gates = (Gate *)IDT_address;
 
 		// build idt
-		// exception interrupts
-		gates[0x00].setInterruptGate(isr_0, 1, 0);
-		gates[0x01].setInterruptGate(isr_1, 1, 0);
-		gates[0x02].setInterruptGate(isr_2, 1, 0);
-		gates[0x03].setInterruptGate(isr_3, 1, 0);
-		gates[0x04].setInterruptGate(isr_4, 1, 0);
-		gates[0x05].setInterruptGate(isr_5, 1, 0);
-		gates[0x06].setInterruptGate(isr_6, 1, 0);
-		gates[0x07].setInterruptGate(isr_7, 1, 0);
-		gates[0x08].setInterruptGate(isr_8, 1, 0);
-		gates[0x09].setInterruptGate(isr_9, 1, 0);
-		gates[0x0a].setInterruptGate(isr_a, 1, 0);
-		gates[0x0b].setInterruptGate(isr_b, 1, 0);
-		gates[0x0c].setInterruptGate(isr_c, 1, 0);
-		gates[0x0d].setInterruptGate(isr_d, 1, 0);
-		gates[0x0e].setInterruptGate(isr_e, 1, 0);
-		gates[0x0f].setInterruptGate(isr_f, 1, 0);
-		gates[0x10].setInterruptGate(isr_10, 1, 0);
-		gates[0x11].setInterruptGate(isr_11, 1, 0);
-		gates[0x12].setInterruptGate(isr_12, 1, 0);
-		gates[0x13].setInterruptGate(isr_13, 1, 0);
-		gates[0x14].setInterruptGate(isr_14, 1, 0);
-		gates[0x15].setInterruptGate(isr_15, 1, 0);
-		gates[0x16].setInterruptGate(isr_16, 1, 0);
-		gates[0x17].setInterruptGate(isr_17, 1, 0);
-		gates[0x18].setInterruptGate(isr_18, 1, 0);
-		gates[0x19].setInterruptGate(isr_19, 1, 0);
-		gates[0x1a].setInterruptGate(isr_1a, 1, 0);
-		gates[0x1b].setInterruptGate(isr_1b, 1, 0);
-		gates[0x1c].setInterruptGate(isr_1c, 1, 0);
-		gates[0x1d].setInterruptGate(isr_1d, 1, 0);
-		gates[0x1e].setInterruptGate(isr_1e, 1, 0);
-		gates[0x1f].setInterruptGate(isr_1f, 1, 0);
+		{
+			// exception interrupts
+			gates[0x00].setInterruptGate(IntEntryPoints::isr_0, 1, 0);
+			gates[0x01].setInterruptGate(IntEntryPoints::isr_1, 1, 0);
+			gates[0x02].setInterruptGate(IntEntryPoints::isr_2, 1, 0);
+			gates[0x03].setInterruptGate(IntEntryPoints::isr_3, 1, 0);
+			gates[0x04].setInterruptGate(IntEntryPoints::isr_4, 1, 0);
+			gates[0x05].setInterruptGate(IntEntryPoints::isr_5, 1, 0);
+			gates[0x06].setInterruptGate(IntEntryPoints::isr_6, 1, 0);
+			gates[0x07].setInterruptGate(IntEntryPoints::isr_7, 1, 0);
+			gates[0x08].setInterruptGate(IntEntryPoints::isr_8, 1, 0);
+			gates[0x09].setInterruptGate(IntEntryPoints::isr_9, 1, 0);
+			gates[0x0a].setInterruptGate(IntEntryPoints::isr_a, 1, 0);
+			gates[0x0b].setInterruptGate(IntEntryPoints::isr_b, 1, 0);
+			gates[0x0c].setInterruptGate(IntEntryPoints::isr_c, 1, 0);
+			gates[0x0d].setInterruptGate(IntEntryPoints::isr_d, 1, 0);
+			gates[0x0e].setInterruptGate(IntEntryPoints::isr_e, 1, 0);
+			gates[0x0f].setInterruptGate(IntEntryPoints::isr_f, 1, 0);
+			gates[0x10].setInterruptGate(IntEntryPoints::isr_10, 1, 0);
+			gates[0x11].setInterruptGate(IntEntryPoints::isr_11, 1, 0);
+			gates[0x12].setInterruptGate(IntEntryPoints::isr_12, 1, 0);
+			gates[0x13].setInterruptGate(IntEntryPoints::isr_13, 1, 0);
+			gates[0x14].setInterruptGate(IntEntryPoints::isr_14, 1, 0);
+			gates[0x15].setInterruptGate(IntEntryPoints::isr_15, 1, 0);
+			gates[0x16].setInterruptGate(IntEntryPoints::isr_16, 1, 0);
+			gates[0x17].setInterruptGate(IntEntryPoints::isr_17, 1, 0);
+			gates[0x18].setInterruptGate(IntEntryPoints::isr_18, 1, 0);
+			gates[0x19].setInterruptGate(IntEntryPoints::isr_19, 1, 0);
+			gates[0x1a].setInterruptGate(IntEntryPoints::isr_1a, 1, 0);
+			gates[0x1b].setInterruptGate(IntEntryPoints::isr_1b, 1, 0);
+			gates[0x1c].setInterruptGate(IntEntryPoints::isr_1c, 1, 0);
+			gates[0x1d].setInterruptGate(IntEntryPoints::isr_1d, 1, 0);
+			gates[0x1e].setInterruptGate(IntEntryPoints::isr_1e, 1, 0);
+			gates[0x1f].setInterruptGate(IntEntryPoints::isr_1f, 1, 0);
 
-		// interrupt requests
-		gates[0x20].setInterruptGate(irq_0, 1, 0);
-		gates[0x21].setInterruptGate(irq_1, 1, 0);
-		gates[0x22].setInterruptGate(irq_2, 1, 0);
-		gates[0x23].setInterruptGate(irq_3, 1, 0);
-		gates[0x24].setInterruptGate(irq_4, 1, 0);
-		gates[0x25].setInterruptGate(irq_5, 1, 0);
-		gates[0x26].setInterruptGate(irq_6, 1, 0);
-		gates[0x27].setInterruptGate(irq_7, 1, 0);
-		gates[0x28].setInterruptGate(irq_8, 1, 0);
-		gates[0x29].setInterruptGate(irq_9, 1, 0);
-		gates[0x2a].setInterruptGate(irq_10, 1, 0);
-		gates[0x2b].setInterruptGate(irq_11, 1, 0);
-		gates[0x2c].setInterruptGate(irq_12, 1, 0);
-		gates[0x2d].setInterruptGate(irq_13, 1, 0);
-		gates[0x2e].setInterruptGate(irq_14, 1, 0);
-		gates[0x2f].setInterruptGate(irq_15, 1, 0);
+			// interrupt requests
+			gates[0x20].setInterruptGate(IntEntryPoints::irq_0, 1, 0);
+			gates[0x21].setInterruptGate(IntEntryPoints::irq_1, 1, 0);
+			gates[0x22].setInterruptGate(IntEntryPoints::irq_2, 1, 0);
+			gates[0x23].setInterruptGate(IntEntryPoints::irq_3, 1, 0);
+			gates[0x24].setInterruptGate(IntEntryPoints::irq_4, 1, 0);
+			gates[0x25].setInterruptGate(IntEntryPoints::irq_5, 1, 0);
+			gates[0x26].setInterruptGate(IntEntryPoints::irq_6, 1, 0);
+			gates[0x27].setInterruptGate(IntEntryPoints::irq_7, 1, 0);
+			gates[0x28].setInterruptGate(IntEntryPoints::irq_8, 1, 0);
+			gates[0x29].setInterruptGate(IntEntryPoints::irq_9, 1, 0);
+			gates[0x2a].setInterruptGate(IntEntryPoints::irq_10, 1, 0);
+			gates[0x2b].setInterruptGate(IntEntryPoints::irq_11, 1, 0);
+			gates[0x2c].setInterruptGate(IntEntryPoints::irq_12, 1, 0);
+			gates[0x2d].setInterruptGate(IntEntryPoints::irq_13, 1, 0);
+			gates[0x2e].setInterruptGate(IntEntryPoints::irq_14, 1, 0);
+			gates[0x2f].setInterruptGate(IntEntryPoints::irq_15, 1, 0);
 
-		// os callback
-		gates[0x30].setInterruptGate(isr_30, 1, 3);
+			// os callback
+			gates[0x30].setInterruptGate(IntEntryPoints::isr_30, 1, 3);
+		}
 
 		// load idt
 		IDT_descriptor descriptor((qword)(gates), sizeof(Gate) * IDT_LENGTH - 1);
@@ -187,7 +197,14 @@ namespace IDT
 		irqOffset = 0x20;
 		PIC::Initialize(irqOffset);
 
+		// init irqHandler list
+		irqHandlers = new std::vector<IrqHandler>[16];
+
 		kernelPaging = &PageMapLevel4::getCurrent();
+	}
+	void CleanUp()
+	{
+		delete[] irqHandlers;
 	}
 
 	const char *exceptionMessages[0x20] =
@@ -247,8 +264,11 @@ namespace IDT
 	extern "C" void exceptionHandler(registers_t &regs, qword int_no, qword err_no)
 	{
 		// if (int_no == 7 || int_no == 6)
-		// 	if (checkSpurious(regs))
-		// 		return;
+		if (checkSpurious(regs))
+		{
+			// cout << "Coming from ISR " << int_no << '\n';
+			return;
+		}
 
 		word irqIsr = PIC::getISR();
 		if (irqIsr)
@@ -300,18 +320,23 @@ namespace IDT
 	}
 	extern "C" void irqHandler(registers_t &regs, qword irq_no, bool spurious)
 	{
-		if (irq_no != 0 && irq_no != 1)
+		if (irq_no != 0 &&
+			irq_no != 1 &&
+			irq_no != 11)
 		{
 			cout << (spurious ? "SIRQ: " : "IRQ: ") << irq_no << '\n';
 		}
-		if (irqHandlers[irq_no])
-			irqHandlers[irq_no](regs);
+
+		for (auto handler : irqHandlers[irq_no])
+			handler(regs);
 
 		PIC::EndOfInterrupt(irq_no);
 	}
 
 	void registerIrqHandler(byte irq_no, IrqHandler handler)
 	{
-		irqHandlers[irq_no] = handler;
+		disableInterrupts();
+		irqHandlers[irq_no].push_back(handler);
+		enableInterrupts();
 	}
 }

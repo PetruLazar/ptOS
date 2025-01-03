@@ -3,6 +3,7 @@
 #include "ide.h"
 #include "ahci.h"
 #include <math.h>
+#include "../../utils/isriostream.h"
 
 using namespace PCI;
 using namespace std;
@@ -98,7 +99,7 @@ namespace Disk
 	void StorageDevice::detectPartitions()
 	{
 		byte *bootSector = new byte[512];
-		if (access(accessDir::read, 0, 1, bootSector) != result::success)
+		if ((result)read(this, 0, 1, bootSector) != result::success)
 			return;
 		MBRpartitionEntry *entries = (MBRpartitionEntry *)(bootSector + 0x1be);
 
@@ -119,7 +120,7 @@ namespace Disk
 					GPTHeader *gpt = (GPTHeader *)new byte[512];
 					uint lbaStart = entries[i].lbaStart;
 					delete[] bootSector;
-					if (access(accessDir::read, lbaStart, 1, (byte *)gpt) != result::success)
+					if ((result)read(this, lbaStart, 1, (byte *)gpt) != result::success)
 						return;
 					if (string(gpt->signature, 8) != "EFI PART" || lbaStart != gpt->headerLba || gpt->partitionEntrySize != sizeof(GPTEntry))
 					{
@@ -128,7 +129,7 @@ namespace Disk
 					}
 					ull partitionArrayLbaLen = integerCeilDivide(gpt->partitionCount * gpt->partitionEntrySize, 0x200);
 					GPTEntry *gptEntries = (GPTEntry *)new byte[partitionArrayLbaLen * 0x200];
-					if (access(accessDir::read, gpt->partitionArrayLba, partitionArrayLbaLen, (byte *)gptEntries) != result::success)
+					if ((result)read(this, gpt->partitionArrayLba, partitionArrayLbaLen, (byte *)gptEntries) != result::success)
 					{
 						delete gpt;
 						return;
@@ -171,5 +172,31 @@ namespace Disk
 				partitions.push_back(part);
 			}
 		delete[] bootSector;
+	}
+
+	void Syscall(registers_t &regs)
+	{
+		// prototype implementation, only accept calls from cpl 0
+		if (regs.cs & 0b11 != 0)
+		{
+			regs.rax = (word)result::unknownError;
+			return;
+		}
+
+		switch (regs.rbx)
+		{
+		case SYSCALL_DISK_READ:
+		case SYSCALL_DISK_WRITE:
+			StorageDevice *device = (StorageDevice *)regs.rdi;
+			uint startLba = regs.rsi,
+				 numsec = regs.rdx;
+			byte *buffer = (byte *)regs.rcx;
+			accessDir dir = regs.rbx == SYSCALL_DISK_READ ? accessDir::read : accessDir::write;
+			// buffer needs translation and validation before actual operation
+			result res = device->driver_access(regs, dir, startLba, numsec, buffer);
+			if (res != result::success)
+				regs.rax = (word)res;
+			return;
+		}
 	}
 }

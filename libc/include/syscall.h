@@ -11,6 +11,7 @@
 #define SYSCALL_PROGENV 4
 #define SYSCALL_CURSOR 5
 #define SYSCALL_TIME 6
+#define SYSCALL_DISK 7
 
 #define SYSCALL_SCREEN_CLEAR 0
 #define SYSCALL_SCREEN_PRINTSTR 1
@@ -31,6 +32,7 @@
 #define SYSCALL_PROGENV_EXIT 0
 #define SYSCALL_PROGENV_WAITFORTASK 1
 #define SYSCALL_PROGENV_WAITFORTHREAD 2
+#define SYSCALL_PROGENV_CREATETHREAD 3
 // #define SYSCALL_PROGENV_ALLOCHEAP 3
 // #define SYSCALL_PROGENV_HEAPFULL 4
 // #define SYSCALL_PROGENV_HEAPCORRUPTION 5
@@ -40,6 +42,10 @@
 
 #define SYSCALL_TIME_GET 0
 #define SYSCALL_TIME_SLEEP 1
+
+#define SYSCALL_DISK_READ 0
+#define SYSCALL_DISK_WRITE 1
+#define SYSCALL_DISK_LIST 3
 
 inline void syscall_breakpoint()
 {
@@ -154,6 +160,26 @@ namespace Scheduler
 		asm("int $0x30"
 			: "=a"(returnValue)
 			: "a"(SYSCALL_PROGENV), "b"(SYSCALL_PROGENV_WAITFORTASK), "D"(task));
+		return returnValue;
+	}
+}
+
+namespace Disk
+{
+	inline uint read(void *diskPtr, uint startLba, uint sectorCount, byte *buffer)
+	{
+		uint returnValue;
+		asm("int $0x30"
+			: "=a"(returnValue)
+			: "a"(SYSCALL_DISK), "b"(SYSCALL_DISK_READ), "D"(diskPtr), "S"(startLba), "d"(sectorCount), "c"(buffer));
+		return returnValue;
+	}
+	inline uint write(void *diskPtr, uint startLba, uint sectorCount, byte *buffer)
+	{
+		uint returnValue;
+		asm("int $0x30"
+			: "=a"(returnValue)
+			: "a"(SYSCALL_DISK), "b"(SYSCALL_DISK_WRITE), "D"(diskPtr), "S"(startLba), "d"(sectorCount), "c"(buffer));
 		return returnValue;
 	}
 }

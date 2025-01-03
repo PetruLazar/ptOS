@@ -2,7 +2,6 @@
 #include "disk.h"
 #include "../../cpu/ports.h"
 #include <iostream.h>
-#include "../../cpu/idt.h"
 #include "../../core/sys.h"
 #include "../../core/filesystem/filesystem.h"
 
@@ -185,7 +184,7 @@ namespace IDE
 			return "Channel " + to_string(channel) + ", drive " + to_string(drive) + " of IDE Controller on " + controller->pciLocation.to_string();
 		}
 
-		virtual result access(accessDir dir, uint lba, uint numsects, byte *buffer_) override
+		virtual result driver_access(registers_t &regs, accessDir dir, uint lba, uint numsects, byte *buffer_) override
 		{
 			accessMode mode;
 			bool dma;

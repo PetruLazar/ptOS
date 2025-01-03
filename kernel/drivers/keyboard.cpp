@@ -77,7 +77,7 @@ namespace Keyboard
 	}
 
 	ModKeys currModKeys;
-	void insertEvent(const KeyEvent &event)
+	void insertEvent(registers_t &regs, const KeyEvent &event)
 	{
 		eventQueue[queueEnd++] = event;
 
@@ -97,7 +97,7 @@ namespace Keyboard
 				req.blockedThread->getRegs().rax = returnValue->getChar();
 
 			// call scheduler
-			Scheduler::unblockThread(keyboardDriverThread, req.blockedThread);
+			Scheduler::unblockThread(regs, keyboardDriverThread, req.blockedThread);
 
 			// dequeue request
 			requests->erase(0);
@@ -381,7 +381,7 @@ namespace Keyboard
 			KeyCode::unknown,
 		}};
 
-	void EventListener(registers_t &)
+	void EventListener(registers_t &regs)
 	{
 		static bool extendedScancode = false;
 		byte scanCode = inb(dataPort);
@@ -439,7 +439,7 @@ namespace Keyboard
 					}
 					key = KeyCode((byte)key | releasedFlag);
 					KeyEvent event = KeyEvent(key, currModKeys);
-					insertEvent(event);
+					insertEvent(regs, event);
 
 					switch (event.getKeyCode())
 					{

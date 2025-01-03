@@ -2,6 +2,7 @@
 #include <types.h>
 #include <string.h>
 #include "../pci.h"
+#include "../../cpu/idt.h"
 
 namespace Disk
 {
@@ -105,7 +106,7 @@ namespace Disk
 		virtual std::string getModel() = 0;
 		virtual std::string getLocation() = 0;
 
-		virtual result access(accessDir dir, uint lba, uint numsec, byte *buffer) = 0;
+		virtual result driver_access(registers_t &regs, accessDir dir, uint lba, uint numsec, byte *buffer) = 0;
 	};
 
 	extern std::vector<StorageDevice *> *devices;
@@ -113,4 +114,6 @@ namespace Disk
 	void Initialize();
 	void CleanUp();
 	void ControllerDetected(PCI::PCIDevice &device);
+
+	void Syscall(registers_t &regs);
 }

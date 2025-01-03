@@ -3,6 +3,7 @@
 #include "../utils/time.h"
 #include "scheduler.h"
 #include "mem.h"
+#include "../drivers/disk/disk.h"
 
 using namespace ISR::std;
 
@@ -34,6 +35,8 @@ extern "C" void os_serviceHandler(registers_t &regs)
 		return Syscall_Time(regs);
 	case SYSCALL_PROGENV:
 		return Syscall_ProgEnv(regs);
+	case SYSCALL_DISK:
+		return Disk::Syscall(regs);
 	}
 }
 

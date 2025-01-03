@@ -21,6 +21,8 @@
 #include <syscall.h>
 using namespace std;
 
+#include "drivers/disk/ahci.h"
+
 #define QEMU
 
 // calling convention: 	rdi, rsi, rdx, rcx, r8, r9, stack...
@@ -56,18 +58,17 @@ extern void main(KernelInfo &info)
 	Screen::Initialize();
 
 	IDT::Initialize((byte *)IDT_ADDRESS);
+	GDT::Initialize((byte *)GDT_ADDRESS, (byte *)TSS_ADDRESS, (byte *)INT_RING0_STACK);
 
 	Scheduler::Initialize();
 	Time::Initialize();
 	Keyboard::Initialize();
 
-	GDT::Initialize((byte *)GDT_ADDRESS, (byte *)TSS_ADDRESS, (byte *)INT_RING0_STACK);
+	enableInterrupts();
 
 	Disk::Initialize();
 	Filesystem::Initialize();
 	PCI::InitializeDevices();
-
-	enableInterrupts();
 
 	terminal();
 
@@ -77,6 +78,7 @@ extern void main(KernelInfo &info)
 	Disk::CleanUp();
 	Keyboard::CleanUp();
 	Scheduler::CleanUp();
+	IDT::CleanUp();
 	Screen::Cleanup();
 
 	ull currAllocCount = Memory::Heap::getAllocationCountFromSelected();
@@ -323,7 +325,7 @@ void terminal()
 				ull clk = clock();
 				Time::sleep(1000);
 				ull diff = clock() - clk;
-				cout << "Average: " << diff << '\n';
+				cout << "Measured Average over 1s: " << diff << '\n';
 			}
 			else if (cmd == "vendor")
 			{

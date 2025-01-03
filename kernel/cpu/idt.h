@@ -46,6 +46,7 @@ namespace IDT
 	};
 
 	void Initialize(byte *IDT_address);
+	void CleanUp();
 
 	void registerIrqHandler(byte irq_no, IrqHandler handler);
 };

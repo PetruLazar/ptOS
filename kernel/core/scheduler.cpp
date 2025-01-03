@@ -319,7 +319,7 @@ namespace Scheduler
 		// thread not found, blocking failed
 		return false;
 	}
-	void unblockThread(Thread *blockingThread, Thread *blockedThread)
+	void unblockThread(registers_t &regs, Thread *blockingThread, Thread *blockedThread)
 	{
 		// do the actual unblocking
 		ull waitingThreadsCount = waitingThreads->getSize();
@@ -329,11 +329,25 @@ namespace Scheduler
 			if (waitingThread == blockedThread && waitingThread->getBlocker() == blockingThread)
 			{
 				waitingThreads->erase(i);
-				executingThreads->push_back(blockedThread);
-
+				if (!blockedThread->getParentTask()->isDead())
+				{
+					// blockedThread is still alive
+					executingThreads->push_back(blockedThread);
+				}
+				else
+				{
+					// blockedThread is dead (someone else killed it, or the main thread of it's task exited)
+					// do clean-up
+					delete blockedThread;
+					return; // nothing else to do
+				}
 				break;
 			}
 		}
+
+		// if cpu is idle, switch to blockedThread
+		if (getCurrentThread() == nullptr)
+			preempt(regs, preemptReason::timeSliceEnded);
 
 		// do the cleanup if blockedThread is already dead
 	}

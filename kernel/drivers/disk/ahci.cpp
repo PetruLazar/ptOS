@@ -1,9 +1,11 @@
 #include "ahci.h"
 #include "disk.h"
-#include <iostream.h>
+#include "../../utils/isriostream.h"
+// #include <iostream.h>
 #include "../../core/paging.h"
 #include "../../core/mem.h"
 #include "../../core/filesystem/filesystem.h"
+#include "../../core/scheduler.h"
 
 using namespace Disk;
 using namespace PCI;
@@ -180,14 +182,19 @@ namespace AHCI
 	};
 	vector<Controller *> *controllers;
 
+	// last syscall data for irq handler
+	bool waiting = false;
+	byte port = 0;
+	Thread *kernelThread, *blockedThread;
+
 	struct StorageDevice : public Disk::StorageDevice
 	{
-		Controller *controller;
+		Controller *volatile controller;
 		ull size;
 		byte portNr;
 		char model[41];
 
-		int findCmdSlot(Port &port)
+		int findCmdSlot(volatile Port &port)
 		{
 			uint slots = port.SATAactive | port.commandIssue;
 			for (uint i = 0; i < controller->cmdSlots; i++)
@@ -207,7 +214,7 @@ namespace AHCI
 		}
 		virtual bool getID(byte buffer[512])
 		{
-			Port &port = controller->regs->ports[portNr];
+			volatile Port &port = controller->regs->ports[portNr];
 			port.interruptStatus = (uint)-1;
 			// find cmd slot
 			int slot = findCmdSlot(port);
@@ -247,7 +254,7 @@ namespace AHCI
 			fis.count = 1;
 
 			// wait for port to not be busy
-			int timeout = 0;
+			volatile int timeout = 0;
 			while ((port.taskFileData & (Port::ATA_DEV_BUSY | Port::ATA_DEV_DRQ)) && timeout < 1000000)
 				timeout++;
 			if (timeout == 1000000)
@@ -268,7 +275,7 @@ namespace AHCI
 
 			return true;
 		}
-		virtual result access(accessDir dir, uint lba, uint numsec, byte *buffer) override
+		virtual result driver_access(registers_t &regs, accessDir dir, uint lba, uint numsec, byte *buffer) override
 		{
 			// read-only for now
 			if (dir == accessDir::write)
@@ -277,7 +284,7 @@ namespace AHCI
 				return result::unknownError;
 			}
 
-			Port &port = controller->regs->ports[portNr];
+			volatile Port &port = controller->regs->ports[portNr];
 			port.interruptStatus = (uint)-1;
 			// find cmd slot
 			int slot = findCmdSlot(port);
@@ -337,23 +344,39 @@ namespace AHCI
 			port.commandIssue |= 1 << slot;
 
 			// wait for completion
-			while (true)
+			Thread *callingThread = Scheduler::getCurrentThread();
+			if (Scheduler::waitForThread(regs, kernelThread))
 			{
-				if ((port.commandIssue & (1 << slot)) == 0)
-					break;
-				if (port.interruptStatus & Port::TFES)
-					return result::deviceFault;
+				waiting = true;
+				AHCI::port = portNr;
+				blockedThread = callingThread;
+				return result::success;
 			}
-			if (port.interruptStatus & Port::TFES)
-				return result::deviceFault;
 
-			return result::success;
+			// while (true)
+			// {
+			// 	if ((port.commandIssue & (1 << slot)) == 0)
+			// 		break;
+			// 	if (port.interruptStatus & Port::TFES)
+			// 		return result::deviceFault;
+			// }
+			// if (port.interruptStatus & Port::TFES)
+			// 	return result::deviceFault;
+
+			return result::unknownError;
 		}
 	};
+
+	void EventHandler(registers_t &regs);
 
 	void Initialize()
 	{
 		controllers = new vector<Controller *>;
+
+		// temporary: the interrupt number could be different than 11
+		IDT::registerIrqHandler(11, EventHandler);
+
+		kernelThread = Scheduler::getCurrentThread();
 	}
 	void CleanUp()
 	{
@@ -369,6 +392,8 @@ namespace AHCI
 
 	void ControllerDetected(PCIDevice &device)
 	{
+		PCIDeviceHeader *header = &device.header;
+
 		Controller *controller = new Controller;
 		controllers->push_back(controller);
 		controller->regs = (Registers *)(ull)header->bar5;
@@ -382,7 +407,11 @@ namespace AHCI
 		if (!current.getPhysicalAddress((ull)header->bar5, physicalAddress))
 			current.mapRegion(freeSpace, (ull)header->bar5, (ull)header->bar5, 0x2000, true, false);
 
-		// preform bios handoff is supported
+		// preform bios handoff if supported
+
+		// enable global AHCI interrupts
+		controller->regs->interruptStatus = controller->regs->interruptStatus;
+		controller->regs->globalHostControl |= 0x02;
 
 		uint implementedPorts = controller->regs->portImplemented;
 		controller->cmdSlots = ((controller->regs->capability >> 8) & 0x1f) + 1;
@@ -420,6 +449,26 @@ namespace AHCI
 					dev->controller = controller;
 					dev->portNr = i;
 					devices->push_back(dev);
+
+					// turn on interrupts for port
+					port.interruptStatus = port.interruptStatus;
+					port.interruptEnable |= (1 << 0) |
+											(1 << 1) |
+											(1 << 2) |
+											(1 << 3) |
+											(1 << 4) |
+											(1 << 5) |
+											(1 << 6) |
+											(1 << 7) |
+											(1 << 22) |
+											(1 << 23) |
+											(1 << 24) |
+											(1 << 26) |
+											(1 << 27) |
+											(1 << 28) |
+											(1 << 29) |
+											(1 << 30) |
+											(1 << 31);
 
 					// allocate memory for the device if it is not
 					if (!port.cmdListBase)
@@ -487,5 +536,49 @@ namespace AHCI
 
 			implementedPorts >>= 1;
 		}
+
+		cout << "Hello AHCI!\n";
+		cout << "\theader->interruptPin = " << header->interruptPin << '\n';
+		cout << "\theader->interruptLine = " << header->interruptLine << '\n';
+		cout << "\theader->command bit 10 = " << ((header->command >> 10) & 1) << '\n';
+		cout << "\tcontroller->regs->globalHostControl bit 1 = " << ((controller->regs->globalHostControl >> 1) & 1) << '\n';
+		cout << "\tcontroller->regs->portImplemented = " << ostream::base::bin << controller->regs->portImplemented << ostream::base::dec << '\n';
+		for (uint i = 0; i < 32; i++)
+			if ((controller->regs->portImplemented >> i) & 1)
+			{
+				cout << "\tport[" << i << "].interruptEnable = "
+					 << ostream::base::bin << controller->regs->ports[i].interruptEnable << ostream::base::dec << '\n';
+				controller->regs->ports[i].interruptStatus = 0;
+			}
+
+		// PIC::EndOfInterrupt(header->interruptLine);
+	}
+
+	void EventHandler(registers_t &regs)
+	{
+		// get controller
+		Controller *controller = controllers->at(0);
+
+		// get interrupt status registers
+		uint controllerInterruptStatus = controller->regs->interruptStatus,
+			 portInterruptStatus = controller->regs->ports[0].interruptStatus;
+
+		// clear interrupt flags
+		controller->regs->interruptStatus = controllerInterruptStatus;
+		controller->regs->ports[0].interruptStatus = portInterruptStatus;
+
+		if (!waiting)
+		{
+			ISR::std::cout << "AHCI IRQ while not waiting for anything...\n";
+			return; // too many syscalls...
+		}
+
+		// actual handling of the interrupt
+		waiting = false;
+		if (portInterruptStatus & Port::TFES)
+			blockedThread->getRegs().rax = (word)result::deviceFault;
+		else
+			blockedThread->getRegs().rax = (word)result::success;
+		Scheduler::unblockThread(regs, kernelThread, blockedThread);
 	}
 }
