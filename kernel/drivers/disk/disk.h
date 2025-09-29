@@ -6,6 +6,16 @@
 
 namespace Disk
 {
+	// specific driver syscall bit
+	constexpr uint SYSCALL_DISK_DRIVER_INTERNAL = 1 << 31;
+
+	// value for each disk driver
+	constexpr uint SYSCALL_DISK_IDE_SPECIFIC = 0 << 16;
+	constexpr uint SYSCALL_DISK_AHCI_SPECIFIC = 1 << 16;
+
+	// ide specific syscalls
+	constexpr uint SYSCALL_DISK_IDE_GETINFO = SYSCALL_DISK_DRIVER_INTERNAL | SYSCALL_DISK_IDE_SPECIFIC | 0;
+
 	enum class ATAerror : byte
 	{
 		badBlock = 0x80,

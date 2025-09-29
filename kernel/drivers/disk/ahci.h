@@ -1,5 +1,6 @@
 #pragma once
 #include "../pci.h"
+#include "../../cpu/idt.h"
 
 namespace AHCI
 {
@@ -7,4 +8,6 @@ namespace AHCI
 	void CleanUp();
 
 	void ControllerDetected(PCI::PCIDevice &device);
+
+	void Syscall(registers_t &regs);
 }

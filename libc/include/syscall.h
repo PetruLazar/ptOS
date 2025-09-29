@@ -45,7 +45,9 @@
 
 #define SYSCALL_DISK_READ 0
 #define SYSCALL_DISK_WRITE 1
-#define SYSCALL_DISK_LIST 3
+#define SYSCALL_DISK_COUNT 2
+#define SYSCALL_DISK_GETSIZE 3
+#define SYSCALL_DISK_GETMODEL 4
 
 inline void syscall_breakpoint()
 {

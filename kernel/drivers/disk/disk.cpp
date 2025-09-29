@@ -187,6 +187,7 @@ namespace Disk
 		{
 		case SYSCALL_DISK_READ:
 		case SYSCALL_DISK_WRITE:
+		{
 			StorageDevice *device = (StorageDevice *)regs.rdi;
 			uint startLba = regs.rsi,
 				 numsec = regs.rdx;
@@ -197,6 +198,21 @@ namespace Disk
 			if (res != result::success)
 				regs.rax = (word)res;
 			return;
+		}
+		default:
+		{
+			if (regs.rbx & SYSCALL_DISK_DRIVER_INTERNAL == 0)
+				return; // not an internal syscall
+
+			switch (regs.rbx & 0x7fff0000)
+			{
+			case SYSCALL_DISK_IDE_SPECIFIC:
+				return;
+			case SYSCALL_DISK_AHCI_SPECIFIC:
+				return AHCI::Syscall(regs);
+			}
+			return;
+		}
 		}
 	}
 }

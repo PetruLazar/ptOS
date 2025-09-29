@@ -17,8 +17,20 @@ using namespace std;
 #define SATA_SIG_SEMB 0xC33C0101  // Enclosure management bridge
 #define SATA_SIG_PM 0x96690101	  // Port multiplier
 
+// ahci specific syscalls
+constexpr uint SYSCALL_DISK_AHCI_GETINFO = SYSCALL_DISK_DRIVER_INTERNAL | SYSCALL_DISK_AHCI_SPECIFIC | 0;
+
 namespace AHCI
 {
+	inline result getInfo(StorageDevice *device, byte buffer[512])
+	{
+		word res;
+		asm("int $0x30"
+			: "=a"(res)
+			: "a"(SYSCALL_DISK), "b"(SYSCALL_DISK_AHCI_GETINFO), "D"(device), "S"(buffer));
+		return (result)res;
+	}
+
 	enum class ATAcmd : byte
 	{
 		readPIO = 0x20,
@@ -189,6 +201,8 @@ namespace AHCI
 
 	struct StorageDevice : public Disk::StorageDevice
 	{
+	private:
+	public:
 		Controller *volatile controller;
 		ull size;
 		byte portNr;
@@ -205,29 +219,62 @@ namespace AHCI
 			}
 			return -1;
 		}
+		result prepCmd(CmdHeader *&cmdHeader, volatile Port &port, int &slot)
+		{
+			//  find cmd slot
+			slot = findCmdSlot(port);
+			if (slot == -1)
+				return result::unknownError;
 
+			cmdHeader = &port.cmdListBase[slot];
+			return result::success;
+		}
+		result sendCmd(registers_t &regs, volatile Port &port, int slot)
+		{
+			// wait for port to not be busy
+			int timeout = 0;
+			while ((port.taskFileData & (Port::ATA_DEV_BUSY | Port::ATA_DEV_DRQ)) && timeout < 1000000)
+			{
+				ISR::std::cout << "AHCI disk is busy\n";
+				timeout++;
+			}
+			if (timeout == 1000000)
+				return result::deviceFault;
+
+			port.commandIssue |= 1 << slot;
+
+			// wait for completion
+			Thread *callingThread = Scheduler::getCurrentThread();
+			if (Scheduler::waitForThread(regs, kernelThread))
+			{
+				waiting = true;
+				AHCI::port = portNr;
+				blockedThread = callingThread;
+				return result::success;
+			}
+			return result::unknownError;
+		}
 		virtual ull getSize() override { return size; }
 		virtual string getModel() override { return model; }
 		virtual string getLocation() override
 		{
 			return "Slot " + to_string(portNr) + " of AHCI Controller on " + controller->pciLocation.to_string();
 		}
-		virtual bool getID(byte buffer[512])
+		result getIdentification(registers_t &regs, byte buffer[512])
 		{
 			volatile Port &port = controller->regs->ports[portNr];
-			port.interruptStatus = (uint)-1;
-			// find cmd slot
-			int slot = findCmdSlot(port);
-			if (slot == -1)
-				return false;
 
-			// prepare header
-			CmdHeader &cmdHeader = port.cmdListBase[slot];
-			cmdHeader.setFISdwordCount(sizeof(FIS_reg_h2d) / sizeof(uint));
-			cmdHeader.setWrite(false); // set according to dir
-			cmdHeader.prdtLength = 1;
+			CmdHeader *cmdHeader;
+			int slot;
+			result res = prepCmd(cmdHeader, port, slot);
+			if (res != result::success)
+				return res;
 
-			CmdTable *cmdTable = cmdHeader.cmdTable;
+			cmdHeader->setFISdwordCount(sizeof(FIS_reg_h2d) / sizeof(uint));
+			cmdHeader->setWrite(false); // set according to dir
+			cmdHeader->prdtLength = 1;
+
+			CmdTable *cmdTable = cmdHeader->cmdTable;
 			memset(cmdTable, sizeof(CmdTable), 0);
 
 			// fill PRDT: 8KB = 16 sectors per entry
@@ -253,57 +300,37 @@ namespace AHCI
 
 			fis.count = 1;
 
-			// wait for port to not be busy
-			volatile int timeout = 0;
-			while ((port.taskFileData & (Port::ATA_DEV_BUSY | Port::ATA_DEV_DRQ)) && timeout < 1000000)
-				timeout++;
-			if (timeout == 1000000)
-				return false;
-
-			port.commandIssue = 1 << slot;
-
-			// wait for completion
-			while (true)
-			{
-				if ((port.commandIssue & (1 << slot)) == 0)
-					break;
-				if (port.interruptStatus & Port::TFES)
-					return false;
-			}
-			if (port.interruptStatus & Port::TFES)
-				return false;
-
-			return true;
+			return sendCmd(regs, port, slot);
 		}
 		virtual result driver_access(registers_t &regs, accessDir dir, uint lba, uint numsec, byte *buffer) override
 		{
 			// read-only for now
-			if (dir == accessDir::write)
-			{
-				cout << "AHCI driver is read-only so far\n";
-				return result::unknownError;
-			}
+			// if (dir == accessDir::write)
+			// {
+			// 	ISR::std::cout << "AHCI driver is read-only so far\n";
+			// 	return result::unknownError;
+			// }
 
 			volatile Port &port = controller->regs->ports[portNr];
-			port.interruptStatus = (uint)-1;
-			// find cmd slot
-			int slot = findCmdSlot(port);
-			if (slot == -1)
-				return result::unknownError;
+
+			CmdHeader *cmdHeader;
+			int slot;
+			result res = prepCmd(cmdHeader, port, slot);
+			if (res != result::success)
+				return res;
 
 			// prepare header
-			CmdHeader &cmdHeader = port.cmdListBase[slot];
-			cmdHeader.setFISdwordCount(sizeof(FIS_reg_h2d) / sizeof(uint));
-			cmdHeader.setWrite(false); // set according to dir
-			cmdHeader.prdtLength = (word)(numsec - 1 >> 4) + 1;
-			cmdHeader.prdByteCount = 0;
+			cmdHeader->setFISdwordCount(sizeof(FIS_reg_h2d) / sizeof(uint));
+			cmdHeader->setWrite(false); // set according to dir
+			cmdHeader->prdtLength = (word)(numsec - 1 >> 4) + 1;
+			cmdHeader->prdByteCount = 0;
 
-			CmdTable *cmdTable = cmdHeader.cmdTable;
-			memset(cmdTable, sizeof(CmdTable) + (cmdHeader.prdtLength - 1) * sizeof(PRDTentry), 0);
+			CmdTable *cmdTable = cmdHeader->cmdTable;
+			memset(cmdTable, sizeof(CmdTable) + (cmdHeader->prdtLength - 1) * sizeof(PRDTentry), 0);
 
 			// fill PRDT: 8KB = 16 sectors per entry
 			int i;
-			for (i = 0; i < (int)cmdHeader.prdtLength - 1; i++)
+			for (i = 0; i < (int)cmdHeader->prdtLength - 1; i++)
 			{
 				PRDTentry &entry = cmdTable->prdt[i];
 				entry.dataAddress = (ull)buffer;
@@ -334,36 +361,7 @@ namespace AHCI
 
 			fis.count = numsec;
 
-			// wait for port to not be busy
-			int timeout = 0;
-			while ((port.taskFileData & (Port::ATA_DEV_BUSY | Port::ATA_DEV_DRQ)) && timeout < 1000000)
-				timeout++;
-			if (timeout == 1000000)
-				return result::deviceFault;
-
-			port.commandIssue |= 1 << slot;
-
-			// wait for completion
-			Thread *callingThread = Scheduler::getCurrentThread();
-			if (Scheduler::waitForThread(regs, kernelThread))
-			{
-				waiting = true;
-				AHCI::port = portNr;
-				blockedThread = callingThread;
-				return result::success;
-			}
-
-			// while (true)
-			// {
-			// 	if ((port.commandIssue & (1 << slot)) == 0)
-			// 		break;
-			// 	if (port.interruptStatus & Port::TFES)
-			// 		return result::deviceFault;
-			// }
-			// if (port.interruptStatus & Port::TFES)
-			// 	return result::deviceFault;
-
-			return result::unknownError;
+			return sendCmd(regs, port, slot);
 		}
 	};
 
@@ -451,7 +449,6 @@ namespace AHCI
 					devices->push_back(dev);
 
 					// turn on interrupts for port
-					port.interruptStatus = port.interruptStatus;
 					port.interruptEnable |= (1 << 0) |
 											(1 << 1) |
 											(1 << 2) |
@@ -469,6 +466,7 @@ namespace AHCI
 											(1 << 29) |
 											(1 << 30) |
 											(1 << 31);
+					port.interruptStatus = port.interruptStatus;
 
 					// allocate memory for the device if it is not
 					if (!port.cmdListBase)
@@ -502,7 +500,7 @@ namespace AHCI
 
 					// identify cmd
 					word *identify = new word[256];
-					if (dev->getID((byte *)identify))
+					if (getInfo(dev, (byte *)identify) == result::success)
 					{
 						if (identify[83] & (1 << 10))
 							// lba48
@@ -537,48 +535,107 @@ namespace AHCI
 			implementedPorts >>= 1;
 		}
 
-		cout << "Hello AHCI!\n";
-		cout << "\theader->interruptPin = " << header->interruptPin << '\n';
-		cout << "\theader->interruptLine = " << header->interruptLine << '\n';
-		cout << "\theader->command bit 10 = " << ((header->command >> 10) & 1) << '\n';
-		cout << "\tcontroller->regs->globalHostControl bit 1 = " << ((controller->regs->globalHostControl >> 1) & 1) << '\n';
-		cout << "\tcontroller->regs->portImplemented = " << ostream::base::bin << controller->regs->portImplemented << ostream::base::dec << '\n';
-		for (uint i = 0; i < 32; i++)
-			if ((controller->regs->portImplemented >> i) & 1)
-			{
-				cout << "\tport[" << i << "].interruptEnable = "
-					 << ostream::base::bin << controller->regs->ports[i].interruptEnable << ostream::base::dec << '\n';
-				controller->regs->ports[i].interruptStatus = 0;
-			}
-
-		// PIC::EndOfInterrupt(header->interruptLine);
+		// cout << "Hello AHCI!\n";
+		// cout << "\theader->interruptPin = " << header->interruptPin << '\n';
+		// cout << "\theader->interruptLine = " << header->interruptLine << '\n';
+		// cout << "\theader->command bit 10 = " << ((header->command >> 10) & 1) << '\n';
+		// cout << "\tcontroller->regs->globalHostControl bit 1 = " << ((controller->regs->globalHostControl >> 1) & 1) << '\n';
+		// cout << "\tcontroller->regs->portImplemented = " << ostream::base::bin << controller->regs->portImplemented << ostream::base::dec << '\n';
+		// for (uint i = 0; i < 32; i++)
+		// 	if ((controller->regs->portImplemented >> i) & 1)
+		// 	{
+		// 		cout << "\tport[" << i << "].interruptEnable = "
+		// 			 << ostream::base::bin << controller->regs->ports[i].interruptEnable << ostream::base::dec << '\n';
+		// 		// controller->regs->ports[i].interruptStatus = 0;
+		// 	}
 	}
 
 	void EventHandler(registers_t &regs)
 	{
-		// get controller
-		Controller *controller = controllers->at(0);
+		bool handled = false;
 
-		// get interrupt status registers
-		uint controllerInterruptStatus = controller->regs->interruptStatus,
-			 portInterruptStatus = controller->regs->ports[0].interruptStatus;
-
-		// clear interrupt flags
-		controller->regs->interruptStatus = controllerInterruptStatus;
-		controller->regs->ports[0].interruptStatus = portInterruptStatus;
-
-		if (!waiting)
+		// poll controllers
+		for (auto *controller : *controllers)
 		{
-			ISR::std::cout << "AHCI IRQ while not waiting for anything...\n";
-			return; // too many syscalls...
+			// get controller interrupt status
+			uint controllerInterruptStatus = controller->regs->interruptStatus;
+
+			for (uint i = 0; i < 32; i++)
+			{
+				// check if port needs servicing
+				if (controllerInterruptStatus & (1 << i))
+				{
+					// get port structure
+					Port& port = controller->regs->ports[i];
+
+					// get port interrupt status
+					uint portInterruptStatus = port.interruptStatus;
+
+					if (!waiting)
+					{
+						ISR::std::cout << "AHCI IRQ while not waiting for anything...\n";
+						while (true)
+							;
+						return; // too many irqs...
+					}
+
+					waiting = false;
+
+					if (portInterruptStatus & Port::TFES)
+						blockedThread->getRegs().rax = (word)result::deviceFault;
+					else
+						blockedThread->getRegs().rax = (word)result::success;
+					handled = true;
+
+					// clear interrupt status
+					port.interruptStatus = portInterruptStatus;
+				}
+			}
+
+			// clear interrupt status
+			controller->regs->interruptStatus = controllerInterruptStatus;
+
+			if (handled)
+				Scheduler::unblockThread(regs, kernelThread, blockedThread);
 		}
 
-		// actual handling of the interrupt
-		waiting = false;
-		if (portInterruptStatus & Port::TFES)
-			blockedThread->getRegs().rax = (word)result::deviceFault;
-		else
-			blockedThread->getRegs().rax = (word)result::success;
-		Scheduler::unblockThread(regs, kernelThread, blockedThread);
+		// get controller
+		// volatile Controller *controller = controllers->at(0);
+		// // get interrupt status registers
+		// uint controllerInterruptStatus = controller->regs->interruptStatus,
+		// 	 portInterruptStatus = controller->regs->ports[0].interruptStatus;
+		// // clear interrupt flags
+		// controller->regs->interruptStatus = controllerInterruptStatus;
+		// controller->regs->ports[0].interruptStatus = portInterruptStatus;
+		// if (!waiting)
+		// {
+		// 	ISR::std::cout << "AHCI IRQ while not waiting for anything...\n";
+		// 	while (true)
+		// 		;
+		// 	return; // too many irqs...
+		// }
+		// // actual handling of the interrupt
+		// waiting = false;
+		// if (portInterruptStatus & Port::TFES)
+		// 	blockedThread->getRegs().rax = (word)result::deviceFault;
+		// else
+		// 	blockedThread->getRegs().rax = (word)result::success;
+		// Scheduler::unblockThread(regs, kernelThread, blockedThread);
+	}
+
+	void Syscall(registers_t &regs)
+	{
+		switch (regs.rbx)
+		{
+		case SYSCALL_DISK_AHCI_GETINFO:
+			StorageDevice *device = (StorageDevice *)regs.rdi;
+			byte *buffer = (byte *)regs.rsi;
+
+			// buffer needs translation and validation before actual operation
+			result res = device->getIdentification(regs, buffer);
+			if (res != result::success)
+				regs.rax = (word)res;
+			return;
+		}
 	}
 }
