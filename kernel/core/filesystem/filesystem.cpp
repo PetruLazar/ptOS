@@ -1,5 +1,6 @@
 #include "filesystem.h"
 #include "fat32.h"
+#include "ptfs.h"
 
 // #include "sys.h"
 #include "mem.h"
@@ -28,6 +29,8 @@ namespace Filesystem
 	{
 		// try load partition by type
 		if (FAT32::tryLoadPartition(part))
+			return true;
+		if (ptFS::tryLoadPartition(part))
 			return true;
 		return false;
 	}

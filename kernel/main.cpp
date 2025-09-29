@@ -17,6 +17,7 @@
 #include "core/paging.h"
 #include "core/scheduler.h"
 #include "core/explorer.h"
+#include "core/filesystem/ptfs.h"
 #define OMIT_FUNCS
 #include <syscall.h>
 using namespace std;
@@ -361,6 +362,34 @@ void terminal()
 				for (auto &part : disk->partitions)
 				{
 					cout << '\t' << toUpper(part->letter) << ": " << part->lbaLen << " sectors at " << part->lbaStart << ", " << part->type() << " partition\n";
+				}
+			}
+		}
+		else if (subCmd == "ptfsformat")
+		{
+			if (Disk::devices->getSize() < 2)
+				cout << "Disk 1 not detected.\n";
+			else if (Disk::devices->at(1)->partitions.getSize() < 3)
+				cout << "Disk 1 does not have 3 partitions";
+			else
+			{
+				Disk::Partition *&part = Disk::devices->at(1)->partitions[2];
+				// cout << "Formatting " << part->type() << " partition " << toUpper(part->letter) << " (" << part->lbaLen << " sectors at " << part->lbaStart << "). Continue (y)? ";
+
+				char answer = 'y';
+				// cin >> answer;
+				// cout << answer << '\n';
+				if (answer != 'y')
+				{
+					cout << "Operation was cancelled.\n";
+				}
+				else
+				{
+					bool res = Filesystem::ptFS::formatPartitionNaty(part);
+					// if (res)
+					// 	cout << "Formatting finished. Restart OS.\n";
+					// else
+					// 	cout << "Formatting Failed.\n";
 				}
 			}
 		}
