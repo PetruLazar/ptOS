@@ -483,7 +483,7 @@ SECOND_SECTOR:
 	cli
 
 	; go to long mode
-	mov eax, 10100000b ; set "physical address extension" and "page global enabled"
+	mov eax, 1010100000b ; set "physical address extension", "page global enabled" and "MMX support"
 	mov cr4, eax
 
 	mov eax, PAGING_LOW ; point cr3 to pml4
@@ -516,6 +516,14 @@ after_longmode_switch:
 	mov ss, ax
 
 	mov rsp, 0xFFFFFFFF80010000
+
+	; mov al, 0xcc
+	; mov rdi, 0xd000 ; start at 0xd000
+	; mov rcx, 0x3000 ; until 0x10000
+	; cld
+	; rep stosb
+	;jmp $
+
 	push qword 0
 	mov rbp, rsp
 
