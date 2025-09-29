@@ -101,7 +101,7 @@ namespace Scheduler
 			sleepingThreads->erase(0, wakeUpCount);
 
 		preempt_timer--;
-		if (!preempt_timer)
+		if (!preempt_timer || (getCurrentThread() == nullptr && executingThreads->getSize() > 0))
 		{
 			Scheduler::preempt(regs, preemptReason::timeSliceEnded);
 			preempt_timer = preempt_interval;
