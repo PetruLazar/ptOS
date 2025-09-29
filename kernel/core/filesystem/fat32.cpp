@@ -746,7 +746,7 @@ namespace Filesystem
 				if (cachedFATSector)
 					delete[] cachedFATSector;
 			}
-			virtual const char *type() { return "FAT32"; }
+			virtual const char *type() override { return "FAT32"; }
 
 			uint getFatEntry(uint index)
 			{
@@ -1313,7 +1313,7 @@ namespace Filesystem
 			ptr->fsInfoSect = part->lbaStart + ebr.FSinfoSectNr;
 			ptr->fsInfo = (FSInfoStruct *)fsInfoSector;
 
-			// put partition in FAT32 partition list
+			// put partition in filesystem partition list
 			registerPartition(ptr);
 
 			// replace partition pointer in Disk::StorageDevice

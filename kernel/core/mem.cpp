@@ -61,7 +61,9 @@ namespace Memory
 	void insertEntry(byte i, byte *start, qword len, RegionType type, uint acpiExtendableAttributes)
 	{
 		for (byte k = mapLength; k > i; k--)
+		{
 			memoryMap[k] = memoryMap[k - 1];
+		}
 		mapLength++;
 		memoryMap[i].base_address = start;
 		memoryMap[i].length = len;
