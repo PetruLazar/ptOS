@@ -466,6 +466,8 @@ void terminal()
 					const char16_t *programs[2] = {
 						u"hello1",
 						u"hello2"};
+					vector<Thread *> threads;
+					int duration = Time::time();
 					for (count; count > 0; count--)
 					{
 						for (auto *program : programs)
@@ -473,12 +475,15 @@ void terminal()
 							bool found = false;
 							for (auto &disk : *Disk::devices)
 							{
+								// cout << "DBG: " << disk->partitions.getSize() << "\n";
 								for (auto &part : disk->partitions)
 								{
+									// std::cout << "DBG: Reading\n";
 									Task *task = Task::createTask((char16_t)part->letter + string16(u":/programs/") + program + u".bin");
 									if (task)
 									{
-										Scheduler::add(task->getMainThread());
+										// Scheduler::add(task->getMainThread());
+										threads.push_back(task->getMainThread());
 										found = true;
 										break;
 									}
@@ -488,6 +493,22 @@ void terminal()
 							}
 						}
 					}
+					duration = Time::time() - duration;
+					cout << "Took " << duration << " ms.\n";
+
+					if (false)
+					{
+						disableInterrupts();
+						for (Thread *th : threads)
+							Scheduler::add(th);
+						enableInterrupts();
+					}
+					else
+					{
+						for (Thread *th : threads)
+							delete th;
+					}
+
 					break;
 				}
 				case 2:
@@ -524,8 +545,9 @@ void terminal()
 				case 3:
 				{
 					cout << "Test commencing:\n";
-					vector<int> v;
-					cout << v.getSize() << '\n';
+					float a = 5;
+					a /= 3;
+					a *= a;
 					break;
 				}
 				default:
@@ -538,32 +560,8 @@ void terminal()
 			cout << "Invalid command.\n";
 		}
 
-		/*switch (key)
-		{
-		case Keyboard::KeyCode::alpha3:
-		case Keyboard::KeyCode::numpad_3:
-		{
-		}
-		break;
-		case Keyboard::KeyCode::alpha7:
-		case Keyboard::KeyCode::numpad_7:
-		{
-			// test allocations, one at a time
-			break;
-		}
-		case Keyboard::KeyCode::alpha8:
-		case Keyboard::KeyCode::numpad_8:
-		{
-			// test stressing the allocator
-			break;
-		}
-		}*/
-
 		cmd.erase();
 	}
-
-	// some cleanup
-	// Screen::Cleanup();
 }
 
 void shutdown()
