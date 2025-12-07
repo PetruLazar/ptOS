@@ -25,18 +25,29 @@ Task *Task::createTask(const std::string16 &executableFileName)
 	byte *pageSpace = (byte *)Memory::Allocate(0x10000, 0x1000),
 		 *stack = (byte *)Memory::Allocate(0x10000, 0x1000),
 		 *heap = (byte *)Memory::Allocate(0x10000, 0x1000);
-	PageMapLevel4 *paging = (PageMapLevel4 *)pageSpace;
-	paging->clearAll();
-	qword freeSpace = (qword)(paging + 0x1);
-	paging->mapRegion(freeSpace, 0x100000, (qword)content, alignValueUpwards(len, 0x1000), true, true); // page loaded code
-	paging->mapRegion(freeSpace, 0x40000, (ull)stack, 0x10000, true, true);								// page stack
-	paging->mapRegion(freeSpace, 0x7f0000000000, (ull)heap, 0x10000, true, true);						// page heap
-	paging->mapRegion(freeSpace, 0xFFFFFFFF80000000, 0x0000, 0x80000, false, false);					// page kernel
-	// get interrupt stack physical address and map it
-	ull interruptStackPhysical;
-	paging->getCurrent().getPhysicalAddress(0xFFFFFFFF80080000, interruptStackPhysical, false);
-	paging->mapRegion(freeSpace, 0xFFFFFFFF80080000, interruptStackPhysical, 0x10000, false, false);
-	if (freeSpace > (qword)(pageSpace + 0x10000))
+	dword pageAllocationMap = 0xffff0000;
+
+	PageMapLevel4 *paging = PageMapLevel4::create(pageSpace, pageAllocationMap);
+	bool mappingFailed = false;
+	if (paging != nullptr)
+	{
+		if (!paging->mapRegion(pageSpace, pageAllocationMap, 0x100000, (qword)content, alignValueUpwards(len, 0x1000), true, true)) // page loaded code
+			mappingFailed = true;
+		if (!paging->mapRegion(pageSpace, pageAllocationMap, 0x40000, (ull)stack, 0x10000, true, true)) // page stack
+			mappingFailed = true;
+		if (!paging->mapRegion(pageSpace, pageAllocationMap, 0x7f0000000000, (ull)heap, 0x10000, true, true)) // page heap
+			mappingFailed = true;
+		if (!paging->mapRegion(pageSpace, pageAllocationMap, 0xFFFFFFFF80000000, 0x0000, 0x80000, false, false)) // page kernel
+			mappingFailed = true;
+		// get interrupt stack physical address and map it
+		ull interruptStackPhysical;
+		if (!paging->getCurrent().getPhysicalAddress(0xFFFFFFFF80080000, interruptStackPhysical, false))
+			mappingFailed = true;
+		if (!paging->mapRegion(pageSpace, pageAllocationMap, 0xFFFFFFFF80080000, interruptStackPhysical, 0x10000, false, false))
+			mappingFailed = true;
+	}
+
+	if (paging == nullptr || mappingFailed)
 	{
 		cout << "Ran out of space for the paging structure.\n";
 		delete[] pageSpace;
@@ -53,7 +64,7 @@ Task *Task::createTask(const std::string16 &executableFileName)
 	regs.rbp = regs.rsp = 0x50000;
 	regs.fs = regs.gs = regs.ss = GDT::USER_DS | 3;
 	regs.rflags = 0;
-	Task *task = new Task(false, pageSpace, content, heap);
+	Task *task = new Task(false, pageSpace, pageAllocationMap, content, heap);
 	Thread *thread = new Thread(task, regs, stack);
 	return task;
 }

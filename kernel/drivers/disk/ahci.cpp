@@ -1,6 +1,7 @@
 #include "ahci.h"
 #include "disk.h"
 #include "../../utils/isriostream.h"
+#include "../../core/sys.h"
 // #include <iostream.h>
 #include "../../core/paging.h"
 #include "../../core/mem.h"
@@ -403,7 +404,16 @@ namespace AHCI
 		PageMapLevel4 &current = PageMapLevel4::getCurrent();
 		ull physicalAddress;
 		if (!current.getPhysicalAddress((ull)header->bar5, physicalAddress))
-			current.mapRegion(freeSpace, (ull)header->bar5, (ull)header->bar5, 0x2000, true, false);
+		{
+			void* pageSpace;
+			dword pageAllocationMap;
+			Memory::GetPageSpace(pageSpace, pageAllocationMap);
+			if (!current.mapRegion(pageSpace, pageAllocationMap, (ull)header->bar5, (ull)header->bar5, 0x2000, true, false))
+			{
+				// handle error case...
+				System::blueScreen();
+			}
+		}
 
 		// preform bios handoff if supported
 

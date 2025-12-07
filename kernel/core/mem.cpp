@@ -36,6 +36,9 @@ namespace Memory
 		}
 	}
 
+	void *pageSpace;
+	dword pageAllocationMap;
+
 	byte mapLength, mapEntrySize;
 	class MapEntry
 	{
@@ -229,15 +232,25 @@ namespace Memory
 				break;
 		MapEntry &entry = memoryMap[i];
 
-		PageMapLevel4 *pml4 = (PageMapLevel4 *)entry.base_address;
-		qword nextFree = (qword)pml4 + 0x1000;
-		pml4->clearAll();
+		// create a page allocation space
+		pageSpace = entry.base_address;
+		qword pageSpaceLen = 0x10000;
+		pageAllocationMap = ~(dword)((1 << (pageSpaceLen / 0x1000)) - 1);
+		// pageAllocationMap = 0xffff0000;
+		bool mappingFailed = false;
+
+		// create the pml4
+		PageMapLevel4 *pml4 = PageMapLevel4::create(pageSpace, pageAllocationMap);
+		if (pml4 == nullptr)
+			System::blueScreen();
 
 		// identity map the first 2MB of ram
-		pml4->mapRegion(nextFree, 0x1000, 0x1000, 0x200000 - 0x1000, true, false);
+		if (!pml4->mapRegion(pageSpace, pageAllocationMap, 0x1000, 0x1000, 0x200000 - 0x1000, true, false))
+			mappingFailed = true;
 
-		// map gdt, idt, 64-bit TSS and kernel stack and kernel image
-		pml4->mapRegion(nextFree, 0xFFFFFFFF80000000, 0x0000, 0x80000, true, false);
+		// map gdt, idt, 64-bit TSS, kernel stack and kernel image
+		if (!pml4->mapRegion(pageSpace, pageAllocationMap, 0xFFFFFFFF80000000, 0x0000, 0x80000, true, false))
+			mappingFailed = true;
 
 		// apply virtual map
 		pml4->setAsCurrent();
@@ -246,11 +259,11 @@ namespace Memory
 		MapEntry &last = memoryMap[mapLength - 1];
 		sqword leftToMap = (sqword)last.base_address + last.length - 0x200000;
 		if (leftToMap > 0)
-			pml4->mapRegion(nextFree, 0x200000, 0x200000, leftToMap, true, false);
+			if (!pml4->mapRegion(pageSpace, pageAllocationMap, 0x200000, 0x200000, leftToMap, true, false))
+				mappingFailed = true;
 
-		qword diff = nextFree - (qword)entry.base_address;
-		entry.base_address += diff;
-		entry.length -= diff;
+		entry.base_address += pageSpaceLen;
+		entry.length -= pageSpaceLen;
 
 		selectedHeap = Heap::build(entry.base_address, entry.length);
 		// Heap::selectHeap(Heap::build(entry.base_address + diff, entry.length - diff));
@@ -258,6 +271,16 @@ namespace Memory
 		byte *interruptStack = (byte *)Memory::Allocate(0x10000, 0x1000);
 
 		// map interrupt stack
-		pml4->mapRegion(nextFree, 0xFFFFFFFF80080000, (ull)interruptStack, 0x10000, true, false);
+		if (!pml4->mapRegion(pageSpace, pageAllocationMap, 0xFFFFFFFF80080000, (ull)interruptStack, 0x10000, true, false))
+			mappingFailed = true;
+
+		if (mappingFailed)
+			System::blueScreen();
+	}
+
+	void GetPageSpace(void *&retValPageSpace, dword &retValPageAllocationMap)
+	{
+		retValPageSpace = pageSpace;
+		retValPageAllocationMap = pageAllocationMap;
 	}
 }

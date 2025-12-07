@@ -11,11 +11,12 @@ class Task
 	std::vector<byte *> programResources;
 	Thread *mainThread = nullptr;
 	int threadCount = 0;
+	dword pageAllocationMap;
 	bool m_isKernelTask, m_isDead = false;
 
 public:
-	inline Task(bool isKernelTask = false, byte *pageSpace = nullptr, byte *programImage = nullptr, byte *heap = nullptr)
-		: pageSpace(pageSpace), programImage(programImage), heap(heap), m_isKernelTask(isKernelTask)
+	inline Task(bool isKernelTask = false, byte *pageSpace = nullptr, dword pageAllocationMap = 0xffff0000, byte *programImage = nullptr, byte *heap = nullptr)
+		: pageSpace(pageSpace), programImage(programImage), heap(heap), m_isKernelTask(isKernelTask), pageAllocationMap(pageAllocationMap)
 	{
 	}
 	inline ~Task()
