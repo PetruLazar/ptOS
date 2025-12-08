@@ -1,6 +1,6 @@
 #include "pit.h"
 #include "idt.h"
-#include "ports.h"
+#include "../ports.h"
 
 #include <iostream.h>
 using namespace std;

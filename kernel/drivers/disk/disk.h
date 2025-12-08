@@ -2,7 +2,7 @@
 #include <types.h>
 #include <string.h>
 #include "../pci.h"
-#include "../../cpu/idt.h"
+#include "../../cpu/interrupt/idt.h"
 
 namespace Disk
 {

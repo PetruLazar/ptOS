@@ -1,10 +1,10 @@
 #include "idt.h"
-#include "../utils/isriostream.h"
+#include "../../utils/isriostream.h"
 #include "pic.h"
-#include "../core/sys.h"
-#include "../core/paging.h"
-#include "../core/scheduler.h"
-#include "gdt.h"
+#include "../../core/sys.h"
+#include "../../core/paging.h"
+#include "../../core/scheduler.h"
+#include "../gdt.h"
 
 using namespace ISR::std;
 

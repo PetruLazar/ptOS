@@ -1,6 +1,6 @@
 #include "sys.h"
 #include <iostream.h>
-#include "../cpu/idt.h"
+#include "../cpu/interrupt/idt.h"
 #include "../drivers/keyboard.h"
 
 using namespace std;

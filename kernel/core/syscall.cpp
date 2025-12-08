@@ -1,5 +1,5 @@
 #include "../utils/isriostream.h"
-#include "../cpu/idt.h"
+#include "../cpu/interrupt/idt.h"
 #include "../utils/time.h"
 #include "scheduler.h"
 #include "mem.h"

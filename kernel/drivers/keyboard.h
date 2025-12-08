@@ -1,7 +1,7 @@
 #pragma once
 #include <keyboard.h>
 #include "../cpu/ports.h"
-#include "../cpu/idt.h"
+#include "../cpu/interrupt/idt.h"
 
 namespace Keyboard
 {

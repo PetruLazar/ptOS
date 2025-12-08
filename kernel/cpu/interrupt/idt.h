@@ -1,6 +1,6 @@
 #pragma once
 #include <types.h>
-#include "../core/paging.h"
+#include "../../core/paging.h"
 
 constexpr int ms_per_timeint = 10;
 

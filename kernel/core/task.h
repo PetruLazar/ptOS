@@ -1,5 +1,5 @@
 #pragma once
-#include "../cpu/idt.h"
+#include "../cpu/interrupt/idt.h"
 #include <string.h>
 
 class Thread;

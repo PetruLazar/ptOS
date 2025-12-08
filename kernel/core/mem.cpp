@@ -1,7 +1,7 @@
 #include "mem.h"
 #include <iostream.h>
 #include "paging.h"
-#include "../cpu/idt.h"
+#include "../cpu/interrupt/idt.h"
 #include "sys.h"
 
 using namespace std;

@@ -1,5 +1,5 @@
-#include "ports.h"
-#include "cpuid.h"
+#include "../ports.h"
+#include "../cpuid.h"
 #include "pic.h"
 #include "pit.h"
 #include "idt.h"

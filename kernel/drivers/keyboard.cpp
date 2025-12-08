@@ -1,5 +1,5 @@
 #include "keyboard.h"
-#include "../cpu/idt.h"
+#include "../cpu/interrupt/idt.h"
 #include "../utils/isriostream.h"
 #include "../core/sys.h"
 #include "../core/scheduler.h"

@@ -1,6 +1,6 @@
 #pragma once
 #include "../pci.h"
-#include "../../cpu/idt.h"
+#include "../../cpu/interrupt/idt.h"
 
 namespace AHCI
 {

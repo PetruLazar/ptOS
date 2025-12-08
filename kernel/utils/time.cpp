@@ -1,5 +1,5 @@
 #include "time.h"
-#include "../cpu/idt.h"
+#include "../cpu/interrupt/idt.h"
 #include "../core/scheduler.h"
 
 #include <iostream.h>

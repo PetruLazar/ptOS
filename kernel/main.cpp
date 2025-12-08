@@ -1,7 +1,7 @@
-#include "cpu/idt.h"
+#include "cpu/interrupt/idt.h"
 #include "drivers/screen.h"
 #include <string.h>
-#include "cpu/pic.h"
+#include "cpu/interrupt/pic.h"
 #include "cpu/ports.h"
 #include "drivers/keyboard.h"
 #include <iostream.h>
