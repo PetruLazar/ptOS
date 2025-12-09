@@ -78,11 +78,8 @@ global loadidt
 global disableInterrupts
 global enableInterrupts
 global getCR2
-global pushCpuState
-global popCpuState
 global isr_common
 global irq_common
-global popCpuState
 
 isr_common:
 call pushCpuState

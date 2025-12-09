@@ -6,6 +6,8 @@
 
 using namespace std;
 
+extern PageMapLevel4 *kernelPaging;
+
 namespace Memory
 {
 	enum class RegionType : uint32_t
@@ -254,6 +256,7 @@ namespace Memory
 
 		// apply virtual map
 		pml4->setAsCurrent();
+		kernelPaging = pml4;
 
 		// identity map the rest of RAM
 		MapEntry &last = memoryMap[mapLength - 1];

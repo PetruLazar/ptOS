@@ -373,7 +373,7 @@ namespace AHCI
 		controllers = new vector<Controller *>;
 
 		// temporary: the interrupt number could be different than 11
-		IDT::registerIrqHandler(11, EventHandler);
+		IRQ::registerIrqHandler(11, EventHandler);
 
 		kernelThread = Scheduler::getCurrentThread();
 	}
@@ -405,7 +405,7 @@ namespace AHCI
 		ull physicalAddress;
 		if (!current.getPhysicalAddress((ull)header->bar5, physicalAddress))
 		{
-			void* pageSpace;
+			void *pageSpace;
 			dword pageAllocationMap;
 			Memory::GetPageSpace(pageSpace, pageAllocationMap);
 			if (!current.mapRegion(pageSpace, pageAllocationMap, (ull)header->bar5, (ull)header->bar5, 0x2000, true, false))
@@ -576,7 +576,7 @@ namespace AHCI
 				if (controllerInterruptStatus & (1 << i))
 				{
 					// get port structure
-					Port& port = controller->regs->ports[i];
+					Port &port = controller->regs->ports[i];
 
 					// get port interrupt status
 					uint portInterruptStatus = port.interruptStatus;

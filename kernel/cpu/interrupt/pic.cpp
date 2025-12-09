@@ -2,14 +2,14 @@
 #include "../cpuid.h"
 #include "pic.h"
 #include "pit.h"
-#include "idt.h"
+#include "irq.h"
 
 namespace PIC
 {
 	constexpr word pic1cmd = 0x20,
 				   pic1data = pic1cmd + 1,
 				   pic2cmd = 0xa0,
-				   pic2data = pic2cmd;
+				   pic2data = pic2cmd + 1;
 
 	constexpr byte icw4 = 0x01,
 				   init = 0x10,
@@ -26,13 +26,10 @@ namespace PIC
 
 	void Initialize(byte offset)
 	{
-		byte mask1 = inb(pic1data),
-			 mask2 = inb(pic2data);
-
 		outb(pic1cmd, init | icw4);
 		outb(pic2cmd, init | icw4);
-
 		io_wait();
+
 		outb(pic1data, offset);
 		outb(pic2data, offset + 8);
 		io_wait();
@@ -45,10 +42,10 @@ namespace PIC
 		outb(pic2data, icw4_8086);
 		io_wait();
 
-		outb(pic1data, mask1);
-		outb(pic2data, mask2);
+		outb(pic1data, 0);
+		outb(pic2data, 0);
 
-		PIT::ConfigureChannel(PIT::SelectChannel::channel0, PIT::OperatingMode::rateGenerator, 1000 / ms_per_timeint);
+		PIT::ConfigureChannel(PIT::SelectChannel::channel0, PIT::OperatingMode::rateGenerator, 1000 / IRQ::ms_per_timeint);
 		// PIT::ConfigureChannel(PIT::SelectChannel::channel2, PIT::OperatingMode::squareWaveGenerator, 10000 / ms_per_timeint);
 		// outb(0x61, inb(0x61) | 0b11);
 	}

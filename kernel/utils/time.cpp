@@ -1,5 +1,5 @@
 #include "time.h"
-#include "../cpu/interrupt/idt.h"
+#include "../cpu/interrupt/irq.h"
 #include "../core/scheduler.h"
 
 #include <iostream.h>
@@ -17,11 +17,11 @@ namespace Time
 
 	void Initialize()
 	{
-		IDT::registerIrqHandler(0, IrqHandler);
+		IRQ::registerIrqHandler(0, IrqHandler);
 	}
 
 	qword driver_time()
 	{
-		return irqCount * ms_per_timeint;
+		return irqCount * IRQ::ms_per_timeint;
 	}
 }

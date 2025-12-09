@@ -1,4 +1,5 @@
 #include "cpu/interrupt/idt.h"
+#include "cpu/interrupt/irq.h"
 #include "drivers/screen.h"
 #include <string.h>
 #include "cpu/interrupt/pic.h"
@@ -53,11 +54,12 @@ struct KernelInfo
 
 extern void main(KernelInfo &info)
 {
+	IDT::Initialize((byte *)IDT_ADDRESS);
 	Memory::Initialize(info.kernelPhysicalAddress, info.memoryMapDescriptorAddress, info.memoryMapAddress);
-
+	
 	Screen::Initialize();
 
-	IDT::Initialize((byte *)IDT_ADDRESS);
+	IRQ::Initialize();
 	GDT::Initialize((byte *)GDT_ADDRESS, (byte *)TSS_ADDRESS, (byte *)INT_RING0_STACK);
 
 	Scheduler::Initialize();
@@ -78,7 +80,7 @@ extern void main(KernelInfo &info)
 	Disk::CleanUp();
 	Keyboard::CleanUp();
 	Scheduler::CleanUp();
-	IDT::CleanUp();
+	IRQ::CleanUp();
 	Screen::Cleanup();
 
 	ull currAllocCount = Memory::Heap::getAllocationCountFromSelected();
@@ -322,9 +324,9 @@ void terminal()
 		{
 			if (cmd == "speed")
 			{
-				ull clk = clock();
+				ull clk = Time::clock();
 				Time::sleep(1000);
-				ull diff = clock() - clk;
+				ull diff = Time::clock() - clk;
 				cout << "Measured Average over 1s: " << diff << '\n';
 			}
 			else if (cmd == "vendor")
@@ -342,7 +344,7 @@ void terminal()
 		}
 		else if (subCmd == "clock")
 		{
-			qword clocks = clock();
+			qword clocks = Time::clock();
 
 			char str[20];
 			qwordToHexString(str, clocks);

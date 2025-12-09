@@ -1,5 +1,5 @@
 #include "keyboard.h"
-#include "../cpu/interrupt/idt.h"
+#include "../cpu/interrupt/irq.h"
 #include "../utils/isriostream.h"
 #include "../core/sys.h"
 #include "../core/scheduler.h"
@@ -52,7 +52,7 @@ namespace Keyboard
 			cout << "Failed to allocate keyboard buffer\n";
 			System::blueScreen();
 		}
-		IDT::registerIrqHandler(1, EventListener);
+		IRQ::registerIrqHandler(1, EventListener);
 
 		// initialize keyboard driver thread
 		// for now, use main kernel thread as keyboard thread

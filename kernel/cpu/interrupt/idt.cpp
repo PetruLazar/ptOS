@@ -8,8 +8,6 @@
 
 using namespace ISR::std;
 
-extern PageMapLevel4 *kernelPaging;
-
 namespace IDT
 {
 	namespace IntEntryPoints
@@ -75,6 +73,40 @@ namespace IDT
 
 	constexpr int IDT_LENGTH = 256;
 
+	typedef void (*voidf)(); // pointer to void returning function with no args
+	class Gate
+	{
+	public:
+		word offsetLow = 0;
+		word segmentSelector = 0;
+		byte IST = 0;	// bits 3-7 are reserved
+		byte flags = 0; // 0-3 gate type (def to interrupt gate), 4=0,5-6 dpl, 7 - present
+		word offsetMid = 0;
+		dword offsetHigh = 0;
+		dword reserved = 0;
+
+		void setInterruptGate(voidf funOffset, byte ist, byte dpl)
+		{
+			qword offset = (qword)funOffset;
+			offsetLow = offset & 0xffff;
+			offsetMid = (offset >> 16) & 0xffff;
+			offsetHigh = offset >> 32;
+			segmentSelector = GDT::KERNEL_CS;
+			flags = 0b10001110 | (dpl << 5);
+			IST = ist;
+		}
+		void setTrapGate(voidf funOffset, byte ist, byte dpl)
+		{
+			qword offset = (qword)funOffset;
+			offsetLow = offset & 0xffff;
+			offsetMid = (offset >> 16) & 0xffff;
+			offsetHigh = offset >> 32;
+			segmentSelector = GDT::KERNEL_CS;
+			flags |= 0b10001111 | (dpl << 5);
+			IST = ist;
+		}
+	};
+
 	class IDT_descriptor
 	{
 		word size;
@@ -103,30 +135,7 @@ namespace IDT
 		}
 	};
 	Gate *gates;
-	std::vector<IrqHandler> *irqHandlers;
-	// IrqHandler irqHandlers[16];
-	byte irqOffset;
 
-	void Gate::setInterruptGate(voidf funOffset, byte ist, byte dpl)
-	{
-		qword offset = (qword)funOffset;
-		offsetLow = offset & 0xffff;
-		offsetMid = (offset >> 16) & 0xffff;
-		offsetHigh = offset >> 32;
-		segmentSelector = GDT::KERNEL_CS;
-		flags = 0b10001110 | (dpl << 5);
-		IST = ist;
-	}
-	void Gate::setTrapGate(voidf funOffset, byte ist, byte dpl)
-	{
-		qword offset = (qword)funOffset;
-		offsetLow = offset & 0xffff;
-		offsetMid = (offset >> 16) & 0xffff;
-		offsetHigh = offset >> 32;
-		segmentSelector = GDT::KERNEL_CS;
-		flags |= 0b10001111 | (dpl << 5);
-		IST = ist;
-	}
 	void Initialize(byte *IDT_address)
 	{
 		gates = (Gate *)IDT_address;
@@ -192,151 +201,5 @@ namespace IDT
 		// load idt
 		IDT_descriptor descriptor((qword)(gates), sizeof(Gate) * IDT_LENGTH - 1);
 		loadidt(&descriptor);
-
-		// init pic
-		irqOffset = 0x20;
-		PIC::Initialize(irqOffset);
-
-		// init irqHandler list
-		irqHandlers = new std::vector<IrqHandler>[16];
-
-		kernelPaging = &PageMapLevel4::getCurrent();
-	}
-	void CleanUp()
-	{
-		delete[] irqHandlers;
-	}
-
-	const char *exceptionMessages[0x20] =
-		{
-			"Divide by 0",
-			"Debug",
-			"Non-maskable interrupt",
-			"Breakpoint",
-			"Overflow",
-			"Bound range exceeded",
-			"Invalid opcode",
-			"Device not available",
-			"Double fault",
-			"Coprocessor segment overrun",
-			"Invalid TSS",
-			"Segment not present",
-			"Stack segment fault",
-			"General protection fault",
-			"Page fault",
-			"Reserved",
-			"x87 floating-point exception",
-			"Alignment check",
-			"Machine check",
-			"SIMD floating-point exception",
-			"Virtualization exception",
-			"Control protection exception",
-			"Reserved",
-			"Reserved",
-			"Reserved",
-			"Reserved",
-			"Reserved",
-			"Reserved",
-			"Hypervisor injection exception",
-			"VMM communication exception",
-			"Security exception",
-			"Reserved",
-	};
-
-	extern "C" qword getCR2();
-	extern "C" void irqHandler(registers_t &regs, qword irq_no, bool spurious);
-	bool checkSpurious(registers_t &regs)
-	{
-		word irqs = PIC::getISR();
-		// cout << irqs;
-		for (int i = 0; i < 16; i++)
-		{
-			if (irqs & 1 && i != 2)
-			{
-				irqHandler(regs, i, true);
-				return true;
-			}
-
-			irqs >>= 1;
-		}
-		return false;
-	}
-	extern "C" void exceptionHandler(registers_t &regs, qword int_no, qword err_no)
-	{
-		// if (int_no == 7 || int_no == 6)
-		if (checkSpurious(regs))
-		{
-			// cout << "Coming from ISR " << int_no << '\n';
-			return;
-		}
-
-		word irqIsr = PIC::getISR();
-		if (irqIsr)
-			cout << "Could be an irq: " << std::ostream::base::bin << irqIsr << '\n';
-		cout
-			<< "Exception: " << exceptionMessages[int_no] << " (0x" << std::ostream::base::hex << int_no
-			<< " - err " << err_no
-			<< ")\nReturn address: " << regs.cs << ':' << (void *)regs.rip
-			<< "\nRegisters:"
-			<< "\nrax=" << (void *)regs.rax << " rbx=" << (void *)regs.rbx << " rcx=" << (void *)regs.rcx
-			<< "\nrdx=" << (void *)regs.rdx << " rdi=" << (void *)regs.rdi << " rsi=" << (void *)regs.rsi
-			<< "\nrsp=" << (void *)regs.rsp << " rbp=" << (void *)regs.rbp
-			<< "\nReturn address memory contents:\n";
-		qword physAddress;
-		if (regs.cr3->getPhysicalAddress(regs.rip, physAddress))
-		{
-			cout << "\tTemporarily disabled for security and stability purposes.\n";
-			// isr_DisplyMemoryBlock((byte *)physAddress - 0x10, 0x20);
-		}
-		else
-			cout << "\tInvalid virtual address.\n";
-
-		cout << "Call stack:\n";
-		cout << "\tTemporarily disabled for security and stability purposes.\n";
-		// for (qword *rbp = (qword *)regs.rbp; rbp[0]; rbp = (qword *)rbp[0])
-		// {
-		// 	cout << "\t0x" << (void *)rbp[1] << " (file offset: 0x" << (void *)(rbp[1] - 0x8000 + 0x200) << ")\n";
-		// }
-
-		// exception specific information
-		switch (int_no)
-		{
-		case 0xe: // page fault
-			cout << "\nAccessing address: " << (void *)getCR2() << '\n';
-			break;
-		}
-
-		if (!Scheduler::isEnabled() || Scheduler::getCurrentThread()->getParentTask()->isKernelTask())
-		{
-			cout << "kernel exception\n";
-			System::blueScreen();
-		}
-		else
-		{
-			cout << "non-kernel exception\n";
-			regs.rdi = (ull)-1;
-			Scheduler::preempt(regs, Scheduler::preemptReason::taskExited);
-		}
-	}
-	extern "C" void irqHandler(registers_t &regs, qword irq_no, bool spurious)
-	{
-		if (irq_no != 0 &&
-			irq_no != 1 &&
-			irq_no != 11)
-		{
-			cout << (spurious ? "SIRQ: " : "IRQ: ") << irq_no << '\n';
-		}
-
-		for (auto handler : irqHandlers[irq_no])
-			handler(regs);
-
-		PIC::EndOfInterrupt(irq_no);
-	}
-
-	void registerIrqHandler(byte irq_no, IrqHandler handler)
-	{
-		disableInterrupts();
-		irqHandlers[irq_no].push_back(handler);
-		enableInterrupts();
 	}
 }
