@@ -26,7 +26,8 @@ namespace AHCI
 	inline result getInfo(StorageDevice *device, byte buffer[512])
 	{
 		word res;
-		asm("int $0x30"
+		asm volatile(
+			"int 0x30"
 			: "=a"(res)
 			: "a"(SYSCALL_DISK), "b"(SYSCALL_DISK_AHCI_GETINFO), "D"(device), "S"(buffer));
 		return (result)res;

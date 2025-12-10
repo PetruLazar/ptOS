@@ -3,9 +3,6 @@
 
 using namespace std;
 
-extern "C" void setCR3(PageMapLevel4 *pml4_ptr);
-extern "C" PageMapLevel4 &getCR3();
-
 // in pt: 4kb pages (0x1000)
 // in pd: 2mb pages (0x200000)
 // in pdpt: 1gb pages (0x40000000)
@@ -611,8 +608,3 @@ PageMapLevel4 *PageMapLevel4::create(void *pageSpace, dword &pageAllocationMap)
 {
 	return (PageMapLevel4 *)AllocatePage(pageSpace, pageAllocationMap);
 }
-void PageMapLevel4::setAsCurrent()
-{
-	setCR3(this);
-}
-PageMapLevel4 &PageMapLevel4::getCurrent() { return getCR3(); }

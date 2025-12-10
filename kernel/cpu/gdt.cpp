@@ -35,10 +35,41 @@ namespace GDT
 
 	SegmentDescriptor *globalDescriptorTable;
 
-	extern "C" void loadGDT(GDT::Descriptor &descriptor);
-	extern "C" void getCurrentGDT(GDT::Descriptor &descriptor);
-	extern "C" void updateSegmentRegisters();
-	extern "C" void loadTSS(word gdtEntry);
+	inline void updateSegmentRegisters()
+	{
+		asm volatile(
+			"mov ss, %[segment]"
+			:
+			: [segment] "r"((word)0x10));
+		asm volatile(
+			"mov ds, %[segment]\n"
+			"mov es, %[segment]\n"
+			"mov fs, %[segment]\n"
+			"mov gs, %[segment]"
+			:
+			: [segment] "r"((word)0x2b));
+	}
+
+	inline void loadGDT(GDT::Descriptor &descriptor)
+	{
+		asm volatile(
+			"lgdt %[descriptor]"
+			:
+			: [descriptor] "m"(descriptor));
+	}
+	inline void getCurrentGDT(GDT::Descriptor &descriptor)
+	{
+		asm volatile(
+			"sgdt %[descriptor]"
+			: [descriptor] "=m"(descriptor));
+	}
+	inline void loadTSS(word gdtEntry)
+	{
+		asm volatile(
+			"ltr %[gdtEntry]"
+			:
+			: [gdtEntry]"rm"(gdtEntry));
+	}
 
 	TSS *tss;
 

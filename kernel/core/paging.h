@@ -231,8 +231,21 @@ public:
 	bool getPhysicalAddress(qword virtualAddress, qword &physicalAddress, bool isUserAccess = false);
 
 	static PageMapLevel4* create(void *pageSpace, dword &pageAllocationMap);
-	static PageMapLevel4 &getCurrent();
-	void setAsCurrent();
+	inline static PageMapLevel4 &getCurrent()
+	{
+		PageMapLevel4* retVal;
+		asm volatile(
+			"mov %[pml4], cr3"
+			: [pml4]"=r"(retVal));
+		return *retVal;
+	}
+	inline void setAsCurrent()
+	{
+		asm volatile(
+			"mov cr3, %[pml4]"
+			:
+			: [pml4]"r"(this));
+	}
 };
 
 void PagingTest();
