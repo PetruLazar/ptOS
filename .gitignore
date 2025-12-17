@@ -1,5 +1,6 @@
 /.dist
 /.vscode
+testing/.vscode
 *.o
 *.bin
 **/disasm/*

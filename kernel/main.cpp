@@ -18,6 +18,7 @@
 #include "core/paging.h"
 #include "core/scheduler.h"
 #include "core/explorer.h"
+#include "unittests/unittests.h"
 #define OMIT_FUNCS
 #include <syscall.h>
 using namespace std;
@@ -415,6 +416,10 @@ void terminal()
 				cout << "Partition must be a single letter\n";
 			else
 				Explorer::Start(cmd[0]);
+		}
+		else if (subCmd == "unittests")
+		{
+			unittests_run();
 		}
 		else if (subCmd == "test")
 		{
