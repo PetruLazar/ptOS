@@ -687,7 +687,7 @@ namespace Filesystem
 				uint cluster = fsInfo->freeClusterStartHint;
 				while (getFatEntry(cluster))
 					cluster++;
-				fsInfo->freeClusterStartHint = cluster;
+				fsInfo->freeClusterStartHint = cluster + 1;
 				return cluster;
 			}
 			void DeallocateCluster(uint clusterNr)
@@ -708,7 +708,7 @@ namespace Filesystem
 			uint *cachedFATSector = nullptr;
 			static constexpr ull FATentriesPerSector = 512 / sizeof(uint);
 
-			/// return the index within the loaded sector
+			// return the index within the loaded sector
 			uint loadFATSector(uint index)
 			{
 				ull sectorNr = index / FATentriesPerSector;
@@ -783,7 +783,6 @@ namespace Filesystem
 				// actually read all the clusters
 				length = 512 * sectorsPerCluster * GetClusterChainLength(startCluster);
 				buffer = (byte *)Memory::Allocate(length, 0x1000);
-				// buffer = new byte[length];
 				byte *current = buffer;
 				for (uint next = startCluster; next < lastCluster; next = getFatEntry(next))
 				{
@@ -816,11 +815,9 @@ namespace Filesystem
 			}
 			result WriteClusterChain(uint &startCluster, byte *buffer, ull length)
 			{
-				// cout << "Writing cluster chain (" << length << " bytes), starting at cluster " << startCluster << '\n';
 				ull clusterLen = 512 * sectorsPerCluster;
 				uint clusterChainLen = startCluster < 2 ? 0 : GetClusterChainLength(startCluster),
-					 neededClusterChainLen = length == 0 ? 0 : (length - 1) / clusterLen + 1;
-				// cout << "Cluster chain length: " << clusterChainLen << "\nNeeded cluster chain length: " << neededClusterChainLen << '\n';
+					 neededClusterChainLen = integerCeilDivide(length, clusterLen);
 				if (clusterChainLen < neededClusterChainLen)
 				{
 					// cluster chain not long enough, allocate missing clusters and write
@@ -829,6 +826,7 @@ namespace Filesystem
 					if (neededClusterChainLen > fsInfo->freeClusterCount)
 						return result::partitionFull;
 					bool isFirstCluster = true;
+					
 					while (clusterChainLen > 0)
 					{
 						WriteCluster(cluster, buffer, length);
