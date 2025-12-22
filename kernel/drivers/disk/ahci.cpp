@@ -186,7 +186,7 @@ namespace AHCI
 
 	struct Controller
 	{
-		Registers *regs;
+		volatile Registers *regs;
 		byte *pageSpace;
 		vector<void *> allocations;
 		uint cmdSlots;
@@ -243,7 +243,7 @@ namespace AHCI
 			if (timeout == 1000000)
 				return result::deviceFault;
 
-			port.commandIssue |= 1 << slot;
+			port.commandIssue = 1 << slot;
 
 			// wait for completion
 			Thread *callingThread = Scheduler::getCurrentThread();
@@ -396,7 +396,7 @@ namespace AHCI
 
 		Controller *controller = new Controller;
 		controllers->push_back(controller);
-		controller->regs = (Registers *)(ull)header->bar5;
+		controller->regs = (volatile Registers *)(ull)header->bar5;
 		controller->pciLocation = device.location;
 
 		controller->pageSpace = (byte *)Memory::Allocate(0x8000, 0x1000);
@@ -431,7 +431,7 @@ namespace AHCI
 			if (implementedPorts & 1)
 			{
 				// port is implemented
-				Port &port = controller->regs->ports[i];
+				volatile Port &port = controller->regs->ports[i];
 				uint SATAStatus = port.SATAstatus;
 				byte det = SATAStatus & 0xf,
 					 ipm = SATAStatus >> 8 & 0xf;
@@ -577,7 +577,7 @@ namespace AHCI
 				if (controllerInterruptStatus & (1 << i))
 				{
 					// get port structure
-					Port &port = controller->regs->ports[i];
+					volatile Port &port = controller->regs->ports[i];
 
 					// get port interrupt status
 					uint portInterruptStatus = port.interruptStatus;
