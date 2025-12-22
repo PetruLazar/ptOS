@@ -13,6 +13,22 @@ namespace Memory
 	void GetPageSpace(void *&pageSpace, dword &pageAllocationMap);
 }
 
-extern "C" void memcpy(void *dest, const void *src, ull len);
+inline void memcpy(void *dest, const void *src, ull len)
+{
+	asm volatile(
+		"cld\n"
+		"rep movsb"
+		: "=S"(src), "=D"(dest), "=c"(len)
+		: "S"(src), "D"(dest), "c"(len)
+	);
+}
 extern "C" void memmove(void *dest, const void *src, ull len);
-extern "C" void memset(void *ptr, ull len, byte val);
+inline void memset(void *ptr, ull len, byte val)
+{
+	asm volatile(
+		"cld\n"
+		"rep stosb"
+		: "=D"(ptr), "=c"(len)
+		: "D"(ptr), "c"(len), "a"(val)
+	);
+}
