@@ -57,23 +57,10 @@ namespace Exception
 			<< "\nRegisters:"
 			<< "\nrax=" << (void *)regs.rax << " rbx=" << (void *)regs.rbx << " rcx=" << (void *)regs.rcx
 			<< "\nrdx=" << (void *)regs.rdx << " rdi=" << (void *)regs.rdi << " rsi=" << (void *)regs.rsi
-			<< "\nrsp=" << (void *)regs.rsp << " rbp=" << (void *)regs.rbp
-			<< "\nReturn address memory contents:\n";
-		qword physAddress;
-		if (regs.cr3->getPhysicalAddress(regs.rip, physAddress))
-		{
-			cout << "\tTemporarily disabled for security and stability purposes.\n";
-			// isr_DisplyMemoryBlock((byte *)physAddress - 0x10, 0x20);
-		}
-		else
-			cout << "\tInvalid virtual address.\n";
-
-		cout << "Call stack:\n";
-		cout << "\tTemporarily disabled for security and stability purposes.\n";
-		// for (qword *rbp = (qword *)regs.rbp; rbp[0]; rbp = (qword *)rbp[0])
-		// {
-		// 	cout << "\t0x" << (void *)rbp[1] << " (file offset: 0x" << (void *)(rbp[1] - 0x8000 + 0x200) << ")\n";
-		// }
+			<< "\nrsp=" << (void *)regs.rsp << " rbp=" << (void *)regs.rbp << " r8 =" << (void *)regs.r8
+			<< "\nr9 =" << (void *)regs.r9  << " r10=" << (void *)regs.r10 << " r11=" << (void *)regs.r11
+			<< "\nr12=" << (void *)regs.r12 << " r13=" << (void *)regs.r13 << " r14=" << (void *)regs.r14
+			<< "\nr15=" << (void *)regs.r15 << '\n';
 
 		// exception specific information
 		switch (int_no)
