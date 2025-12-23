@@ -10,6 +10,7 @@
 xor ax, ax
 mov ds, ax
 mov ss, ax
+mov es, ax
 
 ; relocate code
 mov si, LOADED_CODE_LOCATION ; current location
@@ -33,7 +34,6 @@ jz A_20_ERR ; A20 is disabled, halt
 mov ax, 0xb800
 mov es, ax ; es = 0xb800
 xor di, di
-cld
 
 mov ax, (00000111b << 8) | ' ' ; = 0x0720 ; fill with spaces, black background, light gray foreground
 mov cx, 80 * 25
@@ -94,7 +94,7 @@ MBR_LOOKUP:
 	add bx, PARTITION_ENTRY_SIZE
 	cmp bx, 4 * PARTITION_ENTRY_SIZE
 	jne .main_loop ; until partition index is 4
-	jmp $
+	jmp NO_VALID_PART
 
 GPT_LOOKUP:
 	GPT_HEADER equ 0x1200
