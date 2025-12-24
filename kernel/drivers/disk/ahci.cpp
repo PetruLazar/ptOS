@@ -7,6 +7,7 @@
 #include "../../core/mem.h"
 #include "../../core/filesystem/filesystem.h"
 #include "../../core/scheduler.h"
+#include "../../debug/verbose.h"
 
 using namespace Disk;
 using namespace PCI;
@@ -399,6 +400,7 @@ namespace AHCI
 		controller->regs = (volatile Registers *)(ull)header->bar5;
 		controller->pciLocation = device.location;
 
+		VERBOSE_LOG("Paging memory mapped registers...\n");
 		controller->pageSpace = (byte *)Memory::Allocate(0x8000, 0x1000);
 		ull freeSpace = (ull)controller->pageSpace;
 
@@ -419,6 +421,7 @@ namespace AHCI
 		// preform bios handoff if supported
 
 		// enable global AHCI interrupts
+		VERBOSE_LOG("Enabling controller-wide interrupts...\n");
 		controller->regs->interruptStatus = controller->regs->interruptStatus;
 		controller->regs->globalHostControl |= 0x02;
 
@@ -460,6 +463,7 @@ namespace AHCI
 					devices->push_back(dev);
 
 					// turn on interrupts for port
+					VERBOSE_LOG("Enabling port interrupts...\n");
 					port.interruptEnable |= (1 << 0) |
 											(1 << 1) |
 											(1 << 2) |
@@ -480,6 +484,7 @@ namespace AHCI
 					port.interruptStatus = port.interruptStatus;
 
 					// allocate memory for the device if it is not
+					VERBOSE_LOG("Allocatig missing memory...\n");
 					if (!port.cmdListBase)
 					{
 						// cout << "DEBUG: Allocated a command list.\n";
@@ -511,6 +516,7 @@ namespace AHCI
 
 					// identify cmd
 					word *identify = new word[256];
+					VERBOSE_LOG("Identifying storage device...\n");
 					if (getInfo(dev, (byte *)identify) == result::success)
 					{
 						if (identify[83] & (1 << 10))
@@ -537,6 +543,7 @@ namespace AHCI
 					}
 					delete[] identify;
 
+					VERBOSE_LOG("Detecting partitions and filesystems...\n");
 					dev->detectPartitions();
 					Filesystem::detectPartitions(dev);
 				}

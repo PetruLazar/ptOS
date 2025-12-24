@@ -1,6 +1,7 @@
 #include "screen.h"
 #include "../cpu/ports.h"
 #include <string.h>
+#include "../debug/verbose.h"
 
 using namespace std;
 
@@ -16,8 +17,72 @@ namespace Screen
 
 	int bufferSize, startInBuffer = 0, bufferCursor = 0;
 
+	#ifdef VERBOSE_LOGGING
+	void driver_print_uninitialized(const char* msg)
+	{
+		for (int i = 0; msg[i]; i++)
+		{
+			switch (msg[i])
+			{
+			case '\n':
+			{
+				int delta = screenWidth - screenCursor % screenWidth;
+				screenCursor += delta;
+			}
+			break;
+			case '\b':
+			{
+				if (screenCursor)
+					screenCursor--;
+			}
+			break;
+			case '\t':
+			{
+				short delta = tabSize - (screenCursor % screenWidth) % tabSize;
+				screenCursor += delta;
+			}
+			break;
+			case '\a':
+				break;
+			default:
+				video_memory[screenCursor++].character = msg[i];
+			}
+
+
+			if (screenCursor >= screenWidth * screenHeight)
+			{
+				// scroll up the screen
+				screenCursor -= screenWidth;
+				for (int i = 0; i < screenWidth * (screenHeight - 1); i++)
+					video_memory[i] = video_memory[i + screenWidth];
+				for (int i = screenWidth * (screenHeight - 1); i < screenWidth * screenHeight; i++)
+					video_memory[i] = Cell(' ', Cell::Color::black, Cell::Color::white);
+			}
+		}
+		Cursor::set(screenCursor);
+	}
+	void driver_clear_uninitialized()
+	{
+		for (int i = 0; i < screenWidth * screenHeight; i++)
+			video_memory[i] = Cell(' ', Cell::Color::black, Cell::Color::white);
+		Cursor::set(0);
+	}
+	void Initialize_vervose()
+	{
+		screenSize = screenWidth * screenHeight;
+		bufferSize = screenSize * 10; // 10 screens
+		buffer = new Cell[bufferSize];
+
+		bufferCursor = screenCursor;
+		for (int i = 0; i < screenWidth * screenHeight; i++)
+			buffer[i] = video_memory[i];
+	}
+	#endif
+
 	void Initialize()
 	{
+		SCREENDRIVER_INITIALIZE_REDIRECT;
+
 		screenSize = screenWidth * screenHeight;
 		bufferSize = screenSize * 10; // 10 screens
 		buffer = new Cell[bufferSize];
@@ -30,6 +95,8 @@ namespace Screen
 	}
 	void driver_clear()
 	{
+		SCREENDRIVER_CLEAR_REDIRECT;
+
 		for (word i = 0; i < bufferSize; i++)
 			buffer[i] = Cell();
 		startInBuffer = 0;
@@ -110,6 +177,8 @@ namespace Screen
 	}
 	void driver_print(const char *msg)
 	{
+		SCREENDRIVER_PRINT_REDIRECT;
+
 		while (screenCursor < 0)
 		{
 			screenCursor += screenWidth;

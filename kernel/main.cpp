@@ -19,6 +19,7 @@
 #include "core/scheduler.h"
 #include "core/explorer.h"
 #include "unittests/unittests.h"
+#include "debug/verbose.h"
 #define OMIT_FUNCS
 #include <syscall.h>
 using namespace std;
@@ -55,24 +56,39 @@ struct KernelInfo
 
 extern void main(KernelInfo &info)
 {
+	VERBOSE_BEGIN;
+
+	VERBOSE_LOG("Initializing IDT...\n");
 	IDT::Initialize((byte *)IDT_ADDRESS);
+	VERBOSE_LOG("Initializing Memory...\n");
 	Memory::Initialize(info.kernelPhysicalAddress, info.memoryMapDescriptorAddress, info.memoryMapAddress);
 	
+	VERBOSE_LOG("Initializing Screen driver...\n");
 	Screen::Initialize();
 
+	VERBOSE_LOG("Initializing IRQ handlers...\n");
 	IRQ::Initialize();
+	VERBOSE_LOG("Initializing GDT and TSS...\n");
 	GDT::Initialize((byte *)GDT_ADDRESS, (byte *)TSS_ADDRESS, (byte *)INT_RING0_STACK);
 
+	VERBOSE_LOG("Initializing Scheduler...\n");
 	Scheduler::Initialize();
+	VERBOSE_LOG("Initializing Time driver...\n");
 	Time::Initialize();
+	VERBOSE_LOG("Initializing Keyboard driver...\n");
 	Keyboard::Initialize();
 
+	VERBOSE_LOG("Enabling interrupts...\n");
 	enableInterrupts();
 
+	VERBOSE_LOG("Initializing Disk driver...\n");
 	Disk::Initialize();
+	VERBOSE_LOG("Initializing Filesystem driver...\n");
 	Filesystem::Initialize();
+	VERBOSE_LOG("Detecting PCI devices...\n");
 	PCI::InitializeDevices();
 
+	VERBOSE_LOG("Starting terminal...\n");
 	terminal();
 
 	disableInterrupts();

@@ -3,6 +3,7 @@
 #include "paging.h"
 #include "../cpu/interrupt/idt.h"
 #include "sys.h"
+#include "../debug/verbose.h"
 
 using namespace std;
 
@@ -221,6 +222,7 @@ namespace Memory
 	}
 	void Initialize(byte *kernelPhysicalAddress, byte *mapEntryDescriptor, byte *mapEntries)
 	{
+		VERBOSE_LOG("Processing Memory map...\n");
 		mapLength = *mapEntryDescriptor;
 		mapEntrySize = *(mapEntryDescriptor + 1);
 		memoryMap = (MapEntry *)mapEntries;
@@ -228,6 +230,7 @@ namespace Memory
 		// return;
 		sortMap();
 
+		VERBOSE_LOG("Creating initial paging structures...\n");
 		int i = 0;
 		for (i = 0; i < mapLength; i++)
 			if (memoryMap[i].type == RegionType::usable && memoryMap[i].base_address != 0x0)
@@ -258,6 +261,7 @@ namespace Memory
 		pml4->setAsCurrent();
 		kernelPaging = pml4;
 
+		VERBOSE_LOG("Creating final paging structures...\n");
 		// identity map the rest of RAM
 		MapEntry &last = memoryMap[mapLength - 1];
 		sqword leftToMap = (sqword)last.base_address + last.length - 0x200000;
@@ -267,10 +271,12 @@ namespace Memory
 
 		entry.base_address += pageSpaceLen;
 		entry.length -= pageSpaceLen;
-
+		
+		VERBOSE_LOG("Creating allocation heap...\n");
 		selectedHeap = Heap::build(entry.base_address, entry.length);
 		// Heap::selectHeap(Heap::build(entry.base_address + diff, entry.length - diff));
 
+		VERBOSE_LOG("Allocating and mapping the interrupt stack...\n");
 		byte *interruptStack = (byte *)Memory::Allocate(0x10000, 0x1000);
 
 		// map interrupt stack

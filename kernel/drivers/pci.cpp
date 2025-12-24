@@ -3,6 +3,7 @@
 #include "audio.h"
 #include "net.h"
 #include "../core/sys.h"
+#include "../debug/verbose.h"
 
 using namespace std;
 
@@ -896,11 +897,17 @@ namespace PCI
 							break;
 						case (byte)DeviceClass::multimediaController:
 							if (device.header.subclass == (byte)MultimediaController::audioDevice)
+							{
+								VERBOSE_LOG("Initializing Audio device...\n");
 								Audio::DeviceDetected(device);
+							}
 							break;
 						case (byte)DeviceClass::networkController:
 							if (device.header.subclass == (byte)NetworkController::ethernetCotnroller)
+							{
+								VERBOSE_LOG("Initializing Network controller device...\n");
 								Network::ControllerDetected(device);
+							}
 							break;
 						default:
 							break;

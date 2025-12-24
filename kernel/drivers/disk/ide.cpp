@@ -4,6 +4,7 @@
 #include <iostream.h>
 #include "../../core/sys.h"
 #include "../../core/filesystem/filesystem.h"
+#include "../../debug/verbose.h"
 
 using namespace PCI;
 using namespace Disk;
@@ -406,6 +407,7 @@ namespace IDE
 						continue;
 				}
 
+				VERBOSE_LOG("Identifying storage device...\n");
 				word *identificationSpace = new word[256];
 				for (int offset = 0; offset < 256; offset++)
 					identificationSpace[offset] = readRegW(i, ATAreg::data);
@@ -438,6 +440,7 @@ namespace IDE
 
 				if (dev->type == IDEtype::PATA || dev->type == IDEtype::SATA)
 				{
+					VERBOSE_LOG("Detecting partitions and filesystems...\n");
 					dev->detectPartitions();
 					Filesystem::detectPartitions(dev);
 				}
@@ -560,6 +563,7 @@ namespace IDE
 		controller->writeReg(0, ATAreg::control, 2);
 		controller->writeReg(1, ATAreg::control, 2);
 
+		VERBOSE_LOG("Detecting storage devices...\n");
 		if (controller->DetectDisks())
 			controllers->push_back(controller);
 		else

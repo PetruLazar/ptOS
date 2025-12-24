@@ -4,6 +4,7 @@
 #include "ahci.h"
 #include <math.h>
 #include "../../utils/isriostream.h"
+#include "../../debug/verbose.h"
 
 using namespace PCI;
 using namespace std;
@@ -80,9 +81,11 @@ namespace Disk
 		switch ((MassStorageController)device.header.subclass)
 		{
 		case MassStorageController::IDEController:
+			VERBOSE_LOG("Initializing IDE controller...\n");
 			IDE::ControllerDetected(device);
 			break;
 		case MassStorageController::SATAcontroller:
+			VERBOSE_LOG("Initializing AHCI controller...\n");
 			AHCI::ControllerDetected(device);
 			break;
 		default:
