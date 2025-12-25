@@ -1,5 +1,5 @@
 @echo off
 setlocal
 
-compileall src obj "-I include -mcmodel=kernel" || (echo Build failed! & exit)
+compileall src obj "-I include -masm=intel -mcmodel=kernel" || (echo Build failed! & exit)
 echo Finished
