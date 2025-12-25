@@ -89,8 +89,10 @@ void Syscall_Screen(registers_t &regs)
 	}
 	case SYSCALL_SCREEN_PRINTCH:
 		return Screen::driver_print((char)regs.rdi);
-	case SYSCALL_SCREEN_PAINT:
+	case SYSCALL_SCREEN_PAINTBG:
 		return Screen::driver_paint((byte)regs.rdi, (byte)regs.rsi, (Screen::Cell::Color)regs.rdx);
+	case SYSCALL_SCREEN_PAINT:
+		return Screen::driver_paint((byte)regs.rdi, (byte)regs.rsi, (Screen::Cell::Color)regs.rdx, (Screen::Cell::Color)regs.rcx);
 	}
 }
 void Syscall_Cursor(registers_t &regs)
@@ -101,6 +103,11 @@ void Syscall_Cursor(registers_t &regs)
 		return Screen::Cursor::driver_enable(regs.rdi, regs.rsi);
 	case SYSCALL_CURSOR_DISABLE:
 		return Screen::Cursor::driver_disable();
+	case SYSCALL_CURSOR_SET:
+		return Screen::Cursor::driver_set(regs.rdi);
+	case SYSCALL_CURSOR_GET:
+		regs.rax = Screen::Cursor::driver_get();
+		return;
 	}
 }
 void Syscall_Time(registers_t &regs)

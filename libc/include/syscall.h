@@ -16,7 +16,8 @@
 #define SYSCALL_SCREEN_CLEAR 0
 #define SYSCALL_SCREEN_PRINTSTR 1
 #define SYSCALL_SCREEN_PRINTCH 2
-#define SYSCALL_SCREEN_PAINT 3
+#define SYSCALL_SCREEN_PAINTBG 3
+#define SYSCALL_SCREEN_PAINT 4
 
 #define SYSCALL_KEYBOARD_KEYEVENT 0
 #define SYSCALL_KEYBOARD_KEYPRESSEDEVENT 1
@@ -39,6 +40,8 @@
 
 #define SYSCALL_CURSOR_ENABLE 0
 #define SYSCALL_CURSOR_DISABLE 1
+#define SYSCALL_CURSOR_SET 2
+#define SYSCALL_CURSOR_GET 3
 
 #define SYSCALL_TIME_GET 0
 #define SYSCALL_TIME_SLEEP 1
@@ -80,12 +83,19 @@ namespace Screen
 			:
 			: "a"(SYSCALL_SCREEN), "b"(SYSCALL_SCREEN_PRINTSTR), "D"(msg), "m"(*(const char (*)[])msg));
 	}
-	inline void paint(byte line, byte col, Cell::Color color)
+	inline void paint(byte line, byte col, Cell::Color bgColor)
 	{
 		asm volatile(
 			"int 0x30"
 			:
-			: "a"(SYSCALL_SCREEN), "b"(SYSCALL_SCREEN_PAINT), "D"(line), "S"(col), "d"(color));
+			: "a"(SYSCALL_SCREEN), "b"(SYSCALL_SCREEN_PAINTBG), "D"(line), "S"(col), "d"(bgColor));
+	}
+	inline void paint(byte line, byte col, Cell::Color textColor, Cell::Color bgColor)
+	{
+		asm volatile(
+			"int 0x30"
+			:
+			: "a"(SYSCALL_SCREEN), "b"(SYSCALL_SCREEN_PAINT), "D"(line), "S"(col), "d"(textColor), "c"(bgColor));
 	}
 
 	namespace Cursor
@@ -103,6 +113,23 @@ namespace Screen
 				"int 0x30"
 				:
 				: "a"(SYSCALL_CURSOR), "b"(SYSCALL_CURSOR_DISABLE));
+		}
+
+		inline void set(short pos)
+		{
+			asm volatile(
+				"int 0x30"
+				:
+				: "a"(SYSCALL_CURSOR), "b"(SYSCALL_CURSOR_SET), "D"(pos));
+		}
+		inline short get()
+		{
+			short pos;
+			asm volatile(
+				"int 0x30"
+				: "=a"(pos)
+				: "a"(SYSCALL_CURSOR), "b"(SYSCALL_CURSOR_GET));
+			return pos;
 		}
 	}
 }

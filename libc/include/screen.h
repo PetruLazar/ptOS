@@ -37,7 +37,7 @@ namespace Screen
 	}
 	inline Vector2b LinToVec2(short pos)
 	{
-		return Vector2b(pos % screenWidth, pos / screenHeight);
+		return Vector2b(pos % screenWidth, pos / screenWidth);
 	}
 
 	void clear();
