@@ -78,7 +78,7 @@ namespace Screen
 		asm volatile(
 			"int 0x30"
 			:
-			: "a"(SYSCALL_SCREEN), "b"(SYSCALL_SCREEN_PRINTSTR), "D"(msg), "m"(*msg));
+			: "a"(SYSCALL_SCREEN), "b"(SYSCALL_SCREEN_PRINTSTR), "D"(msg), "m"(*(const char (*)[])msg));
 	}
 	inline void paint(byte line, byte col, Cell::Color color)
 	{

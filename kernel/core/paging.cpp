@@ -24,7 +24,7 @@ void *AllocatePage(void *pageSpace, dword &pageAllocationMap)
 		}
 	}
 
-	return nullptr; // should never happened
+	return nullptr; // should never happen, because of the first check
 }
 void DeallocatePage(void *pageSpace, dword &pageAllocationMap, void *table)
 {

@@ -30,7 +30,8 @@ namespace AHCI
 		asm volatile(
 			"int 0x30"
 			: "=a"(res)
-			: "a"(SYSCALL_DISK), "b"(SYSCALL_DISK_AHCI_GETINFO), "D"(device), "S"(buffer));
+			: "a"(SYSCALL_DISK), "b"(SYSCALL_DISK_AHCI_GETINFO), "D"(device), "S"(buffer),
+			  "m"(*device));
 		return (result)res;
 	}
 
@@ -405,17 +406,13 @@ namespace AHCI
 		ull freeSpace = (ull)controller->pageSpace;
 
 		PageMapLevel4 &current = PageMapLevel4::getCurrent();
-		ull physicalAddress;
-		if (!current.getPhysicalAddress((ull)header->bar5, physicalAddress))
+		void *pageSpace;
+		dword pageAllocationMap;
+		Memory::GetPageSpace(pageSpace, pageAllocationMap);
+		if (!current.mapRegion(pageSpace, pageAllocationMap, (ull)header->bar5, (ull)header->bar5, 0x2000, PageEntry::EntryAttributes(PageEntry::writeAccessBit | PageEntry::pageWriteThroughBit | PageEntry::pageCacheDisable)))
 		{
-			void *pageSpace;
-			dword pageAllocationMap;
-			Memory::GetPageSpace(pageSpace, pageAllocationMap);
-			if (!current.mapRegion(pageSpace, pageAllocationMap, (ull)header->bar5, (ull)header->bar5, 0x2000, true, false))
-			{
-				// handle error case...
-				System::blueScreen();
-			}
+			// handle error case...
+			System::blueScreen();
 		}
 
 		// preform bios handoff if supported
@@ -464,6 +461,7 @@ namespace AHCI
 
 					// turn on interrupts for port
 					VERBOSE_LOG("Enabling port interrupts...\n");
+					port.interruptStatus = port.interruptStatus;
 					port.interruptEnable |= (1 << 0) |
 											(1 << 1) |
 											(1 << 2) |
@@ -481,7 +479,6 @@ namespace AHCI
 											(1 << 29) |
 											(1 << 30) |
 											(1 << 31);
-					port.interruptStatus = port.interruptStatus;
 
 					// allocate memory for the device if it is not
 					VERBOSE_LOG("Allocatig missing memory...\n");
