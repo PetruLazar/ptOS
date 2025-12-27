@@ -10,8 +10,16 @@ struct TestType
 	bool passed;
 };
 
-#define LIBC_STUB namespace std { ostream cout; }	\
-namespace Memory { Heap *selectedHeap; }
+inline void ColorizeVerdict(bool passed)
+{
+	Screen::Cell::Color color = (Screen::Cell::Color)((passed ? Screen::Cell::green : Screen::Cell::red) | Screen::Cell::bright);
+	short cursorPos = Screen::Cursor::get();
+	for (int i = 0; i < 6; i++)
+	{
+		Vector2b pos = Screen::LinToVec2(cursorPos - i - 1);
+		Screen::paint(pos.y, pos.x, color, Screen::Cell::black);
+	}
+}
 
 #define ARRAYSIZE(array) (sizeof(array) / sizeof(array[0]))
 #define TESTPTR(funname) test_##funname
@@ -21,7 +29,9 @@ namespace Memory { Heap *selectedHeap; }
 #define TESTMODULE_END 	int failedCount = 0, passedCount = 0;													\
 	std::cout << "\nTest results:";																				\
 	for (int testIdx = 0; testIdx < ARRAYSIZE(tests); testIdx++) {												\
-		std::cout << (tests[testIdx].passed ? "\nPASSED - " : "\nFAILED - ") << tests[testIdx].testName;		\
+		std::cout << (tests[testIdx].passed ? "\nPASSED" : "\nFAILED");											\
+		ColorizeVerdict(tests[testIdx].passed);																	\
+		std::cout << " - " << tests[testIdx].testName;															\
 		if (tests[testIdx].passed) passedCount++;																\
 		else failedCount++;																						\
 	}																											\
@@ -40,11 +50,15 @@ namespace Memory { Heap *selectedHeap; }
 	};														\
 	test_case test_cases[] = 
 
+#define INPUTARRAY(type) const type*
+#define OUTPUTARRAY(type) const type*
+#define ARRAYDATA(type) (const type[])
 #define EXECUTE_ALL_TESTS for (int testIdx = 0; testIdx < ARRAYSIZE(tests); testIdx++) {	\
 		std::cout << "Running \"" <<  tests[testIdx].testName << "\":";						\
 		bool passed = tests[testIdx].testPtr();												\
-																							\
-		std::cout << (passed ? " PASSED\n" : "\nFAILED\n");									\
+		std::cout << (passed ? " PASSED" : "\nFAILED");									\
+		ColorizeVerdict(passed);															\
+		std::cout << '\n';																	\
 		tests[testIdx].passed = passed;														\
 	}
 #define FOREACH_TESTCASE for (int test_case_id = 0; test_case_id < ARRAYSIZE(test_cases); test_case_id++)
@@ -56,5 +70,8 @@ namespace Memory { Heap *selectedHeap; }
 #define MAKESTR_HELPER(obj) #obj
 #define MAKESTR(obj) MAKESTR_HELPER(obj)
 #define test_assert_expected(variable, expectedExperession, expectedValue) if (!(variable expectedExperession expectedValue)) { std::cout << "\n" __FILE__ ":" MAKESTR(__LINE__) ": Assertion failed for test case " << test_case_id << ": Observed value " << variable << " for variable " #variable ", but expected " #expectedExperession " " << expectedValue << "!"; test_failed = true;  }
+#define test_assert_expected_hex(variable, expectedExperession, expectedValue) if (!(variable expectedExperession expectedValue)) { std::cout << "\n" __FILE__ ":" MAKESTR(__LINE__) ": Assertion failed for test case " << test_case_id << ": Observed value 0x" << std::ostream::base::hex << variable << " for variable " #variable ", but expected " #expectedExperession " 0x" << expectedValue << std::ostream::base::dec << "!"; test_failed = true;  }
 #define test_assert_expected_named(variable, expectedExperession, expectedValue) if (!(variable expectedExperession expectedValue)) { std::cout << "\n" __FILE__ ":" MAKESTR(__LINE__) ": Assertion failed for test case " << test_case_id << ": Observed value " << variable << " for variable " #variable ", but expected " #expectedExperession " " #expectedValue "!"; test_failed = true;  }
 #define test_assert(condition) if (!(condition)) { std::cout << "\n" __FILE__ ":" MAKESTR(__LINE__) ": Assertion failed for test case " << test_case_id << ":\"" #condition "\" evaluated to false!"; test_failed = true; }
+
+#define MOCK(mockedFnName)
