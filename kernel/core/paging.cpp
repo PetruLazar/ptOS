@@ -54,7 +54,7 @@ void getEntryBounds(qword virtualAddress, qword len, word &startEntry, word &end
 	}
 }
 
-bool PageTable::canBeCollapsed(void *pageSpace, dword &pageAllocationMap, qword virtualAddress, qword physicalAddress, qword len, bool writeAccess, bool userPage)
+bool PageTable::canBeCollapsed(void *pageSpace, dword &pageAllocationMap, qword virtualAddress, qword physicalAddress, qword len, PageEntry::EntryAttributes attributes)
 {
 	// check the entries against the desired physical address
 
@@ -75,7 +75,7 @@ bool PageTable::canBeCollapsed(void *pageSpace, dword &pageAllocationMap, qword 
 	for (word i = 0; i < startEntry; i++)
 	{
 		PageTableEntry &entry = entries[i];
-		bool continuous = entry.isPresent() && entry.getAddress() == physicalAddress_lower && entry.isUserPage() == userPage && entry.isWriteAccess() == writeAccess;
+		bool continuous = entry.isPresent() && entry.getAddress() == physicalAddress_lower && entry.attributes() == attributes;
 		if (!continuous)
 			return false;
 
@@ -87,7 +87,7 @@ bool PageTable::canBeCollapsed(void *pageSpace, dword &pageAllocationMap, qword 
 	for (word i = PageEntry::entriesPerTable - 1; i > endEntry; i--)
 	{
 		PageTableEntry &entry = entries[i];
-		bool continuous = entry.isPresent() && entry.getAddress() == physicalAddress_upper && entry.isUserPage() == userPage && entry.isWriteAccess() == writeAccess;
+		bool continuous = entry.isPresent() && entry.getAddress() == physicalAddress_upper && entry.attributes() == attributes;
 		if (!continuous)
 			return false;
 
@@ -96,7 +96,7 @@ bool PageTable::canBeCollapsed(void *pageSpace, dword &pageAllocationMap, qword 
 
 	return true;
 }
-bool PageTable::mapRegion(void *pageSpace, dword &pageAllocationMap, qword virtualAddress, qword physicalAddress, qword len, bool writeAccess, bool userPage)
+bool PageTable::mapRegion(void *pageSpace, dword &pageAllocationMap, qword virtualAddress, qword physicalAddress, qword len, PageEntry::EntryAttributes attributes)
 {
 	word startEntry, endEntry;
 	getEntryBounds(virtualAddress, len, startEntry, endEntry, 12);
@@ -105,7 +105,7 @@ bool PageTable::mapRegion(void *pageSpace, dword &pageAllocationMap, qword virtu
 	{
 		PageTableEntry &entry = entries[i];
 		// page table entries always point to physical pages, no need to deallocate child tables
-		entry.set(physicalAddress, writeAccess, userPage);
+		entry.set(physicalAddress, attributes);
 
 		// increment stuff
 		physicalAddress += bytesPerEntry;
@@ -134,15 +134,14 @@ bool PageDirectoryEntry::expand(void *pageSpace, dword &pageAllocationMap)
 		return false;
 
 	qword physicalAddress = this->getAddress(addressMask_2mb);
-	bool userPage = this->isUserPage();
-	bool writeAccess = this->isWriteAccess();
+	EntryAttributes attributes =  this->attributes();
 
-	if (!table->mapRegion(pageSpace, pageAllocationMap, 0, physicalAddress, 1 << 21, writeAccess, userPage))
+	if (!table->mapRegion(pageSpace, pageAllocationMap, 0, physicalAddress, 1 << 21, attributes))
 		return false;
 	this->set(table);
 	return true;
 }
-bool PageDirectory::canBeCollapsed(void *pageSpace, dword &pageAllocationMap, qword virtualAddress, qword physicalAddress, qword len, bool writeAccess, bool userPage)
+bool PageDirectory::canBeCollapsed(void *pageSpace, dword &pageAllocationMap, qword virtualAddress, qword physicalAddress, qword len, PageEntry::EntryAttributes attributes)
 {
 	// check the entries against the desired physical address
 
@@ -162,7 +161,7 @@ bool PageDirectory::canBeCollapsed(void *pageSpace, dword &pageAllocationMap, qw
 		// for the entire entry to be continuous, it has to be a big page
 		// when this region is affected by mapping, if it were continuous, it would be collapsed into a big page
 		// if it is not a big page, it means the region is not continuous
-		bool continuous = entry.isPresent() && entry.isPageBig() && entry.getAddress(PageEntry::addressMask_2mb) == physicalAddress_lower && entry.isUserPage() == userPage && entry.isWriteAccess() == writeAccess;
+		bool continuous = entry.isPresent() && entry.isPageBig() && entry.getAddress(PageEntry::addressMask_2mb) == physicalAddress_lower && entry.attributes() == attributes;
 		if (!continuous)
 			return false;
 
@@ -174,7 +173,7 @@ bool PageDirectory::canBeCollapsed(void *pageSpace, dword &pageAllocationMap, qw
 	for (word i = PageEntry::entriesPerTable - 1; i > endEntry; i--)
 	{
 		PageDirectoryEntry &entry = entries[i];
-		bool continuous = entry.isPresent() && entry.isPageBig() && entry.getAddress(PageEntry::addressMask_2mb) == physicalAddress_upper && entry.isUserPage() == userPage && entry.isWriteAccess() == writeAccess;
+		bool continuous = entry.isPresent() && entry.isPageBig() && entry.getAddress(PageEntry::addressMask_2mb) == physicalAddress_upper && entry.attributes() == attributes;
 		if (!continuous)
 			return false;
 
@@ -190,8 +189,8 @@ bool PageDirectory::canBeCollapsed(void *pageSpace, dword &pageAllocationMap, qw
 		// a partial entry can be collapsed if the sub-entries are consecutive
 		// OR if the entry is already a big page mapped to the desired physical address
 		PageDirectoryEntry &entry = entries[startEntry];
-		bool continuous = entry.isPresent() && ((entry.isPageBig() && entry.getAddress(PageEntry::addressMask_2mb) == physicalAddress_lower && entry.isUserPage() == userPage && entry.isWriteAccess() == writeAccess) ||
-												(!entry.isPageBig() && entry.getTable()->canBeCollapsed(pageSpace, pageAllocationMap, virtualAddress, physicalAddress, bytesPerEntry - (physicalAddress - physicalAddress_lower), writeAccess, userPage)));
+		bool continuous = entry.isPresent() && ((entry.isPageBig() && entry.getAddress(PageEntry::addressMask_2mb) == physicalAddress_lower && entry.attributes() == attributes) ||
+												(!entry.isPageBig() && entry.getTable()->canBeCollapsed(pageSpace, pageAllocationMap, virtualAddress, physicalAddress, bytesPerEntry - (physicalAddress - physicalAddress_lower), attributes)));
 		if (!continuous)
 			return false;
 	}
@@ -202,13 +201,13 @@ bool PageDirectory::canBeCollapsed(void *pageSpace, dword &pageAllocationMap, qw
 		// region is entirely contained within a single entry), if it exists at all
 
 		PageDirectoryEntry &entry = entries[endEntry];
-		bool continuous = entry.isPresent() && ((entry.isPageBig() && entry.getAddress(PageEntry::addressMask_2mb) == physicalAddress_upper && entry.isUserPage() == userPage && entry.isWriteAccess() == writeAccess) ||
-												(!entry.isPageBig() && entry.getTable()->canBeCollapsed(pageSpace, pageAllocationMap, virtualAddress + (physicalAddress_upper - physicalAddress), physicalAddress_upper, physicalAddress_upper + bytesPerEntry - (physicalAddress + len), writeAccess, userPage)));
+		bool continuous = entry.isPresent() && ((entry.isPageBig() && entry.getAddress(PageEntry::addressMask_2mb) == physicalAddress_upper && entry.attributes() == attributes) ||
+												(!entry.isPageBig() && entry.getTable()->canBeCollapsed(pageSpace, pageAllocationMap, virtualAddress + (physicalAddress_upper - physicalAddress), physicalAddress_upper, physicalAddress_upper + bytesPerEntry - (physicalAddress + len), attributes)));
 		if (!continuous)
 			return false;
 	}
 }
-bool PageDirectory::mapRegion(void *pageSpace, dword &pageAllocationMap, qword virtualAddress, qword physicalAddress, qword len, bool writeAccess, bool userPage)
+bool PageDirectory::mapRegion(void *pageSpace, dword &pageAllocationMap, qword virtualAddress, qword physicalAddress, qword len, PageEntry::EntryAttributes attributes)
 {
 	word startEntry, endEntry;
 	getEntryBounds(virtualAddress, len, startEntry, endEntry, 21);
@@ -235,13 +234,13 @@ bool PageDirectory::mapRegion(void *pageSpace, dword &pageAllocationMap, qword v
 				{
 					// entry present and is big page: expand the entry if mapped to a different region
 					// and with the same attributes, otherwise do nothing
-					bool matching = (entry.getAddress(PageEntry::addressMask_2mb) == (physicalAddress & PageEntry::addressMask_2mb)) && entry.isUserPage() == userPage && entry.isWriteAccess() == writeAccess;
+					bool matching = (entry.getAddress(PageEntry::addressMask_2mb) == (physicalAddress & PageEntry::addressMask_2mb)) && entry.attributes() == attributes;
 					if (!matching)
 					{
 						// expand and map the region
 						if (entry.expand(pageSpace, pageAllocationMap) == false)
 							return false;
-						if (!entry.getTable()->mapRegion(pageSpace, pageAllocationMap, virtualAddress, physicalAddress, len, writeAccess, userPage))
+						if (!entry.getTable()->mapRegion(pageSpace, pageAllocationMap, virtualAddress, physicalAddress, len, attributes))
 							return false;
 					}
 				}
@@ -249,16 +248,16 @@ bool PageDirectory::mapRegion(void *pageSpace, dword &pageAllocationMap, qword v
 				{
 					// not a big page. Check if the entry can be collapsed with the new mapping
 					PageTable *table = entry.getTable();
-					if (table->canBeCollapsed(pageSpace, pageAllocationMap, virtualAddress, physicalAddress, len, writeAccess, userPage))
+					if (table->canBeCollapsed(pageSpace, pageAllocationMap, virtualAddress, physicalAddress, len, attributes))
 					{
 						qword physicalAddress_base = table->entries[0].getAddress();
 						table->clearAll(pageSpace, pageAllocationMap);
 						DeallocatePage(pageSpace, pageAllocationMap, table);
-						entry.set(physicalAddress_base, writeAccess, userPage);
+						entry.set(physicalAddress_base, attributes);
 					}
 					else
 					{
-						if (!table->mapRegion(pageSpace, pageAllocationMap, virtualAddress, physicalAddress, len, writeAccess, userPage))
+						if (!table->mapRegion(pageSpace, pageAllocationMap, virtualAddress, physicalAddress, len, attributes))
 							return false;
 					}
 				}
@@ -270,7 +269,7 @@ bool PageDirectory::mapRegion(void *pageSpace, dword &pageAllocationMap, qword v
 				if (table == nullptr)
 					return false;
 				entry.set(table);
-				if (!table->mapRegion(pageSpace, pageAllocationMap, virtualAddress, physicalAddress, len, writeAccess, userPage))
+				if (!table->mapRegion(pageSpace, pageAllocationMap, virtualAddress, physicalAddress, len, attributes))
 					return false;
 			}
 
@@ -304,7 +303,7 @@ bool PageDirectory::mapRegion(void *pageSpace, dword &pageAllocationMap, qword v
 						table->clearAll(pageSpace, pageAllocationMap);
 						DeallocatePage(pageSpace, pageAllocationMap, table);
 					}
-					entry.set(physicalAddress, writeAccess, userPage);
+					entry.set(physicalAddress, attributes);
 				}
 				else
 				{
@@ -315,7 +314,7 @@ bool PageDirectory::mapRegion(void *pageSpace, dword &pageAllocationMap, qword v
 							return false;
 						entry.set(table);
 					}
-					if (!entry.getTable()->mapRegion(pageSpace, pageAllocationMap, virtualAddress, physicalAddress, len, writeAccess, userPage))
+					if (!entry.getTable()->mapRegion(pageSpace, pageAllocationMap, virtualAddress, physicalAddress, len, attributes))
 						return false;
 				}
 			}
@@ -324,7 +323,7 @@ bool PageDirectory::mapRegion(void *pageSpace, dword &pageAllocationMap, qword v
 				// entry is not present
 				if (aligned)
 				{
-					entry.set(physicalAddress, writeAccess, userPage);
+					entry.set(physicalAddress, attributes);
 				}
 				else
 				{
@@ -332,7 +331,7 @@ bool PageDirectory::mapRegion(void *pageSpace, dword &pageAllocationMap, qword v
 					if (table == nullptr)
 						return false;
 					entry.set(table);
-					if (!table->mapRegion(pageSpace, pageAllocationMap, virtualAddress, physicalAddress, len, writeAccess, userPage))
+					if (!table->mapRegion(pageSpace, pageAllocationMap, virtualAddress, physicalAddress, len, attributes))
 						return false;
 				}
 			}
@@ -379,14 +378,13 @@ bool PageDirectoryPointerTableEntry::expand(void *pageSpace, dword &pageAllocati
 		return false;
 
 	qword physicalAddress = this->getAddress(addressMask_1gb);
-	bool userPage = this->isUserPage();
-	bool writeAccess = this->isWriteAccess();
+	EntryAttributes attributes =  this->attributes();
 
-	table->mapRegion(pageSpace, pageAllocationMap, 0, physicalAddress, 1 << 30, writeAccess, userPage);
+	table->mapRegion(pageSpace, pageAllocationMap, 0, physicalAddress, 1 << 30, attributes);
 	this->set(table);
 	return true;
 }
-bool PageDirectoryPointerTable::mapRegion(void *pageSpace, dword &pageAllocationMap, qword virtualAddress, qword physicalAddress, qword len, bool writeAccess, bool userPage)
+bool PageDirectoryPointerTable::mapRegion(void *pageSpace, dword &pageAllocationMap, qword virtualAddress, qword physicalAddress, qword len, PageEntry::EntryAttributes attributes)
 {
 	word startEntry, endEntry;
 	getEntryBounds(virtualAddress, len, startEntry, endEntry, 30);
@@ -408,28 +406,28 @@ bool PageDirectoryPointerTable::mapRegion(void *pageSpace, dword &pageAllocation
 				// entry is present
 				if (entry.isPageBig())
 				{
-					bool matching = (entry.getAddress(PageEntry::addressMask_1gb) == (physicalAddress & PageEntry::addressMask_1gb)) && entry.isUserPage() == userPage && entry.isWriteAccess() == writeAccess;
+					bool matching = (entry.getAddress(PageEntry::addressMask_1gb) == (physicalAddress & PageEntry::addressMask_1gb)) && entry.attributes() == attributes;
 					if (!matching)
 					{
 						if (entry.expand(pageSpace, pageAllocationMap) == false)
 							return false;
-						if (!entry.getTable()->mapRegion(pageSpace, pageAllocationMap, virtualAddress, physicalAddress, len, writeAccess, userPage))
+						if (!entry.getTable()->mapRegion(pageSpace, pageAllocationMap, virtualAddress, physicalAddress, len, attributes))
 							return false;
 					}
 				}
 				else
 				{
 					PageDirectory *table = entry.getTable();
-					if (table->canBeCollapsed(pageSpace, pageAllocationMap, virtualAddress, physicalAddress, len, writeAccess, userPage))
+					if (table->canBeCollapsed(pageSpace, pageAllocationMap, virtualAddress, physicalAddress, len, attributes))
 					{
 						qword physicalAddress_base = table->entries[0].getAddress();
 						table->clearAll(pageSpace, pageAllocationMap);
 						DeallocatePage(pageSpace, pageAllocationMap, table);
-						entry.set(physicalAddress_base, writeAccess, userPage);
+						entry.set(physicalAddress_base, attributes);
 					}
 					else
 					{
-						if (!table->mapRegion(pageSpace, pageAllocationMap, virtualAddress, physicalAddress, len, writeAccess, userPage))
+						if (!table->mapRegion(pageSpace, pageAllocationMap, virtualAddress, physicalAddress, len, attributes))
 							return false;
 					}
 				}
@@ -441,7 +439,7 @@ bool PageDirectoryPointerTable::mapRegion(void *pageSpace, dword &pageAllocation
 				if (table == nullptr)
 					return false;
 				entry.set(table);
-				if (!table->mapRegion(pageSpace, pageAllocationMap, virtualAddress, physicalAddress, len, writeAccess, userPage))
+				if (!table->mapRegion(pageSpace, pageAllocationMap, virtualAddress, physicalAddress, len, attributes))
 					return false;
 			}
 
@@ -469,7 +467,7 @@ bool PageDirectoryPointerTable::mapRegion(void *pageSpace, dword &pageAllocation
 						table->clearAll(pageSpace, pageAllocationMap);
 						DeallocatePage(pageSpace, pageAllocationMap, table);
 					}
-					entry.set(physicalAddress, writeAccess, userPage);
+					entry.set(physicalAddress, attributes);
 				}
 				else
 				{
@@ -480,13 +478,13 @@ bool PageDirectoryPointerTable::mapRegion(void *pageSpace, dword &pageAllocation
 							return false;
 						entry.set(table);
 					}
-					if (!entry.getTable()->mapRegion(pageSpace, pageAllocationMap, virtualAddress, physicalAddress, len, writeAccess, userPage))
+					if (!entry.getTable()->mapRegion(pageSpace, pageAllocationMap, virtualAddress, physicalAddress, len, attributes))
 						return false;
 				}
 			}
 			else
 			{
-				entry.set(physicalAddress, writeAccess, userPage);
+				entry.set(physicalAddress, attributes);
 			}
 
 			// increment stuff
@@ -524,7 +522,7 @@ bool PageDirectoryPointerTable::getPhysicalAddress(qword virtualAddress, qword &
 	return true;
 }
 
-bool PageMapLevel4::mapRegion(void *pageSpace, dword &pageAllocationMap, qword virtualAddress, qword physicalAddress, qword len, bool writeAccess, bool userPage)
+bool PageMapLevel4::mapRegion(void *pageSpace, dword &pageAllocationMap, qword virtualAddress, qword physicalAddress, qword len, PageEntry::EntryAttributes attributes)
 {
 	word startEntry, endEntry;
 	getEntryBounds(virtualAddress, len, startEntry, endEntry, 39);
@@ -543,7 +541,7 @@ bool PageMapLevel4::mapRegion(void *pageSpace, dword &pageAllocationMap, qword v
 			// partial entry: first, last, or both
 			if (entry.isPresent())
 			{
-				if (!entry.getTable()->mapRegion(pageSpace, pageAllocationMap, virtualAddress, physicalAddress, len, writeAccess, userPage))
+				if (!entry.getTable()->mapRegion(pageSpace, pageAllocationMap, virtualAddress, physicalAddress, len, attributes))
 					return false;
 			}
 			else
@@ -552,7 +550,7 @@ bool PageMapLevel4::mapRegion(void *pageSpace, dword &pageAllocationMap, qword v
 				if (table == nullptr)
 					return false;
 				entry.set(table);
-				if (!table->mapRegion(pageSpace, pageAllocationMap, virtualAddress, physicalAddress, len, writeAccess, userPage))
+				if (!table->mapRegion(pageSpace, pageAllocationMap, virtualAddress, physicalAddress, len, attributes))
 					return false;
 			}
 
@@ -574,7 +572,7 @@ bool PageMapLevel4::mapRegion(void *pageSpace, dword &pageAllocationMap, qword v
 				table->clearAll(pageSpace, pageAllocationMap);
 				entry.set(table);
 			}
-			if (!entry.getTable()->mapRegion(pageSpace, pageAllocationMap, virtualAddress, physicalAddress, len, writeAccess, userPage))
+			if (!entry.getTable()->mapRegion(pageSpace, pageAllocationMap, virtualAddress, physicalAddress, len, attributes))
 				return false;
 		}
 	}

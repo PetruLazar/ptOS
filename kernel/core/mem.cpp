@@ -250,11 +250,11 @@ namespace Memory
 			System::blueScreen();
 
 		// identity map the first 2MB of ram
-		if (!pml4->mapRegion(pageSpace, pageAllocationMap, 0x1000, 0x1000, 0x200000 - 0x1000, true, false))
+		if (!pml4->mapRegion(pageSpace, pageAllocationMap, 0x1000, 0x1000, 0x200000 - 0x1000, PageEntry::EntryAttributes(PageEntry::writeAccessBit)))
 			mappingFailed = true;
 
 		// map gdt, idt, 64-bit TSS, kernel stack and kernel image
-		if (!pml4->mapRegion(pageSpace, pageAllocationMap, 0xFFFFFFFF80000000, 0x0000, 0x80000, true, false))
+		if (!pml4->mapRegion(pageSpace, pageAllocationMap, 0xFFFFFFFF80000000, 0x0000, 0x80000, PageEntry::EntryAttributes(PageEntry::writeAccessBit)))
 			mappingFailed = true;
 
 		// apply virtual map
@@ -266,7 +266,7 @@ namespace Memory
 		MapEntry &last = memoryMap[mapLength - 1];
 		sqword leftToMap = (sqword)last.base_address + last.length - 0x200000;
 		if (leftToMap > 0)
-			if (!pml4->mapRegion(pageSpace, pageAllocationMap, 0x200000, 0x200000, leftToMap, true, false))
+			if (!pml4->mapRegion(pageSpace, pageAllocationMap, 0x200000, 0x200000, leftToMap, PageEntry::EntryAttributes(PageEntry::writeAccessBit)))
 				mappingFailed = true;
 
 		entry.base_address += pageSpaceLen;
@@ -280,7 +280,7 @@ namespace Memory
 		byte *interruptStack = (byte *)Memory::Allocate(0x10000, 0x1000);
 
 		// map interrupt stack
-		if (!pml4->mapRegion(pageSpace, pageAllocationMap, 0xFFFFFFFF80080000, (ull)interruptStack, 0x10000, true, false))
+		if (!pml4->mapRegion(pageSpace, pageAllocationMap, 0xFFFFFFFF80080000, (ull)interruptStack, 0x10000, PageEntry::EntryAttributes(PageEntry::writeAccessBit)))
 			mappingFailed = true;
 
 		if (mappingFailed)

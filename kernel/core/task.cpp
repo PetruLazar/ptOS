@@ -31,19 +31,19 @@ Task *Task::createTask(const std::string16 &executableFileName)
 	bool mappingFailed = false;
 	if (paging != nullptr)
 	{
-		if (!paging->mapRegion(pageSpace, pageAllocationMap, 0x100000, (qword)content, alignValueUpwards(len, 0x1000), true, true)) // page loaded code
+		if (!paging->mapRegion(pageSpace, pageAllocationMap, 0x100000, (qword)content, alignValueUpwards(len, 0x1000), PageEntry::EntryAttributes(PageEntry::writeAccessBit | PageEntry::userPageBit))) // page loaded code
 			mappingFailed = true;
-		if (!paging->mapRegion(pageSpace, pageAllocationMap, 0x40000, (ull)stack, 0x10000, true, true)) // page stack
+		if (!paging->mapRegion(pageSpace, pageAllocationMap, 0x40000, (ull)stack, 0x10000, PageEntry::EntryAttributes(PageEntry::writeAccessBit | PageEntry::userPageBit))) // page stack
 			mappingFailed = true;
-		if (!paging->mapRegion(pageSpace, pageAllocationMap, 0x7f0000000000, (ull)heap, 0x10000, true, true)) // page heap
+		if (!paging->mapRegion(pageSpace, pageAllocationMap, 0x7f0000000000, (ull)heap, 0x10000, PageEntry::EntryAttributes(PageEntry::writeAccessBit | PageEntry::userPageBit))) // page heap
 			mappingFailed = true;
-		if (!paging->mapRegion(pageSpace, pageAllocationMap, 0xFFFFFFFF80000000, 0x0000, 0x80000, false, false)) // page kernel
+		if (!paging->mapRegion(pageSpace, pageAllocationMap, 0xFFFFFFFF80000000, 0x0000, 0x80000, PageEntry::EntryAttributes(PageEntry::writeAccessBit))) // page kernel
 			mappingFailed = true;
 		// get interrupt stack physical address and map it
 		ull interruptStackPhysical;
 		if (!paging->getCurrent().getPhysicalAddress(0xFFFFFFFF80080000, interruptStackPhysical, false))
 			mappingFailed = true;
-		if (!paging->mapRegion(pageSpace, pageAllocationMap, 0xFFFFFFFF80080000, interruptStackPhysical, 0x10000, false, false))
+		if (!paging->mapRegion(pageSpace, pageAllocationMap, 0xFFFFFFFF80080000, interruptStackPhysical, 0x10000, PageEntry::EntryAttributes(PageEntry::writeAccessBit)))
 			mappingFailed = true;
 	}
 
