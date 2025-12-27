@@ -123,6 +123,8 @@ bool PageTable::getPhysicalAddress(qword virtualAddress, qword &physicalAddress,
 	PageTableEntry &entry = entries[(virtualAddress >> 12) & 0x1ff];
 	if (!entry.isPresent())
 		return false;
+	if (!entry.attributes().userPage && isUserAccess)
+		return false;
 	physicalAddress = entry.getAddress(PageEntry::addressMask_4kb) | (virtualAddress & (bytesPerEntry - 1));
 	return true;
 }
@@ -365,6 +367,8 @@ bool PageDirectory::getPhysicalAddress(qword virtualAddress, qword &physicalAddr
 	PageDirectoryEntry &entry = entries[(virtualAddress >> 21) & 0x1ff];
 	if (!entry.isPresent())
 		return false;
+	if (!entry.attributes().userPage && isUserAccess)
+		return false;
 	if (!entry.isPageBig())
 		return entry.getTable()->getPhysicalAddress(virtualAddress, physicalAddress, isUserAccess);
 	physicalAddress = entry.getAddress(PageEntry::addressMask_2mb) | (virtualAddress & (bytesPerEntry - 1));
@@ -484,7 +488,19 @@ bool PageDirectoryPointerTable::mapRegion(void *pageSpace, dword &pageAllocation
 			}
 			else
 			{
-				entry.set(physicalAddress, attributes);
+				if (aligned)
+				{
+					entry.set(physicalAddress, attributes);
+				}
+				else
+				{
+					PageDirectory *table = (PageDirectory *)AllocatePage(pageSpace, pageAllocationMap);
+					if (table == nullptr)
+						return false;
+					entry.set(table);
+					if (!table->mapRegion(pageSpace,pageAllocationMap, virtualAddress, physicalAddress, len, attributes))
+						return false;
+				}
 			}
 
 			// increment stuff
@@ -515,6 +531,8 @@ bool PageDirectoryPointerTable::getPhysicalAddress(qword virtualAddress, qword &
 {
 	PageDirectoryPointerTableEntry &entry = entries[(virtualAddress >> 30) & 0x1ff];
 	if (!entry.isPresent())
+		return false;
+	if (!entry.attributes().userPage && isUserAccess)
 		return false;
 	if (!entry.isPageBig())
 		return entry.getTable()->getPhysicalAddress(virtualAddress, physicalAddress, isUserAccess);
@@ -574,6 +592,10 @@ bool PageMapLevel4::mapRegion(void *pageSpace, dword &pageAllocationMap, qword v
 			}
 			if (!entry.getTable()->mapRegion(pageSpace, pageAllocationMap, virtualAddress, physicalAddress, len, attributes))
 				return false;
+
+			physicalAddress += bytesPerEntry;
+			virtualAddress += bytesPerEntry;
+			len -= bytesPerEntry;
 		}
 	}
 
@@ -598,6 +620,8 @@ bool PageMapLevel4::getPhysicalAddress(qword virtualAddress, qword &physicalAddr
 {
 	PageMapLevel4Entry &entry = entries[(virtualAddress >> 39) & 0x1ff];
 	if (!entry.isPresent())
+		return false;
+	if (!entry.attributes().userPage && isUserAccess)
 		return false;
 	return entry.getTable()->getPhysicalAddress(virtualAddress, physicalAddress, isUserAccess);
 }
