@@ -4,6 +4,7 @@
 #include "pic.h"
 #include "../../core/scheduler.h"
 #include "../../core/sys.h"
+#include "../../debug/debug.h"
 
 using namespace ISR::std;
 
@@ -48,6 +49,9 @@ namespace Exception
 
 	extern "C" void exceptionHandler(registers_t &regs, qword int_no, qword err_no)
 	{
+		if (int_no == 1 || int_no == 3)
+			return Debug::DebugExceptionHandler(regs, int_no);
+
 		// if (int_no == 7 || int_no == 6)
 
 		cout
