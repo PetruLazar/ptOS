@@ -10,7 +10,7 @@ namespace Memory
 	std::string getStringMemoryMap();
 	void Initialize(byte *kernelPhysicalAddress, byte *mapEntryDescriptor, byte *mapEntries);
 
-	void GetPageSpace(void *&pageSpace, dword &pageAllocationMap);
+	void GetPageSpace(void *&pageSpace, dword *&pageAllocationMap);
 }
 
 inline void memcpy(void *dest, const void *src, ull len)

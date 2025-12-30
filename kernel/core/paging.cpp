@@ -208,6 +208,8 @@ bool PageDirectory::canBeCollapsed(void *pageSpace, dword &pageAllocationMap, qw
 		if (!continuous)
 			return false;
 	}
+
+	return true;
 }
 bool PageDirectory::mapRegion(void *pageSpace, dword &pageAllocationMap, qword virtualAddress, qword physicalAddress, qword len, PageEntry::EntryAttributes attributes)
 {
@@ -252,7 +254,7 @@ bool PageDirectory::mapRegion(void *pageSpace, dword &pageAllocationMap, qword v
 					PageTable *table = entry.getTable();
 					if (table->canBeCollapsed(pageSpace, pageAllocationMap, virtualAddress, physicalAddress, len, attributes))
 					{
-						qword physicalAddress_base = table->entries[0].getAddress();
+						qword physicalAddress_base = physicalAddress - (virtualAddress - virtualAddress_entryBase);
 						table->clearAll(pageSpace, pageAllocationMap);
 						DeallocatePage(pageSpace, pageAllocationMap, table);
 						entry.set(physicalAddress_base, attributes);
@@ -424,7 +426,7 @@ bool PageDirectoryPointerTable::mapRegion(void *pageSpace, dword &pageAllocation
 					PageDirectory *table = entry.getTable();
 					if (table->canBeCollapsed(pageSpace, pageAllocationMap, virtualAddress, physicalAddress, len, attributes))
 					{
-						qword physicalAddress_base = table->entries[0].getAddress();
+						qword physicalAddress_base = physicalAddress - (virtualAddress - virtualAddress_entryBase);
 						table->clearAll(pageSpace, pageAllocationMap);
 						DeallocatePage(pageSpace, pageAllocationMap, table);
 						entry.set(physicalAddress_base, attributes);

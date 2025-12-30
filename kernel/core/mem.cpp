@@ -287,9 +287,9 @@ namespace Memory
 			System::blueScreen();
 	}
 
-	void GetPageSpace(void *&retValPageSpace, dword &retValPageAllocationMap)
+	void GetPageSpace(void *&retValPageSpace, dword *&retValPageAllocationMap)
 	{
 		retValPageSpace = pageSpace;
-		retValPageAllocationMap = pageAllocationMap;
+		retValPageAllocationMap = &pageAllocationMap;
 	}
 }

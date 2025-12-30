@@ -407,9 +407,9 @@ namespace AHCI
 
 		PageMapLevel4 &current = PageMapLevel4::getCurrent();
 		void *pageSpace;
-		dword pageAllocationMap;
+		dword *pageAllocationMap;
 		Memory::GetPageSpace(pageSpace, pageAllocationMap);
-		if (!current.mapRegion(pageSpace, pageAllocationMap, (ull)header->bar5, (ull)header->bar5, 0x2000, PageEntry::EntryAttributes(PageEntry::writeAccessBit | PageEntry::pageWriteThroughBit | PageEntry::pageCacheDisable)))
+		if (!current.mapRegion(pageSpace, *pageAllocationMap, (ull)header->bar5, (ull)header->bar5, 0x2000, PageEntry::EntryAttributes(PageEntry::writeAccessBit | PageEntry::pageWriteThroughBit | PageEntry::pageCacheDisable)))
 		{
 			// handle error case...
 			System::blueScreen();
