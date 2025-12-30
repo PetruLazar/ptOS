@@ -189,7 +189,6 @@ namespace AHCI
 	struct Controller
 	{
 		volatile Registers *regs;
-		byte *pageSpace;
 		vector<void *> allocations;
 		uint cmdSlots;
 
@@ -384,7 +383,6 @@ namespace AHCI
 	{
 		for (auto &controller : *controllers)
 		{
-			delete[] controller->pageSpace;
 			for (auto &ptr : controller->allocations)
 				delete[] (byte *)ptr;
 			delete controller;
@@ -402,9 +400,6 @@ namespace AHCI
 		controller->pciLocation = device.location;
 
 		VERBOSE_LOG("Paging memory mapped registers...\n");
-		controller->pageSpace = (byte *)Memory::Allocate(0x8000, 0x1000);
-		ull freeSpace = (ull)controller->pageSpace;
-
 		PageMapLevel4 &current = PageMapLevel4::getCurrent();
 		void *pageSpace;
 		dword *pageAllocationMap;
