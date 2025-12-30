@@ -73,13 +73,15 @@ namespace GDT
 
 	TSS *tss;
 
-	void Initialize(byte *GDT_address, byte *TSS_address, byte *interruptStack)
+	void Initialize(byte *GDT_address, byte *TSS_address, byte *interruptStackIsr, byte *interruptStackIrq, byte *interruptStackSyscall)
 	{
 		globalDescriptorTable = (SegmentDescriptor *)GDT_address;
 		tss = (TSS *)TSS_address;
 
 		tss->clear();
-		tss->rsp[0] = tss->ist[0] = (ull)interruptStack;
+		tss->ist[1 - 1] = (ull)interruptStackIsr;
+		tss->ist[2 - 1] = (ull)interruptStackIrq;
+		tss->ist[3 - 1] = (ull)interruptStackSyscall;
 
 		TSSDescriptor tssDesc(*tss);
 

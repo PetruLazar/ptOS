@@ -45,7 +45,9 @@ void shutdown();
 static constexpr ull GDT_ADDRESS = (ull)0xFFFFFFFF80000500;
 static constexpr ull IDT_ADDRESS = (ull)0xFFFFFFFF80001000;
 static constexpr ull TSS_ADDRESS = (ull)0xFFFFFFFF80002000;
-static constexpr ull INT_RING0_STACK = (ull)0xFFFFFFFF80090000;
+static constexpr ull INT_RING0_STACK_ISR = (ull)0xFFFFFFFF80082000;
+static constexpr ull INT_RING0_STACK_IRQ = (ull)0xFFFFFFFF80084000;
+static constexpr ull INT_RING0_STACK_SYSCALL = (ull)0xFFFFFFFF80086000;
 
 struct KernelInfo
 {
@@ -69,7 +71,7 @@ extern void main(KernelInfo &info)
 	VERBOSE_LOG("Initializing IRQ handlers...\n");
 	IRQ::Initialize();
 	VERBOSE_LOG("Initializing GDT and TSS...\n");
-	GDT::Initialize((byte *)GDT_ADDRESS, (byte *)TSS_ADDRESS, (byte *)INT_RING0_STACK);
+	GDT::Initialize((byte *)GDT_ADDRESS, (byte *)TSS_ADDRESS, (byte *)INT_RING0_STACK_ISR, (byte *)INT_RING0_STACK_IRQ, (byte *)INT_RING0_STACK_SYSCALL);
 
 	VERBOSE_LOG("Initializing Scheduler...\n");
 	Scheduler::Initialize();

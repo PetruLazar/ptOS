@@ -22,6 +22,20 @@ Task *Task::createTask(const std::string16 &executableFileName)
 		// cout << "Could not read file: " << Filesystem::resultAsString(res) << "\n";
 		return nullptr;
 	}
+	ull interruptStackISR_physicalAddress,
+		interruptStackIRQ_physicalAddress,
+		interruptStackSYSCALL_physicalAddress;
+
+	if (!PageMapLevel4::getCurrent().getPhysicalAddress(0xFFFFFFFF80081000, interruptStackISR_physicalAddress, false) ||
+		!PageMapLevel4::getCurrent().getPhysicalAddress(0xFFFFFFFF80083000, interruptStackIRQ_physicalAddress, false) ||
+		!PageMapLevel4::getCurrent().getPhysicalAddress(0xFFFFFFFF80085000, interruptStackSYSCALL_physicalAddress, false)
+	)
+	{
+		cout << "Could not obtain physical address of interrupt stacks.\n";
+		delete[] content;
+		return nullptr;
+	}
+
 	byte *pageSpace = (byte *)Memory::Allocate(0x10000, 0x1000),
 		 *stack = (byte *)Memory::Allocate(0x10000, 0x1000),
 		 *heap = (byte *)Memory::Allocate(0x10000, 0x1000);
@@ -40,10 +54,11 @@ Task *Task::createTask(const std::string16 &executableFileName)
 		if (!paging->mapRegion(pageSpace, pageAllocationMap, 0xFFFFFFFF80000000, 0x0000, 0x80000, PageEntry::EntryAttributes(PageEntry::writeAccessBit))) // page kernel
 			mappingFailed = true;
 		// get interrupt stack physical address and map it
-		ull interruptStackPhysical;
-		if (!paging->getCurrent().getPhysicalAddress(0xFFFFFFFF80080000, interruptStackPhysical, false))
+		if (!paging->mapRegion(pageSpace, pageAllocationMap, 0xFFFFFFFF80081000, interruptStackISR_physicalAddress, 0x1000, PageEntry::EntryAttributes(PageEntry::writeAccessBit)))
 			mappingFailed = true;
-		if (!paging->mapRegion(pageSpace, pageAllocationMap, 0xFFFFFFFF80080000, interruptStackPhysical, 0x10000, PageEntry::EntryAttributes(PageEntry::writeAccessBit)))
+		if (!paging->mapRegion(pageSpace, pageAllocationMap, 0xFFFFFFFF80083000, interruptStackIRQ_physicalAddress, 0x1000, PageEntry::EntryAttributes(PageEntry::writeAccessBit)))
+			mappingFailed = true;
+		if (!paging->mapRegion(pageSpace, pageAllocationMap, 0xFFFFFFFF80085000, interruptStackSYSCALL_physicalAddress, 0x1000, PageEntry::EntryAttributes(PageEntry::writeAccessBit)))
 			mappingFailed = true;
 	}
 

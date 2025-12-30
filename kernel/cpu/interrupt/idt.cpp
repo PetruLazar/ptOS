@@ -177,25 +177,25 @@ namespace IDT
 			gates[0x1f].setInterruptGate(IntEntryPoints::isr_1f, 1, 0);
 
 			// interrupt requests
-			gates[0x20].setInterruptGate(IntEntryPoints::irq_0, 1, 0);
-			gates[0x21].setInterruptGate(IntEntryPoints::irq_1, 1, 0);
-			gates[0x22].setInterruptGate(IntEntryPoints::irq_2, 1, 0);
-			gates[0x23].setInterruptGate(IntEntryPoints::irq_3, 1, 0);
-			gates[0x24].setInterruptGate(IntEntryPoints::irq_4, 1, 0);
-			gates[0x25].setInterruptGate(IntEntryPoints::irq_5, 1, 0);
-			gates[0x26].setInterruptGate(IntEntryPoints::irq_6, 1, 0);
-			gates[0x27].setInterruptGate(IntEntryPoints::irq_7, 1, 0);
-			gates[0x28].setInterruptGate(IntEntryPoints::irq_8, 1, 0);
-			gates[0x29].setInterruptGate(IntEntryPoints::irq_9, 1, 0);
-			gates[0x2a].setInterruptGate(IntEntryPoints::irq_10, 1, 0);
-			gates[0x2b].setInterruptGate(IntEntryPoints::irq_11, 1, 0);
-			gates[0x2c].setInterruptGate(IntEntryPoints::irq_12, 1, 0);
-			gates[0x2d].setInterruptGate(IntEntryPoints::irq_13, 1, 0);
-			gates[0x2e].setInterruptGate(IntEntryPoints::irq_14, 1, 0);
-			gates[0x2f].setInterruptGate(IntEntryPoints::irq_15, 1, 0);
+			gates[0x20].setInterruptGate(IntEntryPoints::irq_0, 2, 0);
+			gates[0x21].setInterruptGate(IntEntryPoints::irq_1, 2, 0);
+			gates[0x22].setInterruptGate(IntEntryPoints::irq_2, 2, 0);
+			gates[0x23].setInterruptGate(IntEntryPoints::irq_3, 2, 0);
+			gates[0x24].setInterruptGate(IntEntryPoints::irq_4, 2, 0);
+			gates[0x25].setInterruptGate(IntEntryPoints::irq_5, 2, 0);
+			gates[0x26].setInterruptGate(IntEntryPoints::irq_6, 2, 0);
+			gates[0x27].setInterruptGate(IntEntryPoints::irq_7, 2, 0);
+			gates[0x28].setInterruptGate(IntEntryPoints::irq_8, 2, 0);
+			gates[0x29].setInterruptGate(IntEntryPoints::irq_9, 2, 0);
+			gates[0x2a].setInterruptGate(IntEntryPoints::irq_10, 2, 0);
+			gates[0x2b].setInterruptGate(IntEntryPoints::irq_11, 2, 0);
+			gates[0x2c].setInterruptGate(IntEntryPoints::irq_12, 2, 0);
+			gates[0x2d].setInterruptGate(IntEntryPoints::irq_13, 2, 0);
+			gates[0x2e].setInterruptGate(IntEntryPoints::irq_14, 2, 0);
+			gates[0x2f].setInterruptGate(IntEntryPoints::irq_15, 2, 0);
 
 			// os callback
-			gates[0x30].setInterruptGate(IntEntryPoints::isr_30, 1, 3);
+			gates[0x30].setInterruptGate(IntEntryPoints::isr_30, 3, 3);
 		}
 
 		// load idt

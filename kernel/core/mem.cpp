@@ -277,10 +277,14 @@ namespace Memory
 		// Heap::selectHeap(Heap::build(entry.base_address + diff, entry.length - diff));
 
 		VERBOSE_LOG("Allocating and mapping the interrupt stack...\n");
-		byte *interruptStack = (byte *)Memory::Allocate(0x10000, 0x1000);
+		byte *interruptStack = (byte *)Memory::Allocate(0x6000, 0x1000);
 
 		// map interrupt stack
-		if (!pml4->mapRegion(pageSpace, pageAllocationMap, 0xFFFFFFFF80080000, (ull)interruptStack, 0x10000, PageEntry::EntryAttributes(PageEntry::writeAccessBit)))
+		if (!pml4->mapRegion(pageSpace, pageAllocationMap, 0xFFFFFFFF80081000, (ull)interruptStack + 0x1000, 0x1000, PageEntry::EntryAttributes(PageEntry::writeAccessBit)))
+			mappingFailed = true;
+		if (!pml4->mapRegion(pageSpace, pageAllocationMap, 0xFFFFFFFF80083000, (ull)interruptStack + 0x3000, 0x1000, PageEntry::EntryAttributes(PageEntry::writeAccessBit)))
+			mappingFailed = true;
+		if (!pml4->mapRegion(pageSpace, pageAllocationMap, 0xFFFFFFFF80085000, (ull)interruptStack + 0x5000, 0x1000, PageEntry::EntryAttributes(PageEntry::writeAccessBit)))
 			mappingFailed = true;
 
 		if (mappingFailed)
