@@ -16,5 +16,6 @@ struct registers_t
 
 namespace IDT
 {
+	void PreInitialize(byte *IDT_address);
 	void Initialize(byte *IDT_address);
 };

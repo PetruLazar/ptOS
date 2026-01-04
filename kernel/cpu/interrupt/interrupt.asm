@@ -17,6 +17,7 @@ interruptNr: db 0
 ; externals for .text
 [extern exceptionHandler]
 [extern irqHandler]
+[extern irqApicHandler]
 [extern os_serviceHandler]
 
 ; symbols for .text
@@ -72,6 +73,15 @@ global irq_13
 global irq_14
 global irq_15
 
+global irq_40
+global irq_41
+global irq_42
+global irq_43
+global irq_44
+global irq_45
+global irq_46
+global irq_4f
+
 global getRSP
 global getRBP
 global loadidt
@@ -89,7 +99,6 @@ movzx rsi, byte [interruptNr]
 mov rdx, [errCode]
 call exceptionHandler
 call popCpuState
-sti
 iretq
 
 irq_common:
@@ -100,7 +109,14 @@ movzx rsi, byte [interruptNr]
 xor rdx, rdx
 call irqHandler
 call popCpuState
-sti
+iretq
+
+irq_apic_common:
+call pushCpuState
+lea rdi, [rsp]
+movzx rsi, byte [interruptNr]
+call irqApicHandler
+call popCpuState
 iretq
 
 isr_0:
@@ -369,6 +385,49 @@ irq_15:
 cli
 mov byte [interruptNr], 15
 jmp irq_common
+
+
+
+irq_40:
+cli
+mov byte [interruptNr], 0
+jmp irq_apic_common
+
+irq_41:
+cli
+mov byte [interruptNr], 1
+jmp irq_apic_common
+
+irq_42:
+cli
+mov byte [interruptNr], 2
+jmp irq_apic_common
+
+irq_43:
+cli
+mov byte [interruptNr], 3
+jmp irq_apic_common
+
+irq_44:
+cli
+mov byte [interruptNr], 4
+jmp irq_apic_common
+
+irq_45:
+cli
+mov byte [interruptNr], 5
+jmp irq_apic_common
+
+irq_46:
+cli
+mov byte [interruptNr], 6
+jmp irq_apic_common
+
+irq_4f:
+cli
+mov byte [interruptNr], 15
+jmp irq_apic_common
+
 
 
 disableInterrupts:

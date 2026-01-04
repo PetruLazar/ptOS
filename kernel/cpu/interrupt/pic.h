@@ -5,6 +5,6 @@ namespace PIC
 {
 	void EndOfInterrupt(byte irq_no);
 	void Initialize(byte offset);
-	bool detectApic();
+	void Disable();
 	word getISR();
 };

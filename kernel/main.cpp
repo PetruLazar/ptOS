@@ -60,11 +60,12 @@ extern void main(KernelInfo &info)
 {
 	VERBOSE_BEGIN;
 
-	VERBOSE_LOG("Initializing IDT...\n");
-	IDT::Initialize((byte *)IDT_ADDRESS);
+	VERBOSE_LOG("Pre-initializing IDT...\n");
+	IDT::PreInitialize((byte *)IDT_ADDRESS);
 	VERBOSE_LOG("Initializing Memory...\n");
 	Memory::Initialize(info.kernelPhysicalAddress, info.memoryMapDescriptorAddress, info.memoryMapAddress);
-	
+	// nullptr access protection starts here!!
+
 	VERBOSE_LOG("Initializing Screen driver...\n");
 	Screen::Initialize();
 
@@ -72,6 +73,8 @@ extern void main(KernelInfo &info)
 	IRQ::Initialize();
 	VERBOSE_LOG("Initializing GDT and TSS...\n");
 	GDT::Initialize((byte *)GDT_ADDRESS, (byte *)TSS_ADDRESS, (byte *)INT_RING0_STACK_ISR, (byte *)INT_RING0_STACK_IRQ, (byte *)INT_RING0_STACK_SYSCALL);
+	VERBOSE_LOG("Initializing IDT...\n");
+	IDT::Initialize((byte *)IDT_ADDRESS);
 
 	VERBOSE_LOG("Initializing Scheduler...\n");
 	Scheduler::Initialize();
@@ -331,13 +334,6 @@ void terminal()
 		else if (subCmd == "memmap")
 		{
 			Memory::DisplayMap();
-		}
-		else if (subCmd == "apic")
-		{
-			cout << "Apic ";
-			if (!PIC::detectApic())
-				cout << "not ";
-			cout << "detected\n";
 		}
 		else if (subCmd == "cpu")
 		{

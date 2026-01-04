@@ -1,5 +1,6 @@
 #pragma once
 #include <types.h>
+#include "idt.h"
 
 namespace PIT
 {
@@ -23,4 +24,8 @@ namespace PIT
 	};
 
 	void ConfigureChannel(SelectChannel channel, OperatingMode opMode, uint desiredFrequency);
+
+	void InterruptHandler(registers_t &regs);
+	ull driver_time();
+
 }

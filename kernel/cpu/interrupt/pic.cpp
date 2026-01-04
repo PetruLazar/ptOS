@@ -1,7 +1,6 @@
 #include "../ports.h"
 #include "../cpuid.h"
 #include "pic.h"
-#include "pit.h"
 #include "irq.h"
 
 namespace PIC
@@ -44,10 +43,10 @@ namespace PIC
 
 		outb(pic1data, 0);
 		outb(pic2data, 0);
-
-		PIT::ConfigureChannel(PIT::SelectChannel::channel0, PIT::OperatingMode::rateGenerator, 1000 / IRQ::ms_per_timeint);
-		// PIT::ConfigureChannel(PIT::SelectChannel::channel2, PIT::OperatingMode::squareWaveGenerator, 10000 / ms_per_timeint);
-		// outb(0x61, inb(0x61) | 0b11);
+	}
+	void Disable()
+	{
+		
 	}
 
 	constexpr byte readIRRcmd = 0x0a,
@@ -57,12 +56,5 @@ namespace PIC
 		outb(pic1cmd, readISRcmd);
 		outb(pic2cmd, readISRcmd);
 		return (inb(pic2cmd) << 8) | inb(pic1cmd);
-	}
-
-	bool detectApic()
-	{
-		dword unused, edx;
-		cpuid(1, unused, unused, unused, edx);
-		return (edx >> 9) & 0x1;
 	}
 }

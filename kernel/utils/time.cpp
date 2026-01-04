@@ -1,18 +1,54 @@
 #include "time.h"
 #include "../cpu/interrupt/irq.h"
 #include "../core/scheduler.h"
+#include "../cpu/interrupt/pit.h"
 
 #include <iostream.h>
 using namespace std;
 
 namespace Time
 {
-	qword irqCount = 0;
+	typedef IRQ::IrqHandler InterruptHandlerCallback;
+	typedef ull (*TimeGetterCallback)();
+
+	struct TimerConfiguration
+	{
+		InterruptHandlerCallback interruptHandler;
+		TimeGetterCallback timeGetter;
+	};
+
+	const TimerConfiguration supportedTimers[] = {
+		{ // PIT
+			PIT::InterruptHandler,
+			PIT::driver_time,
+		},
+		{ // APICtimer
+			nullptr,
+			nullptr,
+		},
+		{ // HPET
+			nullptr,
+			nullptr,
+		},
+	};
+	const TimerConfiguration *activeTimerConfiguration = nullptr;
 
 	void IrqHandler(registers_t &regs)
 	{
-		irqCount++;
+		if (activeTimerConfiguration)
+			activeTimerConfiguration->interruptHandler(regs);
 		Scheduler::tick(regs);
+	}
+	void SelectTimer(TimerSource timerSource)
+	{
+		if (timerSource < TimerSource::noTimer)
+		{
+			activeTimerConfiguration = &supportedTimers[(byte)timerSource];
+		}
+		else
+		{
+			activeTimerConfiguration = nullptr;
+		}
 	}
 
 	void Initialize()
@@ -22,6 +58,6 @@ namespace Time
 
 	qword driver_time()
 	{
-		return irqCount * IRQ::ms_per_timeint;
+		return activeTimerConfiguration->timeGetter();
 	}
 }

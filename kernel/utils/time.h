@@ -3,8 +3,17 @@
 
 namespace Time
 {
+	enum class TimerSource
+	{
+		PIT,
+		APICtimer,
+		HPET,
+
+		noTimer
+	};
 
 	void Initialize();
+	void SelectTimer(TimerSource timerSource);
 
 	inline qword clock()
 	{

@@ -1,8 +1,11 @@
 #include "irq.h"
+#include "apic.h"
 #include "pic.h"
+#include "pit.h"
 #include <vector.h>
 #include "../../utils/isriostream.h"
 #include "../../core/sys.h"
+#include "../../utils/time.h"
 
 using namespace std;
 
@@ -16,6 +19,16 @@ namespace IRQ
 	{
 		// init pic
 		PIC::Initialize(irqOffset);
+		if (APIC::DetectPresence())
+		{
+			APIC::Initialize();
+			PIC::Disable(); // does nothing yet
+		}
+		else
+		{
+			Time::SelectTimer(Time::TimerSource::PIT);
+			PIT::ConfigureChannel(PIT::SelectChannel::channel0, PIT::OperatingMode::rateGenerator, 1000 / ms_per_timeint);
+		}
 
 		// init irqHandler list
 		irqHandlers = new vector<IrqHandler>[16];
@@ -39,11 +52,30 @@ namespace IRQ
 
 		PIC::EndOfInterrupt(irq_no);
 	}
+	extern "C" void irqApicHandler(registers_t &regs, qword irq_no)
+	{
+		ISR::std::cout << "APIC INT " << irq_no << '\n';
+	}
 
 	void registerIrqHandler(byte irq_no, IrqHandler handler)
 	{
 		disableInterrupts();
 		irqHandlers[irq_no].push_back(handler);
+		enableInterrupts();
+	}
+	void unregisterIrqHandler(byte irq_no, IrqHandler handler)
+	{
+		disableInterrupts();
+		auto &vec = irqHandlers[irq_no];
+		auto len = vec.getSize();
+		for (ull i = 0; i < len; i++)
+		{
+			if (vec[i] == handler)
+			{
+				vec.erase(i);
+				break;
+			}
+		}
 		enableInterrupts();
 	}
 }

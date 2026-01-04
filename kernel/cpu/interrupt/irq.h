@@ -22,4 +22,5 @@ namespace IRQ
 	void CleanUp();
 
 	void registerIrqHandler(byte irq_no, IrqHandler handler);
+	void unregisterIrqHandler(byte irq_no, IrqHandler handler);
 }
