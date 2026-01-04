@@ -8,8 +8,8 @@ using namespace std;
 
 namespace Screen
 {
-	short screenSize;
-	int bufferSize, startInBuffer = 0;
+	short screenSize = screenWidth * screenHeight;
+	int bufferSize = screenHeight * screenWidth, startInBuffer = 0;
 
 	namespace Cursor
 	{
@@ -56,80 +56,15 @@ namespace Screen
 	void makeSpaceInBuffer();
 
 	Cell *const video_memory = (Cell *)0xb8000;
-	Cell *buffer = nullptr;
-
-	#ifdef VERBOSE_LOGGING
-	void driver_print_uninitialized(const char* msg)
-	{
-		for (int i = 0; msg[i]; i++)
-		{
-			switch (msg[i])
-			{
-			case '\n':
-			{
-				int delta = screenWidth - Cursor::screenPos % screenWidth;
-				Cursor::screenPos += delta;
-			}
-			break;
-			case '\b':
-			{
-				if (Cursor::screenPos)
-					Cursor::screenPos--;
-			}
-			break;
-			case '\t':
-			{
-				short delta = tabSize - (Cursor::screenPos % screenWidth) % tabSize;
-				Cursor::screenPos += delta;
-			}
-			break;
-			case '\a':
-				break;
-			default:
-				video_memory[Cursor::screenPos++].character = msg[i];
-			}
-
-
-			if (Cursor::screenPos >= screenWidth * screenHeight)
-			{
-				// scroll up the screen
-				Cursor::screenPos -= screenWidth;
-				for (int i = 0; i < screenWidth * (screenHeight - 1); i++)
-					video_memory[i] = video_memory[i + screenWidth];
-				for (int i = screenWidth * (screenHeight - 1); i < screenWidth * screenHeight; i++)
-					video_memory[i] = Cell(' ', Cell::Color::black, Cell::Color::white);
-			}
-		}
-		Cursor::update();
-	}
-	void driver_clear_uninitialized()
-	{
-		for (int i = 0; i < screenWidth * screenHeight; i++)
-			video_memory[i] = Cell(' ', Cell::Color::black, Cell::Color::white);
-		Cursor::driver_set(0);
-	}
-	void Initialize_vervose()
-	{
-		screenSize = screenWidth * screenHeight;
-		bufferSize = screenSize * 10; // 10 screens
-		buffer = new Cell[bufferSize];
-
-		for (int i = 0; i < screenWidth * screenHeight; i++)
-			buffer[i] = video_memory[i];
-
-		Cursor::bufferPos = Cursor::screenPos;
-	}
-	#endif
+	Cell *buffer = video_memory;
 
 	void Initialize()
 	{
-		SCREENDRIVER_INITIALIZE_REDIRECT;
-
-		screenSize = screenWidth * screenHeight;
 		bufferSize = screenSize * 10; // 10 screens
 		buffer = new Cell[bufferSize];
 
-		driver_clear();
+		for (int i = 0; i < screenSize; i++)
+			buffer[i] = video_memory[i];
 	}
 	void Cleanup()
 	{
@@ -137,8 +72,6 @@ namespace Screen
 	}
 	void driver_clear()
 	{
-		SCREENDRIVER_CLEAR_REDIRECT;
-
 		for (word i = 0; i < bufferSize; i++)
 			buffer[i] = Cell();
 		startInBuffer = 0;
@@ -218,8 +151,6 @@ namespace Screen
 	}
 	void driver_print(const char *msg)
 	{
-		SCREENDRIVER_PRINT_REDIRECT;
-
 		while (Cursor::screenPos < 0)
 		{
 			Cursor::screenPos += screenWidth;

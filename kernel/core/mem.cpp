@@ -276,7 +276,7 @@ namespace Memory
 		selectedHeap = Heap::build(entry.base_address, entry.length);
 		// Heap::selectHeap(Heap::build(entry.base_address + diff, entry.length - diff));
 
-		VERBOSE_LOG("Allocating and mapping the interrupt stack...\n");
+		VERBOSE_LOG("Allocating and mapping the interrupt stacks...\n");
 		byte *interruptStack = (byte *)Memory::Allocate(0x6000, 0x1000);
 
 		// map interrupt stack

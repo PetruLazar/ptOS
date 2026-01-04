@@ -58,7 +58,7 @@ struct KernelInfo
 
 extern void main(KernelInfo &info)
 {
-	VERBOSE_BEGIN;
+	Screen::driver_clear();
 
 	VERBOSE_LOG("Pre-initializing IDT...\n");
 	IDT::PreInitialize((byte *)IDT_ADDRESS);
