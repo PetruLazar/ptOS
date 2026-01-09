@@ -6,6 +6,7 @@
 #include "../../utils/isriostream.h"
 #include "../../core/sys.h"
 #include "../../utils/time.h"
+#include "../../debug/verbose.h"
 
 using namespace std;
 
@@ -18,14 +19,17 @@ namespace IRQ
 	void Initialize()
 	{
 		// init pic
+		VERBOSE_LOG("Initializing PIC...\n");
 		PIC::Initialize(irqOffset);
 		if (APIC::DetectPresence())
 		{
+			VERBOSE_LOG("Initializing APIC...\n");
 			APIC::Initialize();
 			PIC::Disable(); // does nothing yet
 		}
 		else
 		{
+			VERBOSE_LOG("Initializing PIT...\n");
 			Time::SelectTimer(Time::TimerSource::PIT);
 			PIT::ConfigureChannel(PIT::SelectChannel::channel0, PIT::OperatingMode::rateGenerator, 1000 / ms_per_timeint);
 		}
