@@ -361,6 +361,7 @@ namespace Scheduler
 		// this means that this function only works for kernel task, where the heap is identity mapped
 
 		Thread *thread = new Thread(parentThread->getParentTask(), regs, stack);
+		return true;
 	}
 
 	Thread *getCurrentThread() { return currentThread == noExecutingThread ? nullptr : executingThreads->at(currentThread); }

@@ -88,6 +88,7 @@ namespace Disk
 				ret.erase(ret.length() - 3, 3);
 			return ret;
 		}
+		default:
 		case result::unknownError:
 			return "unknown error";
 		case result::deviceNotSupported:

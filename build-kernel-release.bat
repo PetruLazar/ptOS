@@ -8,7 +8,7 @@ set /A kernel = 0
 
 rem compile and assemble kernel
 rem compileall src/kernel obj/kernel "-I src/libc/include -mcmodel=kernel -D_DEBUG -gdwarf-4" || (set /A kernel = 1)
-compileall src/kernel obj/kernel "-I src/libc/include -masm=intel -mcmodel=kernel -D_RELEASE -O2" || (set /A kernel = 1)
+compileall src/kernel obj/kernel "-I src/libc/include -masm=intel -mcmodel=kernel -mno-red-zone -D_RELEASE -O2 -Wreturn-type" || (set /A kernel = 1)
 
 rem link kernel
 if %kernel%==0 (linkall obj/kernel bin/kernel.bin "--oformat binary -Ttext 0xFFFFFFFF80010000 -e 0xFFFFFFFF80010000 -T linker.ld -Map bin/ptos.map" src/libc/obj/globals || (set /A kernel = 2))
