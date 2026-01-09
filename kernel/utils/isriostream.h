@@ -137,7 +137,7 @@ void inline isr_displayMemoryRow(byte *block)
 	ISR::std::cout << '\n'
 				   << std::ostream::base::dec;
 }
-void inline isr_DisplyMemoryBlock(byte *block, ull len)
+void inline isr_DisplayMemoryBlock(byte *block, ull len)
 {
 	for (ull i = 0; i < len; i += 0x10)
 		isr_displayMemoryRow(block + i);

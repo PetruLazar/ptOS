@@ -17,7 +17,7 @@ namespace Memory
 			cout << "Found end signature " << magicCheckEnd() << " instead of " << magicNumberEnd << '\n';
 		cout << ostream::base::dec;
 		cout << "Memory dump:\n";
-		DisplyMemoryBlock((byte *)this, 0x100);
+		DisplayMemoryBlock((byte *)this, 0x100);
 	}
 
 	void Heap::displayAllocationSummary()
@@ -27,7 +27,7 @@ namespace Memory
 			// cheat to get the allocation size
 			ull size = ((ull *)i)[2];
 			cout << "Allocation of " << size << " bytes at " << (void *)i << ", data at " << (void *)i->getAllocatedBlock() << ":\n";
-			DisplyMemoryBlock((byte *)i->getAllocatedBlock(), 0x30);
+			DisplayMemoryBlock((byte *)i->getAllocatedBlock(), 0x30);
 		}
 	}
 	void *Heap::Allocate(qword allocationSize, ull alignment)

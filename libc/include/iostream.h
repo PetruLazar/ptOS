@@ -210,14 +210,14 @@ namespace std
 	};
 }
 
-void inline displayMemoryByte(byte *address)
+void inline displayMemoryByte(const byte *address)
 {
 	if (*address < 0x10)
 		std::cout << '0';
 	std::cout << *address;
 }
 /*Displays 16 bytes starting at the given memory address*/
-void inline displayMemoryRow(byte *block)
+void inline displayMemoryRow(const byte *block)
 {
 	std::cout << (void *)block << ':' << std::ostream::base::hex;
 	for (int i = 0; i < 16; i++)
@@ -228,7 +228,7 @@ void inline displayMemoryRow(byte *block)
 	std::cout << '\n'
 			  << std::ostream::base::dec;
 }
-void inline DisplyMemoryBlock(byte *block, ull len)
+void inline DisplayMemoryBlock(const byte *block, ull len)
 {
 	for (ull i = 0; i < len; i += 0x10)
 		displayMemoryRow(block + i);

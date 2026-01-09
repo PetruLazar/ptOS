@@ -307,7 +307,7 @@ void terminal()
 				}
 				else
 				{
-					DisplyMemoryBlock(content, length);
+					DisplayMemoryBlock(content, length);
 				}
 				delete[] content;
 			}

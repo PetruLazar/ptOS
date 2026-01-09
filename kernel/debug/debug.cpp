@@ -232,7 +232,7 @@ namespace Debug
 						else
 						{
 							ull len = upper - lower + 1;
-							isr_DisplyMemoryBlock((byte*)lower, len);
+							isr_DisplayMemoryBlock((byte*)lower, len);
 						}
 					}
 					else if (colon != std::string::npos)
@@ -257,7 +257,7 @@ namespace Debug
 						}
 						else
 						{
-							isr_DisplyMemoryBlock((byte*)lower, len);
+							isr_DisplayMemoryBlock((byte*)lower, len);
 						}
 					}
 				}

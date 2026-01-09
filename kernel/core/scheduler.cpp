@@ -248,7 +248,7 @@ namespace Scheduler
 								   << regs.cs << ':' << regs.rip << "\nss:rsp = " << regs.ss << ':' << regs.rsp << '\n'
 								   << ostream::base::dec;
 					ISR::std::cout << "regs:\n";
-					isr_DisplyMemoryBlock((byte *)&regs - 0x20, sizeof(regs) + 0x40);
+					isr_DisplayMemoryBlock((byte *)&regs - 0x20, sizeof(regs) + 0x40);
 				}
 				if (!current)
 					idling = false;

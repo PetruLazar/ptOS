@@ -1095,14 +1095,14 @@ namespace Filesystem
 					// cout << "{ ";
 					DirectoryIterator iterator(this, cluster);
 					// cout << "}\n";
-					// DisplyMemoryBlock((byte *)iterator.directoryData, 0x80);
+					// DisplayMemoryBlock((byte *)iterator.directoryData, 0x80);
 					// if (!*(byte *)iterator.currentIterator)
 					// {
 					// 	cout << '\n';
 					// 	iterator.currentIterator = (UnknownDirEntry *)iterator.directoryData;
 					// 	iterator.currentIterator--;
 					// 	iterator.advance();
-					// 	DisplyMemoryBlock((byte *)iterator.currentIterator, 0x80);
+					// 	DisplayMemoryBlock((byte *)iterator.currentIterator, 0x80);
 					// }
 					iterator.advanceTo(part);
 					if (iterator.finished())
