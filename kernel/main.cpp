@@ -18,8 +18,11 @@
 #include "core/paging.h"
 #include "core/scheduler.h"
 #include "core/explorer.h"
+#include "utils/isriostream.h"
 #include "unittests/unittests.h"
 #include "debug/verbose.h"
+#include "drivers/acpi/acpi.h"
+#include "drivers/acpi/aml.h"
 #define OMIT_FUNCS
 #include <syscall.h>
 using namespace std;
@@ -68,6 +71,9 @@ extern void main(KernelInfo &info)
 
 	VERBOSE_LOG("Initializing Screen driver...\n");
 	Screen::Initialize();
+
+	VERBOSE_LOG("Initializing ACPI...\n");
+	ACPI::Initialize();
 
 	VERBOSE_LOG("Initializing IRQ handlers...\n");
 	IRQ::Initialize();
@@ -434,6 +440,39 @@ void terminal()
 		else if (subCmd == "unittests")
 		{
 			unittests_run();
+		}
+		else if (subCmd == "acpi")
+		{
+			if (getSubcommand(cmd, subCmd))
+			{
+				if (subCmd == "list")
+				{
+					ACPI::listRootEntries();
+				}
+				else if (subCmd == "dsdt")
+				{
+					ACPI::DisplayDSDT();
+				}
+				else if (subCmd == "madt")
+				{
+					ACPI::DisplayMADT();
+				}
+				else
+				{
+					cout << "Invalid ACPI sub-command.\n";
+				}
+			}
+			else
+			{
+				cout << "Invalid command.\n";
+			}
+			
+		}
+		else if (subCmd == "dev")
+		{
+			// currently working on: ACPI
+			// asm volatile("int3");
+			std::cout << 0x28 << '\n';
 		}
 		else if (subCmd == "test")
 		{
