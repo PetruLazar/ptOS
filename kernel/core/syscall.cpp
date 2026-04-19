@@ -5,7 +5,7 @@
 #include "mem.h"
 #include "../drivers/disk/disk.h"
 
-using namespace ISR::std;
+using namespace std;
 
 extern "C" qword getRSP();
 extern "C" qword getRBP();
@@ -43,7 +43,7 @@ extern "C" void os_serviceHandler(registers_t &regs)
 void Syscall_Breakpoint(registers_t &regs)
 {
 	qword currRsp = getRBP();
-	cout << "Breakpoint reached\n";
+	isrcout << "Breakpoint reached\n";
 	bool keepGoing = true;
 	enableInterrupts();
 	while (keepGoing)
@@ -58,7 +58,7 @@ void Syscall_Breakpoint(registers_t &regs)
 			// for (byte *i = (byte *)regs.rsp; i <= (byte *)regs.rbp; i += bytesPerRow)
 			for (byte *i = (byte *)currRsp; i <= (byte *)regs.rbp; i += bytesPerRow)
 				isr_displayMemoryRow(i);
-			cout << "RBP: " << (void *)regs.rbp << "   RSP: " << (void *)regs.rsp << "   Current RSP: " << (void *)currRsp << '\n';
+			isrcout << "RBP: " << (void *)regs.rbp << "   RSP: " << (void *)regs.rsp << "   Current RSP: " << (void *)currRsp << '\n';
 			break;
 		}
 	}
@@ -71,21 +71,26 @@ void Syscall_Screen(registers_t &regs)
 	case SYSCALL_SCREEN_CLEAR:
 		return Screen::driver_clear();
 	case SYSCALL_SCREEN_PRINTSTR:
+	case SYSCALL_SCREEN_PRINTDYNSTR:
 	{
 		// get the physical address of the string from regs.rdi and the paging structures
 		qword physical;
 		bool user = (regs.cs & 0b11) == 0b11;
-		// check that the task has access to the entire string
+		// check that the task has access to the  string
+		// to-do: check that the task has access to the ENTIRE string
 		if (!regs.cr3->getPhysicalAddress((qword)regs.rdi, physical, user))
 		{
 			// error
-			cout << "Syscall error: address \"0x" << ::std::ostream::base::hex << regs.rdi << "\" not mapped\n";
+			isrcout << "Syscall error: address \"0x" << ::std::ostream::base::hex << regs.rdi << "\" not mapped\n";
 			regs.rdi = (ull)-1;
 			return Scheduler::preempt(regs, Scheduler::preemptReason::taskExited);
 		}
 		// for now, everything is identity mapped, no translation from physical to kernel virtual space
-		// PageMapLevel4::getCurrent().mapRegion(...);
-		return Screen::driver_print((const char *)physical);
+		
+		// get length
+		ull len = regs.rbx == SYSCALL_SCREEN_PRINTSTR ? regs.rsi : strlen((const char*)physical);
+
+		return Screen::driver_print((const char *)physical, len);
 	}
 	case SYSCALL_SCREEN_PRINTCH:
 		return Screen::driver_print((char)regs.rdi);

@@ -238,7 +238,7 @@ namespace AHCI
 			int timeout = 0;
 			while ((port.taskFileData & (Port::ATA_DEV_BUSY | Port::ATA_DEV_DRQ)) && timeout < 1000000)
 			{
-				ISR::std::cout << "AHCI disk is busy\n";
+				isrcout << "AHCI disk is busy\n";
 				timeout++;
 			}
 			if (timeout == 1000000)
@@ -307,13 +307,6 @@ namespace AHCI
 		}
 		virtual result driver_access(registers_t &regs, accessDir dir, uint lba, uint numsec, byte *buffer) override
 		{
-			// read-only for now
-			// if (dir == accessDir::write)
-			// {
-			// 	ISR::std::cout << "AHCI driver is read-only so far\n";
-			// 	return result::unknownError;
-			// }
-
 			volatile Port &port = controller->regs->ports[portNr];
 
 			CmdHeader *cmdHeader;
@@ -479,14 +472,12 @@ namespace AHCI
 					VERBOSE_LOG("Allocatig missing memory...\n");
 					if (!port.cmdListBase)
 					{
-						// cout << "DEBUG: Allocated a command list.\n";
 						void *ptr = Memory::Allocate(0x400, 0x400);
 						controller->allocations.push_back(ptr);
 						port.cmdListBase = (CmdHeader *)ptr;
 					}
 					if (!port.FISbase)
 					{
-						// cout << "DEBUG: Allocated a FIS struct.\n";
 						void *ptr = Memory::Allocate(0x100, 0x100);
 						controller->allocations.push_back(ptr);
 						port.cmdListBase = (CmdHeader *)ptr;
@@ -494,7 +485,6 @@ namespace AHCI
 					for (uint i = 0; i < controller->cmdSlots; i++)
 						if (!port.cmdListBase[i].cmdTable)
 						{
-							// cout << "DEBUG: Allocated CMD table for cmd slot " << i << ".\n";
 							void *ptr = Memory::Allocate(0x10080, 0x80);
 							controller->allocations.push_back(ptr);
 							port.cmdListBase[i].cmdTable = (CmdTable *)ptr;
@@ -544,20 +534,6 @@ namespace AHCI
 
 			implementedPorts >>= 1;
 		}
-
-		// cout << "Hello AHCI!\n";
-		// cout << "\theader->interruptPin = " << header->interruptPin << '\n';
-		// cout << "\theader->interruptLine = " << header->interruptLine << '\n';
-		// cout << "\theader->command bit 10 = " << ((header->command >> 10) & 1) << '\n';
-		// cout << "\tcontroller->regs->globalHostControl bit 1 = " << ((controller->regs->globalHostControl >> 1) & 1) << '\n';
-		// cout << "\tcontroller->regs->portImplemented = " << ostream::base::bin << controller->regs->portImplemented << ostream::base::dec << '\n';
-		// for (uint i = 0; i < 32; i++)
-		// 	if ((controller->regs->portImplemented >> i) & 1)
-		// 	{
-		// 		cout << "\tport[" << i << "].interruptEnable = "
-		// 			 << ostream::base::bin << controller->regs->ports[i].interruptEnable << ostream::base::dec << '\n';
-		// 		// controller->regs->ports[i].interruptStatus = 0;
-		// 	}
 	}
 
 	void EventHandler(registers_t &regs)
@@ -583,7 +559,7 @@ namespace AHCI
 
 					if (!waiting)
 					{
-						ISR::std::cout << "AHCI IRQ while not waiting for anything...\n";
+						isrcout << "AHCI IRQ while not waiting for anything...\n";
 						while (true)
 							;
 						return; // too many irqs...
@@ -608,29 +584,6 @@ namespace AHCI
 			if (handled)
 				Scheduler::unblockThread(regs, kernelThread, blockedThread);
 		}
-
-		// get controller
-		// volatile Controller *controller = controllers->at(0);
-		// // get interrupt status registers
-		// uint controllerInterruptStatus = controller->regs->interruptStatus,
-		// 	 portInterruptStatus = controller->regs->ports[0].interruptStatus;
-		// // clear interrupt flags
-		// controller->regs->interruptStatus = controllerInterruptStatus;
-		// controller->regs->ports[0].interruptStatus = portInterruptStatus;
-		// if (!waiting)
-		// {
-		// 	ISR::std::cout << "AHCI IRQ while not waiting for anything...\n";
-		// 	while (true)
-		// 		;
-		// 	return; // too many irqs...
-		// }
-		// // actual handling of the interrupt
-		// waiting = false;
-		// if (portInterruptStatus & Port::TFES)
-		// 	blockedThread->getRegs().rax = (word)result::deviceFault;
-		// else
-		// 	blockedThread->getRegs().rax = (word)result::success;
-		// Scheduler::unblockThread(regs, kernelThread, blockedThread);
 	}
 
 	void Syscall(registers_t &regs)

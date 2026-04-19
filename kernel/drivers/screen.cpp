@@ -149,7 +149,7 @@ namespace Screen
 		}
 		applyBuffer();
 	}
-	void driver_print(const char *msg)
+	void driver_print(const char *msg, ull len)
 	{
 		while (Cursor::screenPos < 0)
 		{
@@ -162,7 +162,7 @@ namespace Screen
 			startInBuffer += screenWidth;
 		}
 
-		for (int i = 0; msg[i]; i++)
+		for (ull i = 0; i < len; i++)
 		{
 			switch (msg[i])
 			{
@@ -217,6 +217,10 @@ namespace Screen
 		if (!Cursor::isEnabled())
 			Cursor::driver_enable();
 		applyBuffer();
+	}
+	inline void driver_print(const char* msg)
+	{
+		driver_print(msg, strlen(msg));
 	}
 	void driver_print(char ch)
 	{

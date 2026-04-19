@@ -6,8 +6,6 @@
 #include "../../core/scheduler.h"
 #include "../gdt.h"
 
-using namespace ISR::std;
-
 namespace IDT
 {
 	namespace IntEntryPoints

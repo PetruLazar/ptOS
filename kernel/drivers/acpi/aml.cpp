@@ -40,7 +40,7 @@ namespace AML
 		const byte *byteStream;
 		ull length;
 
-		AMLContext(const byte* byteStream, ull length)
+		AMLContext(const byte* byteStream, ull length, bool runtime, bool display = false)
 		{
 			this->byteStream = byteStream;
 			this->length = length;
@@ -49,11 +49,18 @@ namespace AML
 
 			this->expressionReturnValue = nullptr;
 			this->expressionReturnType = voidType;
+
+			this->runtime = runtime;
+			if (display) output_stream = &cout;
+			else output_stream = &nullout;
 		}
 		~AMLContext()
 		{
 			consumeReturnByReference();
 		}
+
+		// context data
+		bool runtime;
 
 		// sub-context handling
 		vector<const byte*> subContextStream;
@@ -182,10 +189,11 @@ namespace AML
 		void consumeReturnByReference();
 
 		// debug ctx info
+		ostream* output_stream;
 		string tabulation = "";
 		void indent() { tabulation += "  "; }
 		void outdent() { if (tabulation.length() >= 2) tabulation.resize(tabulation.length() - 2); }
-		ostream& debug_info(bool skipIndentation = false) { return skipIndentation ? cout : cout << tabulation; }
+		ostream& debug_info(bool skipIndentation = false) { return skipIndentation ? *output_stream : *output_stream << tabulation; }
 	};
 	typedef bool (*Operation)(AMLContext &ctx);
 
@@ -1890,9 +1898,7 @@ namespace AML
 
 	bool LoadDefinitionBlock(const byte *definitionBlock, ull definitionBlockLen)
 	{
-		return false; // not fully implemented for now
-
-		AMLContext ctx(definitionBlock, definitionBlockLen);
+		AMLContext ctx(definitionBlock, definitionBlockLen, false);
 
 		bool result = Grammar::TermList::Parse(ctx);
 		if (result == false)
@@ -1905,7 +1911,7 @@ namespace AML
 	}
 	bool DisplayDefinitionBlock(const byte *definitionBlock, ull definitionBlockLen)
 	{
-		AMLContext ctx(definitionBlock, definitionBlockLen);
+		AMLContext ctx(definitionBlock, definitionBlockLen, false, true);
 
 		// cout << (void*)ctx.byteStreamPos << '\n';
 		// DisplayMemoryBlock(ctx.byteStreamPos, 0x100);

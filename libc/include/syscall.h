@@ -14,10 +14,11 @@
 #define SYSCALL_DISK 7
 
 #define SYSCALL_SCREEN_CLEAR 0
-#define SYSCALL_SCREEN_PRINTSTR 1
+#define SYSCALL_SCREEN_PRINTDYNSTR 1
 #define SYSCALL_SCREEN_PRINTCH 2
 #define SYSCALL_SCREEN_PAINTBG 3
 #define SYSCALL_SCREEN_PAINT 4
+#define SYSCALL_SCREEN_PRINTSTR 5
 
 #define SYSCALL_KEYBOARD_KEYEVENT 0
 #define SYSCALL_KEYBOARD_KEYPRESSEDEVENT 1
@@ -81,7 +82,14 @@ namespace Screen
 		asm volatile(
 			"int 0x30"
 			:
-			: "a"(SYSCALL_SCREEN), "b"(SYSCALL_SCREEN_PRINTSTR), "D"(msg), "m"(*(const char (*)[])msg));
+			: "a"(SYSCALL_SCREEN), "b"(SYSCALL_SCREEN_PRINTDYNSTR), "D"(msg), "m"(*(const char (*)[])msg));
+	}
+	inline void print(const char *msg, ull len)
+	{
+		asm volatile(
+			"int 0x30"
+			:
+			: "a"(SYSCALL_SCREEN), "b"(SYSCALL_SCREEN_PRINTSTR), "D"(msg), "S"(len), "m"(*(const char (*)[])msg));
 	}
 	inline void paint(byte line, byte col, Cell::Color bgColor)
 	{

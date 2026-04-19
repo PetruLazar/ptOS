@@ -3,9 +3,11 @@
 #include "../utils/isriostream.h"
 #include "../core/scheduler.h"
 
+using namespace std;
+
 namespace Debug
 {
-	void readCommand(registers_t &regs, std::string &cmd)
+	void readCommand(registers_t &regs, string &cmd)
 	{
 		while (true)
 		{
@@ -29,26 +31,26 @@ namespace Debug
 				case '\b': // delete one char
 					if (cmd[0] == 0)
 						break;
-					ISR::std::cout << "\b \b";
+					isrcout << "\b \b";
 					cmd.pop_back();
 					break;
 				case '\r': // finish reading
-					ISR::std::cout << '\n';
+					isrcout << '\n';
 					return;
 				case 0:
 					break;
 				default:
-					ISR::std::cout << ch;
+					isrcout << ch;
 					cmd.push_back(ch);
 				}
 			}
 			}
 		}
 	}
-	bool getSubcommand(std::string &cmd, std::string &subCmd)
+	bool getSubcommand(string &cmd, string &subCmd)
 	{
 		ull space = cmd.firstOf(' ');
-		if (space == std::string::npos)
+		if (space == string::npos)
 		{
 			// no space
 			if (cmd.length() == 0)
@@ -62,7 +64,7 @@ namespace Debug
 		return true;
 	}
 
-	bool interpretHexStr(const std::string &str, ull &result)
+	bool interpretHexStr(const string &str, ull &result)
 	{
 		result = 0;
 		for (char c : str)
@@ -107,7 +109,7 @@ namespace Debug
 
 	void DebugExceptionHandler(registers_t &regs, qword int_no)
 	{
-		ISR::std::cout << "Breakpoint reached at " << (void*)regs.rip << '\n';
+		isrcout << "Breakpoint reached at " << (void*)regs.rip << '\n';
 		// disable scheduling and enable interrupts
 		Scheduler::disable();
 		enableInterrupts();
@@ -116,7 +118,7 @@ namespace Debug
 		while (!exit_handler)
 		{
 			// read command
-			std::string cmd, subCmd;
+			string cmd, subCmd;
 			readCommand(regs, cmd);
 
 			// precess command
@@ -124,75 +126,75 @@ namespace Debug
 			{
 				if (subCmd == "rax")
 				{
-					ISR::std::cout << "rax = " << (void*)regs.rax << '\n';
+					isrcout << "rax = " << (void*)regs.rax << '\n';
 				}
 				else if (subCmd == "rbx")
 				{
-					ISR::std::cout << "rbx = " << (void*)regs.rbx << '\n';
+					isrcout << "rbx = " << (void*)regs.rbx << '\n';
 				}
 				else if (subCmd == "rcx")
 				{
-					ISR::std::cout << "rcx = " << (void*)regs.rcx << '\n';
+					isrcout << "rcx = " << (void*)regs.rcx << '\n';
 				}
 				else if (subCmd == "rdx")
 				{
-					ISR::std::cout << "rdx = " << (void*)regs.rdx << '\n';
+					isrcout << "rdx = " << (void*)regs.rdx << '\n';
 				}
 				else if (subCmd == "rdi")
 				{
-					ISR::std::cout << "rdi = " << (void*)regs.rdi << '\n';
+					isrcout << "rdi = " << (void*)regs.rdi << '\n';
 				}
 				else if (subCmd == "rsi")
 				{
-					ISR::std::cout << "rsi = " << (void*)regs.rsi << '\n';
+					isrcout << "rsi = " << (void*)regs.rsi << '\n';
 				}
 				else if (subCmd == "rsp")
 				{
-					ISR::std::cout << "rsp = " << (void*)regs.rsp << '\n';
+					isrcout << "rsp = " << (void*)regs.rsp << '\n';
 				}
 				else if (subCmd == "rbp")
 				{
-					ISR::std::cout << "rbp = " << (void*)regs.rbp << '\n';
+					isrcout << "rbp = " << (void*)regs.rbp << '\n';
 				}
 				else if (subCmd == "r9")
 				{
-					ISR::std::cout << "r9 = " << (void*)regs.r9 << '\n';
+					isrcout << "r9 = " << (void*)regs.r9 << '\n';
 				}
 				else if (subCmd == "r10")
 				{
-					ISR::std::cout << "r10 = " << (void*)regs.r10 << '\n';
+					isrcout << "r10 = " << (void*)regs.r10 << '\n';
 				}
 				else if (subCmd == "r11")
 				{
-					ISR::std::cout << "r11 = " << (void*)regs.r11 << '\n';
+					isrcout << "r11 = " << (void*)regs.r11 << '\n';
 				}
 				else if (subCmd == "r12")
 				{
-					ISR::std::cout << "r12 = " << (void*)regs.r12 << '\n';
+					isrcout << "r12 = " << (void*)regs.r12 << '\n';
 				}
 				else if (subCmd == "r13")
 				{
-					ISR::std::cout << "r13 = " << (void*)regs.r13 << '\n';
+					isrcout << "r13 = " << (void*)regs.r13 << '\n';
 				}
 				else if (subCmd == "r14")
 				{
-					ISR::std::cout << "r14 = " << (void*)regs.r14 << '\n';
+					isrcout << "r14 = " << (void*)regs.r14 << '\n';
 				}
 				else if (subCmd == "r15")
 				{
-					ISR::std::cout << "r15 = " << (void*)regs.r15 << '\n';
+					isrcout << "r15 = " << (void*)regs.r15 << '\n';
 				}
 				else if (subCmd == "rip")
 				{
-					ISR::std::cout << "rip = " << (void*)regs.rip << '\n';
+					isrcout << "rip = " << (void*)regs.rip << '\n';
 				}
 				else if (subCmd == "cr3")
 				{
-					ISR::std::cout << "cr3 = " << (void*)regs.cr3 << '\n';
+					isrcout << "cr3 = " << (void*)regs.cr3 << '\n';
 				}
 				else if (subCmd == "regs")
 				{
-					ISR::std::cout
+					isrcout
 						<< "\nrax=" << (void *)regs.rax << " rbx=" << (void *)regs.rbx << " rcx=" << (void *)regs.rcx
 						<< "\nrdx=" << (void *)regs.rdx << " rdi=" << (void *)regs.rdi << " rsi=" << (void *)regs.rsi
 						<< "\nrsp=" << (void *)regs.rsp << " rbp=" << (void *)regs.rbp << " r8 =" << (void *)regs.r8
@@ -209,10 +211,10 @@ namespace Debug
 					ull colon = subCmd.firstOf(':');
 					ull dash = subCmd.firstOf('-');
 
-					if (dash != std::string::npos)
+					if (dash != string::npos)
 					{
 						// interpret as lower and upper limit
-						std::string lowerStr, upperStr;
+						string lowerStr, upperStr;
 						upperStr = subCmd.data() + dash + 1;
 						lowerStr.assign(subCmd.data(), dash);
 
@@ -223,11 +225,11 @@ namespace Debug
 
 						if (!lowerValid)
 						{
-							ISR::std::cout << "Cannot interpret\"" << lowerStr.data() << "\"\n";
+							isrcout << "Cannot interpret\"" << lowerStr.data() << "\"\n";
 						}
 						else if (!upperValid)
 						{
-							ISR::std::cout << "Cannot interpret\"" << upperStr.data() << "\"\n";
+							isrcout << "Cannot interpret\"" << upperStr.data() << "\"\n";
 						}
 						else
 						{
@@ -235,10 +237,10 @@ namespace Debug
 							isr_DisplayMemoryBlock((byte*)lower, len);
 						}
 					}
-					else if (colon != std::string::npos)
+					else if (colon != string::npos)
 					{
 						// interpret as base and length
-						std::string lowerStr, lenStr;
+						string lowerStr, lenStr;
 						lenStr = subCmd.data() + colon + 1;
 						lowerStr.assign(subCmd.data(), colon);
 
@@ -249,11 +251,11 @@ namespace Debug
 
 						if (!lowerValid)
 						{
-							ISR::std::cout << "Cannot interpret\"" << lowerStr.data() << "\"\n";
+							isrcout << "Cannot interpret\"" << lowerStr.data() << "\"\n";
 						}
 						else if (!lenValid)
 						{
-							ISR::std::cout << "Cannot interpret\"" << lenStr.data() << "\"\n";
+							isrcout << "Cannot interpret\"" << lenStr.data() << "\"\n";
 						}
 						else
 						{
@@ -267,6 +269,6 @@ namespace Debug
 		// disable interrupts and enable scheduling again
 		disableInterrupts();
 		Scheduler::enable();
-		ISR::std::cout << "Continuing...\n";
+		isrcout << "Continuing...\n";
 	}
 }

@@ -7,8 +7,6 @@
 #include "irq.h"
 #include "../../utils/time.h"
 
-using namespace ISR::std;
-
 namespace APIC
 {
 	class LocalAPIC

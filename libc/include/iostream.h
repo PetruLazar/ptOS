@@ -9,7 +9,8 @@ namespace std
 	class ostream;
 
 	extern istream cin;
-	extern ostream cout;
+	extern ostream& cout;
+	extern ostream& nullout;
 
 	class ostream
 	{
@@ -31,22 +32,24 @@ namespace std
 			return (base)(flags & 0b11);
 		}
 
+	protected:
+		virtual void write(const byte* buffer, ull len) = 0;
+
 	public:
 		inline ostream &operator<<(const char *str)
 		{
-			Screen::print(str);
+			write((const byte*)str, strlen(str));
 			return *this;
 		}
 		inline ostream &operator<<(void *ptr)
 		{
 			char str[17];
 			qwordToHexString(str, (qword)ptr);
-			Screen::print(str);
-			return *this;
+			return *this << str;
 		}
 		inline ostream &operator<<(char character)
 		{
-			Screen::print(character);
+			write((const byte*)&character, 1);
 			return *this;
 		}
 		inline ostream &operator<<(short val) { return operator<<((llong)val); }
@@ -63,28 +66,24 @@ namespace std
 			{
 				char str[20];
 				lltos16(str, val);
-				Screen::print(str);
-				return *this;
+				return *this << str;
 			}
 			case base::oct:
 			{
 				char str[32];
 				lltos8(str, val);
-				Screen::print(str);
-				return *this;
+				return *this << str;
 			}
 			case base::bin:
 			{
 				char str[65];
 				lltos2(str, val);
-				Screen::print(str);
-				return *this;
+				return *this << str;
 			}
 			}
 			char str[32];
 			lltos(str, val);
-			Screen::print(str);
-			return *this;
+			return *this << str;
 		}
 		inline ostream &operator<<(ullong val)
 		{
@@ -94,28 +93,24 @@ namespace std
 			{
 				char str[20];
 				ulltos16(str, val);
-				Screen::print(str);
-				return *this;
+				return *this << str;
 			}
 			case base::oct:
 			{
 				char str[32];
 				ulltos8(str, val);
-				Screen::print(str);
-				return *this;
+				return *this << str;
 			}
 			case base::bin:
 			{
 				char str[65];
 				ulltos2(str, val);
-				Screen::print(str);
-				return *this;
+				return *this << str;
 			}
 			}
 			char str[32];
 			ulltos(str, val);
-			Screen::print(str);
-			return *this;
+			return *this << str;
 		}
 		inline ostream &operator<<(base base)
 		{

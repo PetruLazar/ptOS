@@ -6,7 +6,7 @@
 #include "../../core/sys.h"
 #include "../../debug/debug.h"
 
-using namespace ISR::std;
+using namespace std;
 
 namespace Exception
 {
@@ -54,7 +54,7 @@ namespace Exception
 
 		// if (int_no == 7 || int_no == 6)
 
-		cout
+		isrcout
 			<< "Exception: " << exceptionMessages[int_no] << " (0x" << std::ostream::base::hex << int_no
 			<< " - err " << err_no
 			<< ")\nReturn address: " << regs.cs << ':' << (void *)regs.rip
@@ -70,18 +70,18 @@ namespace Exception
 		switch (int_no)
 		{
 		case 0xe: // page fault
-			cout << "\nAccessing address: " << (void *)getCR2() << '\n';
+			isrcout << "\nAccessing address: " << (void *)getCR2() << '\n';
 			break;
 		}
 
 		if (!Scheduler::isEnabled() || Scheduler::getCurrentThread()->getParentTask()->isKernelTask())
 		{
-			cout << "kernel exception\n";
+			isrcout << "kernel exception\n";
 			System::blueScreen();
 		}
 		else
 		{
-			cout << "non-kernel exception\n";
+			isrcout << "non-kernel exception\n";
 			regs.rdi = (ull)-1;
 			Scheduler::preempt(regs, Scheduler::preemptReason::taskExited);
 		}

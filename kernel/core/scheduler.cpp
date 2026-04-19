@@ -242,12 +242,12 @@ namespace Scheduler
 				Thread::switchContext(current, target, regs);
 				if (regs.cs == GDT::USER_CS)
 				{
-					ISR::std::cout << "Entering user mode:\n"
-									  "cs:rip = "
-								   << ostream::base::hex
-								   << regs.cs << ':' << regs.rip << "\nss:rsp = " << regs.ss << ':' << regs.rsp << '\n'
-								   << ostream::base::dec;
-					ISR::std::cout << "regs:\n";
+					isrcout << "Entering user mode:\n"
+								"cs:rip = "
+							<< ostream::base::hex
+							<< regs.cs << ':' << regs.rip << "\nss:rsp = " << regs.ss << ':' << regs.rsp << '\n'
+							<< ostream::base::dec;
+					isrcout << "regs:\n";
 					isr_DisplayMemoryBlock((byte *)&regs - 0x20, sizeof(regs) + 0x40);
 				}
 				if (!current)

@@ -48,7 +48,7 @@ namespace IRQ
 			irq_no != 1 &&
 			irq_no != 11)
 		{
-			ISR::std::cout << (spurious ? "SIRQ: " : "IRQ: ") << irq_no << '\n';
+			isrcout << (spurious ? "SIRQ: " : "IRQ: ") << irq_no << '\n';
 		}
 
 		for (auto handler : irqHandlers[irq_no])
@@ -58,7 +58,7 @@ namespace IRQ
 	}
 	extern "C" void irqApicHandler(registers_t &regs, qword irq_no)
 	{
-		ISR::std::cout << "APIC INT " << irq_no << '\n';
+		isrcout << "APIC INT " << irq_no << '\n';
 	}
 
 	void registerIrqHandler(byte irq_no, IrqHandler handler)

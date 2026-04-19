@@ -1,9 +1,14 @@
 #include "isriostream.h"
 
-namespace ISR
+class isr_ostream : public std::ostream
 {
-	namespace std
+	void write(const byte* buffer, ull len) override
 	{
-		ostream cout;
+		Screen::driver_print((const char*)buffer, len);
 	}
+} _isrcout;
+
+namespace std
+{
+	ostream& isrcout = _isrcout;
 }

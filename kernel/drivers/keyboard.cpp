@@ -4,7 +4,7 @@
 #include "../core/sys.h"
 #include "../core/scheduler.h"
 
-using namespace ISR::std;
+using namespace std;
 
 namespace Keyboard
 {
@@ -49,7 +49,7 @@ namespace Keyboard
 		eventQueue = new KeyEvent[256];
 		if (eventQueue == nullptr)
 		{
-			cout << "Failed to allocate keyboard buffer\n";
+			isrcout << "Failed to allocate keyboard buffer\n";
 			System::blueScreen();
 		}
 		IRQ::registerIrqHandler(1, EventListener);
@@ -418,13 +418,6 @@ namespace Keyboard
 				extendedScancode = true;
 			else
 			{
-				// cout << "Keyboard event: ";
-				// if (extendedScancode)
-				// 	cout << "0xE0 ";
-				// if (scanCode >= 0x80)
-				// 	cout << "0x80 | ";
-				// cout << ostream::base::hex << "0x" << (uint)(0x7f & scanCode) << ostream::base::dec << "\n";
-
 				if (!checkFullQueue())
 				{
 					byte releasedFlag = scanCode & 0x80;
@@ -432,10 +425,10 @@ namespace Keyboard
 					KeyCode key = scancodeToKeycodeMap[extendedScancode][scanCode];
 					if (key == KeyCode::unknown && !releasedFlag)
 					{
-						cout << "Unknown keycode: 0x";
+						isrcout << "Unknown keycode: 0x";
 						if (extendedScancode)
-							cout << "e0";
-						cout << std::ostream::base::hex << scanCode << std::ostream::base::dec << '\n';
+							isrcout << "e0";
+						isrcout << std::ostream::base::hex << scanCode << std::ostream::base::dec << '\n';
 					}
 					key = KeyCode((byte)key | releasedFlag);
 					KeyEvent event = KeyEvent(key, currModKeys);
