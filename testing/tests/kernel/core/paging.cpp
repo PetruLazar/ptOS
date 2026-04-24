@@ -303,7 +303,7 @@ TEST(mapRegion)
 			bool success;
 			dword pageAllocationMap;
 
-			const int sampleCount;
+			int sampleCount;
 			OUTPUTARRAY(qword) sampleVirtualAddress;
 			OUTPUTARRAY(qword) samplePhysicalAddress;
 			OUTPUTARRAY(bool) sampleAsUser;
@@ -390,15 +390,153 @@ TEST(mapRegion)
 
 	TEST_END;
 }
-TEST(mapRegion_expansion)
+TEST(mapRegion_expansionAndCollapse)
 {
-	cout << " Not implemented yet...";
-	return false;
-}
-TEST(mapRegion_collapse)
-{
-	cout << " Not implemented yet...";
-	return false;
+	TEST_INIT;
+
+	DEFINE_TESTCASES
+	(
+		INPUTLIST
+		{
+			qword initialVirtualAddress;
+			qword initialPhysicalAddress;
+			qword initialLen;
+
+			qword finalVirtualAddress;
+			qword finalPhysicalAddress;
+			qword finalLen;
+
+			PageEntry::EntryAttributes initialAttributes;
+			PageEntry::EntryAttributes finalAttributes;
+		},
+		OUTPUTLIST
+		{
+			bool success;
+			dword pageAllocationMap;
+
+			int sampleCount;
+			OUTPUTARRAY(qword) sampleVirtualAddress;
+			OUTPUTARRAY(qword) samplePhysicalAddress;
+			OUTPUTARRAY(bool) sampleAsUser;
+			OUTPUTARRAY(bool) sampleResult;
+		}
+	)
+	TESTCASELIST
+	{
+
+		/* Test case  0 */ {{ 0x00007592a6600000, 0xd1650f8859000, 0x00000200000, 0x00007592a6700000, 0x0db0583815000, 0x00000100000, PageEntry::EntryAttributes(PageEntry::writeAccessBit), PageEntry::EntryAttributes(PageEntry::userPageBit)    }, { 1, 0xffff000f,     5, ARRAYDATA(qword) { 0x00007592a6600000, 0x00007592a66ff000, 0x00007592a6700000, 0x00007592a67ff000, 0x00007592a6800000 }, ARRAYDATA(qword) { 0xd1650f8859000, 0x0000000000000, 0x0db0583815000, 0x0db0583914000, 0x0000000000000 }, ARRAYDATA(bool) { 0, 1, 1, 1, 0 }, ARRAYDATA(bool) { 1, 0, 1, 1, 0 }}}, // map unaligned 2mb range, then override some 1kb pages
+		/* Test case  1 */ {{ 0x000043eeb7200000, 0x6bd165dc00000, 0x00000200000, 0x000043eeb7300000, 0x5a5c0e3a19000, 0x00000100000, PageEntry::EntryAttributes(PageEntry::writeAccessBit), PageEntry::EntryAttributes(PageEntry::userPageBit)    }, { 1, 0xffff000f,     4, ARRAYDATA(qword) { 0x000043eeb7200000, 0x000043eeb72ff000, 0x000043eeb7300000, 0x000043eeb7400000 }, ARRAYDATA(qword) { 0x0000000000000, 0x6bd165dcff000, 0x5a5c0e3a19000, 0x0000000000000 }, ARRAYDATA(bool)  { 1, 0, 1, 0 }, ARRAYDATA(bool)  { 0, 1, 1, 0 }}}, // map 2mb page, then modify some 1kb pages: tests expansion
+		/* Test case  2 */ {{ 0x0000300e53400000, 0xc55b40ac00000, 0x00000200000, 0x0000300e53400000, 0x2e55213779000, 0x00000200000, PageEntry::EntryAttributes(PageEntry::writeAccessBit), PageEntry::EntryAttributes(PageEntry::userPageBit)    }, { 1, 0xffff000f,     5, ARRAYDATA(qword) { 0x0000300e533ff000, 0x0000300e53400000, 0x0000300e53400000, 0x0000300e53500000, 0x0000300e53600000 }, ARRAYDATA(qword) { 0x0000000000000, 0x2e55213779000, 0x2e55213779000, 0x2e55213879000, 0x0000000000000 }, ARRAYDATA(bool) { 0, 1, 0, 1, 0 }, ARRAYDATA(bool) { 0, 1, 1, 1, 0 }}}, // map 2mb page, then override with an unaligned 2mb range: tests expansion
+		/* Test case  3 */ {{ 0x000066331de00000, 0x9c91afe434000, 0x00000200000, 0x000066331de00000, 0xad66339000000, 0x00000200000, PageEntry::EntryAttributes(PageEntry::userPageBit), PageEntry::EntryAttributes(PageEntry::writeAccessBit)    }, { 1, 0xffff0007,     4, ARRAYDATA(qword) { 0x000066331ddff000, 0x000066331de00000, 0x000066331df00000, 0x000066331e000000 }, ARRAYDATA(qword) { 0x0000000000000, 0x0000000000000, 0xad66339100000, 0x0000000000000 }, ARRAYDATA(bool)  { 0, 1, 0, 0 }, ARRAYDATA(bool)  { 0, 0, 1, 0 }}}, // map unaligned 2mb tange, then override with 2ms page: tests collapse
+		/* Test case  4 */ {{ 0xffffeec7b2f00000, 0x7737fd3d00000, 0x00000100000, 0xffffeec7b2e00000, 0x7737fd3c00000, 0x00000100000, PageEntry::EntryAttributes(PageEntry::writeAccessBit), PageEntry::EntryAttributes(PageEntry::writeAccessBit) }, { 1, 0xffff0007,     4, ARRAYDATA(qword) { 0xffffeec7b2e00000, 0xffffeec7b2f00000, 0xffffeec7b2f00000, 0xffffeec7b3000000 }, ARRAYDATA(qword) { 0x7737fd3c00000, 0x7737fd3d00000, 0x0000000000000, 0x0000000000000 }, ARRAYDATA(bool)  { 0, 0, 1, 0 }, ARRAYDATA(bool)  { 1, 1, 0, 0 }}}, // map partial 2mb range, then complete it (tests collapse)
+		/* Test case  5 */ {{ 0xffffed9a13b00000, 0xf956adf700000, 0x00000100000, 0xffffed9a13a00000, 0xf956adf600000, 0x00000100000, PageEntry::EntryAttributes(PageEntry::userPageBit), PageEntry::EntryAttributes(PageEntry::writeAccessBit)    }, { 1, 0xffff000f,     5, 
+ARRAYDATA(qword) { 0xffffed9a13a00000, 0xffffed9a13a00000, 0xffffed9a13b00000, 0xffffed9a13b00000, 0xffffed9a13c00000 }, 
+ARRAYDATA(qword) { 0x0000000000000, 0xf956adf600000, 0xf956adf700000, 0xf956adf700000, 0x0000000000000 }, 
+ARRAYDATA(bool)  { 1, 0, 1, 0, 0 }, 
+ARRAYDATA(bool)  { 0, 1, 1, 1, 0 }
+}}, // map partial 2mb range, then complete it, but with different attributes
+
+		/* Test case  6 */ {{ 0x000072f280000000, 0x36a7f77000000, 0x00040000000, 0x000072f2bf000000, 0x3f0e2b4e00000, 0x00001000000, PageEntry::EntryAttributes(PageEntry::writeAccessBit), PageEntry::EntryAttributes(PageEntry::userPageBit)    }, { 1, 0xffff0007,     5, 
+ARRAYDATA(qword) { 0x000072f280000000, 0x000072f280000000, 0x000072f2bf000000, 0x000072f2bf000000, 0x000072f2c0000000}, 
+ARRAYDATA(qword) { 0x0000000000000, 0x36a7f77000000, 0x3f0e2b4e00000, 0x3f0e2b4e00000, 0x0000000000000 }, 
+ARRAYDATA(bool)  { 1, 0, 1, 0, 0 }, 
+ARRAYDATA(bool)  { 0, 1, 1, 1, 0 }
+}}, // map an unaligned 1gb range, modify some 2mb pages
+		/* Test case  7 */ {{ 0x000055f140000000, 0xd459c80000000, 0x00040000000, 0x000055f17f000000, 0x7cc84bf000000, 0x00001000000, PageEntry::EntryAttributes(PageEntry::userPageBit), PageEntry::EntryAttributes(PageEntry::writeAccessBit)    }, { 1, 0xffff0007,     5, 
+ARRAYDATA(qword) { 0x000055f140000000, 0x000055f140000000, 0x000055f17f000000, 0x000055f17f000000, 0x000055f180000000 }, 
+ARRAYDATA(qword) { 0xd459c80000000, 0xd459c80000000, 0x7cc84bf000000, 0x0000000000000, 0x0000000000000 }, 
+ARRAYDATA(bool)  { 0, 1, 0, 1, 0 }, 
+ARRAYDATA(bool)  { 1, 1, 1, 0, 0 }
+}}, // map 1g page, then modify some 2mb pages: tests expansion
+		/* Test case  8 */ {{ 0x0000283b00000000, 0x4bf5340000000, 0x00040000000, 0x0000283b00000000, 0xcd2d28d600000, 0x00040000000, PageEntry::EntryAttributes(PageEntry::userPageBit), PageEntry::EntryAttributes(PageEntry::writeAccessBit)    }, { 1, 0xffff0007,     4, 
+ARRAYDATA(qword) { 0x0000283b00000000, 0x0000283b00000000, 0x0000283b20000000, 0x0000283b40000000 }, 
+ARRAYDATA(qword) { 0xcd2d28d600000, 0x0000000000000, 0xcd2d2ad600000, 0x0000000000000 }, 
+ARRAYDATA(bool)  { 0, 1, 0, 0 }, 
+ARRAYDATA(bool)  { 1, 0, 1, 0 }
+}}, // map 1g page, then overide with an unaligned 1g range: tests expansion
+		/* Test case  9 */ {{ 0xffffae7f80000000, 0x6f49d94400000, 0x00040000000, 0xffffae7f80000000, 0xa4b9200000000, 0x00040000000, PageEntry::EntryAttributes(PageEntry::userPageBit), PageEntry::EntryAttributes(PageEntry::writeAccessBit)    }, { 1, 0xffff0003,     5, 
+ARRAYDATA(qword) { 0xffffae7f80000000, 0xffffae7f80000000, 0xffffae7fa0000000, 0xffffae7fa0000000, 0xffffae7fc0000000 }, 
+ARRAYDATA(qword) { 0xa4b9200000000, 0x0000000000000, 0xa4b9220000000, 0x0000000000000, 0x0000000000000 }, 
+ARRAYDATA(bool)  { 0, 1, 0, 1, 0 }, 
+ARRAYDATA(bool)  { 1, 0, 1, 0, 0 }
+}}, // map unaligned 1gb range, then override with a 1gb page: tests collapse
+		/* Test case 10 */ {{ 0x0000774660000000, 0x6d5fae0000000, 0x00020000000, 0x0000774640000000, 0x6d5fac0000000, 0x00020000000, PageEntry::EntryAttributes(PageEntry::writeAccessBit), PageEntry::EntryAttributes(PageEntry::writeAccessBit) }, { 1, 0xffff0003,     5, 
+ARRAYDATA(qword) { 0x0000774640000000, 0x0000774640000000, 0x0000774660000000, 0x0000774660000000, 0x0000774680000000 }, 
+ARRAYDATA(qword) { 0x6d5fac0000000, 0x0000000000000, 0x6d5fae0000000, 0x0000000000000, 0x0000000000000 }, 
+ARRAYDATA(bool)  { 0, 1, 0, 1, 0 }, 
+ARRAYDATA(bool)  { 1, 0, 1, 0, 0 }
+}}, // map partial 1gb range, then complete it (tests collapse)
+		/* Test case 11 */ {{ 0x00006e9260000000, 0x482c560000000, 0x00020000000, 0x00006e9240000000, 0x482c540000000, 0x00020000000, PageEntry::EntryAttributes(PageEntry::userPageBit), PageEntry::EntryAttributes(PageEntry::writeAccessBit)    }, { 1, 0xffff0007,     5, 
+ARRAYDATA(qword) { 0x00006e9240000000, 0x00006e9240000000, 0x00006e9260000000, 0x00006e9260000000, 0x00006e9280000000 }, 
+ARRAYDATA(qword) { 0x482c540000000, 0x0000000000000, 0x482c560000000, 0x482c560000000, 0x0000000000000 }, 
+ARRAYDATA(bool)  { 0, 1, 0, 1, 0 }, 
+ARRAYDATA(bool)  { 1, 0, 1, 1, 0 }
+}}, // map partial 1gb range, then complete it, but with different attributes
+
+// negative test for expansion. map a range using the entire allocation map, then expand an entry, to test for failure
+
+
+	};
+
+	FOREACH_TESTCASE
+	{
+		void* pageSpace = (void*)heapStart;
+		dword pageAllocationMap = 0xffff0000;
+
+		PageMapLevel4 *pml4 = PageMapLevel4::create(pageSpace, pageAllocationMap);
+
+		test_assert_expected_named(pml4, !=, nullptr);
+		if (pml4 == nullptr)
+			continue;
+
+		bool initialMappingSuccess = pml4->mapRegion(pageSpace, pageAllocationMap, INPUT(initialVirtualAddress), INPUT(initialPhysicalAddress), INPUT(initialLen), INPUT(initialAttributes));
+
+		test_assert_expected(initialMappingSuccess, ==, 1);
+		
+		bool finalMappingSuccess = pml4->mapRegion(pageSpace, pageAllocationMap, INPUT(finalVirtualAddress), INPUT(finalPhysicalAddress), INPUT(finalLen), INPUT(finalAttributes));
+		
+		test_assert_expected(finalMappingSuccess, ==, OUTPUT(success));
+		test_assert_expected_hex(pageAllocationMap, ==, OUTPUT(pageAllocationMap));
+
+		int count = OUTPUT(sampleCount);
+		for (int sample = 0; sample < count; sample++)
+		{
+			qword physicalAddress;
+			bool success = pml4->getPhysicalAddress(OUTPUT(sampleVirtualAddress)[sample], physicalAddress, OUTPUT(sampleAsUser)[sample]);
+
+			test_assert_expected(success, ==, OUTPUT(sampleResult)[sample]);
+			if (success)
+			{
+				test_assert_expected_hex(physicalAddress, ==, OUTPUT(samplePhysicalAddress)[sample]);
+			}
+			if (success != OUTPUT(sampleResult)[sample] || (success && physicalAddress != OUTPUT(samplePhysicalAddress)[sample]))
+			{
+				cout << "\nFAILED";
+				ColorizeVerdict(false);
+				cout << " at sample " << sample;
+			}
+		}
+
+		// clean up
+		pml4->clearAll(pageSpace, pageAllocationMap);
+		test_assert_expected_hex(pageAllocationMap, ==, 0xffff0001);
+
+		for (int sample = 0; sample < count; sample++)
+		{
+			qword physicalAddress;
+			bool success = pml4->getPhysicalAddress(OUTPUT(sampleVirtualAddress)[sample], physicalAddress, OUTPUT(sampleAsUser)[sample]);
+
+			test_assert_expected(success, ==, false);
+			if (success != false)
+			{
+				cout << "\nFAILED";
+				ColorizeVerdict(false);
+				cout << " at sample " << sample << " (after cleanup)";
+			}
+		}
+	}
+
+	TEST_END;
 }
 
 #include "test_libc_stub.h"
@@ -413,8 +551,7 @@ extern "C" void main()
 		MAKETEST(getEntryBounds),
 		MAKETEST(getPhysicalAddress),
 		MAKETEST(mapRegion),
-		MAKETEST(mapRegion_expansion),
-		MAKETEST(mapRegion_collapse),
+		MAKETEST(mapRegion_expansionAndCollapse),
 	};
 
 	EXECUTE_ALL_TESTS;
