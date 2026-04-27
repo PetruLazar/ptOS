@@ -109,6 +109,7 @@ extern void main(KernelInfo &info)
 	Keyboard::CleanUp();
 	Scheduler::CleanUp();
 	IRQ::CleanUp();
+	ACPI::CleanUp();
 	Screen::Cleanup();
 
 	ull currAllocCount = Memory::Heap::getAllocationCountFromSelected();
@@ -456,6 +457,15 @@ void terminal()
 				else if (subCmd == "madt")
 				{
 					ACPI::DisplayMADT();
+				}
+				else if (subCmd == "namespace")
+				{
+					string indentation = "";
+					ACPI::GetRootNamespace()->DisplayContents(indentation);
+				}
+				else if (subCmd == "call")
+				{
+					ACPI::testPRT();
 				}
 				else
 				{

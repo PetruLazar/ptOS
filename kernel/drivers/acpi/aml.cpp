@@ -1,8 +1,9 @@
 #include "aml.h"
 
 #include "../../core/filesystem/filesystem.h" // temporarily
-#include <iostream.h>
 #include "../../core/mem.h"
+#include "acpi.h"
+#include <iostream.h>
 
 #define AMLAssert(cond, errType) if (!(cond)) { return ctx.logError(errType); }
 #define AMLAssertPassthrough(cond) if(!(cond)) { return false; }
@@ -31,7 +32,115 @@ namespace AML
 		inconsistentBufferParametersError,
 		inconsistentPackageParametersError,
 
+		inexistentNamespaceError,
+
+		incorrectArgCountError,
+
 		unknownError
+	};
+
+	class PackageObject;
+
+	class AMLDataObject
+	{
+	public:
+		ExpressionType type = voidType;
+		void* valuePtr = nullptr;
+
+		AMLDataObject() { assign(voidType, nullptr); }
+		AMLDataObject(ExpressionType type, void* valuePtr) { assign(type, valuePtr); }
+
+		void assign(ExpressionType type, void* valuePtr)
+		{
+			this->type = type;
+			this->valuePtr = valuePtr;
+		}
+		void assignAndDeallocate(ExpressionType type, void* valuePtr)
+		{
+			if (this->valuePtr != nullptr)
+				deallocate();
+
+			assign(type, valuePtr);
+		}
+		void deallocate();
+
+		template <typename T> T val() { return *(T*)valuePtr; }
+		template <typename T> T& deref() { return *(T*)valuePtr; }
+	};
+	class PackageObject : public vector<AMLDataObject>
+	{
+	public:
+		~PackageObject()
+		{
+			for (auto& elem : *this)
+				elem.deallocate();
+		}
+	};
+
+	void AMLDataObject::deallocate()
+	{
+		switch (type)
+		{
+		case integerType:
+			delete (ull*)valuePtr;
+			break;
+		case stringType:
+			delete (string*)valuePtr;
+			break;
+		case bufferType:
+			delete (vector<byte>*)valuePtr;
+			break;
+		case packageType:
+			delete (PackageObject*)valuePtr;
+			break;
+		default:
+			// cannot delete untyped - leave the object to leak
+			break;
+		}
+
+		assign(voidType, nullptr);
+	}
+
+	class ACPIDevice : public ACPI::ACPINamedObject
+	{
+	public:
+		ACPIDevice() : ACPINamedObject(deviceType) { }
+
+		virtual void DisplayContents(string& indentation) override
+		{
+			cout << indentation << "Device (" << GetSimpleName() << ") {\n";
+			indentation += "  ";
+			for (auto elem : children) elem->DisplayContents(indentation);
+			indentation.erase(indentation.length() - 2, 2);
+			cout << indentation << "}\n";
+		}
+	};
+	class ACPIMethod : public ACPI::ACPINamedObject
+	{
+	private:
+		virtual ACPINamedObject* getChild(const string& simpleName, ScopeType desiredType = anyType) override { return nullptr; }
+		virtual bool addChild(const string& simpleName, ACPINamedObject* obj)  override { return false; }
+
+	public:
+		union Flags
+		{
+			byte raw;
+			struct Fields
+			{
+				byte argCount : 3;
+				byte serialized : 1;
+				byte syncLevel : 4;
+			} fields;
+		} flags;
+		const byte* methodStart;
+		ull methodLen;
+
+		ACPIMethod() : ACPINamedObject(methodType) { }
+
+		virtual void DisplayContents(string &indentation) override
+		{
+			cout << indentation << "Method (" << GetSimpleName() << ", " << flags.fields.argCount << " args, " << (flags.fields.serialized ? "S" : "nS") << ", Sync " << flags.fields.syncLevel << ")\n";
+		}
 	};
 
 	class AMLContext
@@ -40,27 +149,52 @@ namespace AML
 		const byte *byteStream;
 		ull length;
 
-		AMLContext(const byte* byteStream, ull length, bool runtime, bool display = false)
+		AMLContext(const byte* byteStream, ull length, bool display = false)
 		{
+			// derive data from the input data
 			this->byteStream = byteStream;
 			this->length = length;
+			this->runtime = false;
 
-			this->lastError = ErrorType::noError;
-
-			this->expressionReturnValue = nullptr;
-			this->expressionReturnType = voidType;
-
-			this->runtime = runtime;
 			if (display) output_stream = &cout;
 			else output_stream = &nullout;
+
+			this->currentScope = ACPI::GetRootNamespace();
 		}
+		AMLContext(ACPIMethod* method, const vector<AMLDataObject> &args)
+		{
+			byteStream = method->methodStart;
+			length = method->methodLen;
+			runtime = true;
+
+			output_stream = &nullout;
+			currentScope = method; // maybe get parent instead?
+
+			if (method->flags.fields.argCount != args.getSize())
+			{
+				lastError = incorrectArgCountError;
+				return;
+			}
+
+			this->args.assign(args);
+			locals.resize(8);
+		}
+
 		~AMLContext()
 		{
-			consumeReturnByReference();
+			returnValueObj.assignAndDeallocate(voidType, nullptr);
+			for (auto& elem : args)
+				elem.deallocate();
+			for (auto& elem : locals)
+				elem.deallocate();
 		}
 
 		// context data
 		bool runtime;
+		vector<AMLDataObject> args;
+		vector<AMLDataObject> locals;
+
+		ACPI::ACPINamedObject* currentScope;
 
 		// sub-context handling
 		vector<const byte*> subContextStream;
@@ -123,11 +257,9 @@ namespace AML
 		}
 
 		// error handling
-		ErrorType lastError;
+		ErrorType lastError = noError;
 		bool logError(ErrorType error)
 		{
-			if (expressionReturnValue != nullptr)
-				consumeReturnByReference();
 			lastError = error;
 			return false;
 		}
@@ -144,49 +276,45 @@ namespace AML
 				"Inconsistent buffer parameters detected",
 				"Inconsistent package parameters detected",
 
+				"Inexistent namespace referenced",
+
+				"Method called with incorrect number or arguments",
+
 				"Unkown Error",
 			};
 			return errorTypeToString[(uint)lastError];
 		}
 
 		// expression result
-		ExpressionType expressionReturnType;
-		void* expressionReturnValue;
+		AMLDataObject returnValueObj;
 		template <typename tn> bool returnValue(ExpressionType type, tn* val)
 		{
-			if (expressionReturnValue != nullptr)
-				consumeReturnByReference();
-			expressionReturnType = type;
-			expressionReturnValue = val;
+			returnValueObj.assignAndDeallocate(type, val);
 			return true;
 		}
-		template <typename tn> bool consumeReturnByValue(ExpressionType type, tn* ptr)
+		template <typename tn> bool getReturnByValue(ExpressionType type, tn* ptr)
 		{
 			// no point in checking for nullptr;
 			// if return value is consumed, return type becomes voidType, which should never be requested
-			if (expressionReturnType != type)
+			if (returnValueObj.type != type)
 				return false;
 
-			*ptr = *(tn*)expressionReturnValue;
-
-			consumeReturnByReference();
+			*ptr = *(tn*)returnValueObj.valuePtr;
 			return true;
 		}
 		template <typename tn> bool getReturnByReference(ExpressionType type, tn* &ptr)
 		{
-			if (expressionReturnType != type)
+			if (returnValueObj.type != type)
 				return false;
 
-			ptr = (tn*)expressionReturnValue;
+			ptr = (tn*)returnValueObj.valuePtr;
 			return true;
 		}
-		void takeReturnReferenceOwnership()
+		void takeReturnValueOwnership()
 		{
 			// skip deletion
-			expressionReturnValue = nullptr;
-			expressionReturnType = voidType;
+			returnValueObj.assign(voidType, nullptr);
 		}
-		void consumeReturnByReference();
 
 		// debug ctx info
 		ostream* output_stream;
@@ -203,79 +331,6 @@ namespace AML
 		ull opCode;
 		Operation handler;
 	};
-
-	class PackageElement
-	{
-	public:
-		PackageElement() { assign(voidType, nullptr); }
-		PackageElement(AMLContext &ctx) { assign(ctx); }
-		PackageElement(ExpressionType type, void* valuePtr) { assign(type, valuePtr); }
-		void assign(AMLContext &ctx) { assign(ctx.expressionReturnType, ctx.expressionReturnValue); }
-		void assign(ExpressionType type, void* valuePtr)
-		{
-			if (this->valuePtr != nullptr)
-				deallocate();
-
-			this->type = type;
-			this->valuePtr = valuePtr;
-		}
-		void deallocate()
-		{
-			switch (type)
-			{
-			case integerType:
-				delete (ull*)valuePtr;
-				break;
-			case stringType:
-				delete (string*)valuePtr;
-				break;
-			default:
-				// skip deletion
-				break;
-			}
-			type = voidType;
-			valuePtr = nullptr;
-		}
-
-		template <typename T> T val() { return *(T*)valuePtr; }
-		template <typename T> T& deref() { return *(T*)valuePtr; }
-
-		ExpressionType type = voidType;
-		void* valuePtr = nullptr;
-	};
-	class PackageObject : public vector<PackageElement>
-	{
-	public:
-		~PackageObject()
-		{
-			for (auto& elem : *this)
-				elem.deallocate();
-		}
-	};
-
-	void AMLContext::consumeReturnByReference()
-	{
-		switch (expressionReturnType)
-		{
-		case integerType:
-			delete (ull*)expressionReturnValue;
-			break;
-		case stringType:
-			delete (string*)expressionReturnValue;
-			break;
-		case bufferType:
-			delete (vector<byte>*)expressionReturnValue;
-			break;
-		case packageType:
-			delete (PackageObject*)expressionReturnValue;
-			break;
-		default:
-			// cannot delete untyped - leave the object to leak
-			break;
-		}
-		expressionReturnValue = nullptr;
-		expressionReturnType = voidType;
-	}
 
 	namespace Grammar
 	{
@@ -552,17 +607,16 @@ namespace AML
 				AMLAssertPassthrough(NameString::Parse(ctx));
 				AMLAssert(ctx.getReturnByReference(stringType, tmpname), unknownError);
 				name = *tmpname;
-				ctx.consumeReturnByReference();
 
 				// DataRefObject
 				AMLAssertPassthrough(DataRefObject::Parse(ctx));
 
-				switch (ctx.expressionReturnType)
+				switch (ctx.returnValueObj.type)
 				{
 					case integerType:
 					{
 						ull data;
-						AMLAssert(ctx.consumeReturnByValue(integerType, &data), unknownError);
+						AMLAssert(ctx.getReturnByValue(integerType, &data), unknownError);
 						ctx.debug_info() << "Name (" << name << ", " << data << ")\n";
 						break;
 					}
@@ -571,7 +625,6 @@ namespace AML
 						string* val;
 						AMLAssert(ctx.getReturnByReference(stringType, val), unknownError);
 						ctx.debug_info() << "Name (" << name << ", \"" << *val << "\")\n";
-						ctx.consumeReturnByReference();
 						break;
 					}
 					case bufferType:
@@ -586,7 +639,6 @@ namespace AML
 						}
 						ctx.outdent();
 						ctx.debug_info() << "}\n";
-						ctx.consumeReturnByReference();
 						break;
 					}
 					case packageType:
@@ -611,7 +663,6 @@ namespace AML
 						}
 						ctx.outdent();
 						ctx.debug_info() << "}\n";
-						ctx.consumeReturnByReference();
 						break;
 					}
 					default:
@@ -635,7 +686,7 @@ namespace AML
 
 				// pkgLength
 				AMLAssertPassthrough(PkgLength::Parse(ctx));
-				AMLAssert(ctx.consumeReturnByValue(integerType, &pkgLength), unknownError);
+				AMLAssert(ctx.getReturnByValue(integerType, &pkgLength), unknownError);
 				ctx.limitSubcontext(pkgLength);
 
 				// NameString
@@ -643,9 +694,12 @@ namespace AML
 				AMLAssertPassthrough(NameString::Parse(ctx));
 				AMLAssert(ctx.getReturnByReference(stringType, name), unknownError);
 
+				ACPI::ACPINamedObject* oldScope = ctx.currentScope;
+				ctx.currentScope = ctx.currentScope->get(*name);
+				AMLAssert(ctx.currentScope != nullptr, inexistentNamespaceError);
+
 				ctx.debug_info() << "Scope (" << *name << ") {\n";
 				ctx.indent();
-				ctx.consumeReturnByReference();
 
 				// TermList
 				AMLAssertPassthrough(TermList::Parse(ctx));
@@ -653,6 +707,8 @@ namespace AML
 				ctx.outdent();
 				ctx.debug_info() << "}\n";
 				ctx.popSubContext();
+
+				ctx.currentScope = oldScope;
 
 				return true;
 			}
@@ -738,7 +794,6 @@ namespace AML
 				AMLAssertPassthrough(NameString::Parse(ctx));
 				AMLAssert(ctx.getReturnByReference(stringType, tmpname), unknownError);
 				name = *tmpname;
-				ctx.consumeReturnByReference();
 
 				// RegionSpace
 				AMLAssert(ctx.check(1), endOfStreamError);
@@ -746,11 +801,11 @@ namespace AML
 
 				// RegionOffset => Integer
 				AMLAssertPassthrough(TermArg::Parse(ctx));
-				AMLAssert(ctx.consumeReturnByValue(integerType, &regionOffset), unknownError);
+				AMLAssert(ctx.getReturnByValue(integerType, &regionOffset), unknownError);
 
 				// RegionLen => Integer
 				AMLAssertPassthrough(TermArg::Parse(ctx));
-				AMLAssert(ctx.consumeReturnByValue(integerType, &regionLen), unexpectedExpressionTypeError);
+				AMLAssert(ctx.getReturnByValue(integerType, &regionLen), unexpectedExpressionTypeError);
 
 				ctx.debug_info() << "OpRegion (" << name << ", " << (uint)regionSpace << ", " << regionOffset << ", " << regionLen << ")\n";
 
@@ -783,7 +838,7 @@ namespace AML
 				// PkgLength
 				ull pkgLength;
 				AMLAssertPassthrough(PkgLength::Parse(ctx));
-				AMLAssert(ctx.consumeReturnByValue(integerType, &pkgLength), unknownError);
+				AMLAssert(ctx.getReturnByValue(integerType, &pkgLength), unknownError);
 				ctx.limitSubcontext(pkgLength);
 
 				// NameString
@@ -795,8 +850,18 @@ namespace AML
 				AMLAssert(ctx.check(1), endOfStreamError);
 				byte methodFlags = ctx.pop<byte>();
 
+				ACPIMethod* method = new ACPIMethod();
+				if (!ctx.currentScope->add(*name, method))
+				{
+					delete method;
+					return ctx.logError(inexistentNamespaceError);
+				}
+
+				method->flags.raw = methodFlags;
+				method->methodStart = ctx.byteStream;
+				method->methodLen = ctx.length;
+
 				ctx.debug_info() << "Method (" << *name << ", " << (uint)methodFlags << ") {\n";
-				ctx.consumeReturnByReference();
 				ctx.indent();
 
 				// TermList
@@ -823,7 +888,7 @@ namespace AML
 				// PkgLength
 				ull pkgLength;
 				AMLAssertPassthrough(PkgLength::Parse(ctx));
-				AMLAssert(ctx.consumeReturnByValue(integerType, &pkgLength), unknownError);
+				AMLAssert(ctx.getReturnByValue(integerType, &pkgLength), unknownError);
 				ctx.limitSubcontext(pkgLength);
 
 				// NameString
@@ -837,7 +902,6 @@ namespace AML
 
 				ctx.debug_info() << "Field (" << *name << ", " << (uint)fieldFlags << ") {\n";
 				ctx.indent();
-				ctx.consumeReturnByReference();
 
 				// FieldList
 				AMLAssertPassthrough(FieldList::Parse(ctx));
@@ -861,7 +925,7 @@ namespace AML
 				// PkgLength
 				ull pkgLength;
 				AMLAssertPassthrough(PkgLength::Parse(ctx));
-				AMLAssert(ctx.consumeReturnByValue(integerType, &pkgLength), unknownError);
+				AMLAssert(ctx.getReturnByValue(integerType, &pkgLength), unknownError);
 				ctx.limitSubcontext(pkgLength);
 
 				// NameString
@@ -869,8 +933,16 @@ namespace AML
 				AMLAssertPassthrough(NameString::Parse(ctx));
 				AMLAssert(ctx.getReturnByReference(stringType, name), unknownError);
 
+				ACPIDevice* device = new ACPIDevice();
+				if (!ctx.currentScope->add(*name, device))
+				{
+					delete device;
+					return ctx.logError(inexistentNamespaceError);
+				}
+				ACPI::ACPINamedObject* oldScope = ctx.currentScope;
+				ctx.currentScope = device;
+
 				ctx.debug_info() << "Device (" << *name << ") {\n";
-				ctx.consumeReturnByReference();
 				ctx.indent();
 
 				// TermList
@@ -879,6 +951,8 @@ namespace AML
 				ctx.outdent();
 				ctx.debug_info() << "}\n";
 				ctx.popSubContext();
+
+				ctx.currentScope = oldScope;
 
 				return true;
 			}
@@ -895,7 +969,7 @@ namespace AML
 				ull pkgLength;
 				ctx.createSubcontext();
 				AMLAssertPassthrough(PkgLength::Parse(ctx));
-				AMLAssert(ctx.consumeReturnByValue(integerType, &pkgLength), unknownError);
+				AMLAssert(ctx.getReturnByValue(integerType, &pkgLength), unknownError);
 				ctx.limitSubcontext(pkgLength);
 
 				ctx.debug_info() << "Processor {\n";
@@ -960,7 +1034,6 @@ namespace AML
 					AMLAssertPassthrough(NameSeg::Parse(ctx));
 					AMLAssert(ctx.getReturnByReference(stringType, nameSegVal), unknownError);
 					result.append(*nameSegVal);
-					ctx.consumeReturnByReference();
 				}
 				return true;
 			}
@@ -1272,13 +1345,13 @@ namespace AML
 				ull pkgLength;
 				ctx.createSubcontext();
 				AMLAssertPassthrough(PkgLength::Parse(ctx));
-				AMLAssert(ctx.consumeReturnByValue(integerType, &pkgLength), unknownError);
+				AMLAssert(ctx.getReturnByValue(integerType, &pkgLength), unknownError);
 				ctx.limitSubcontext(pkgLength);
 
 				// BufferSize
 				ull bufferSize;
 				AMLAssertPassthrough(TermArg::Parse(ctx))
-				AMLAssert(ctx.consumeReturnByValue(integerType, &bufferSize), unexpectedExpressionTypeError);
+				AMLAssert(ctx.getReturnByValue(integerType, &bufferSize), unexpectedExpressionTypeError);
 
 				// ByteList
 				AMLAssert(ctx.length == bufferSize, inconsistentBufferParametersError);
@@ -1300,7 +1373,7 @@ namespace AML
 				ull pkgLength;
 				ctx.createSubcontext();
 				AMLAssertPassthrough(PkgLength::Parse(ctx));
-				AMLAssert(ctx.consumeReturnByValue(integerType, &pkgLength), unknownError);
+				AMLAssert(ctx.getReturnByValue(integerType, &pkgLength), unknownError);
 				ctx.limitSubcontext(pkgLength);
 
 				// NumElements
@@ -1773,7 +1846,7 @@ namespace AML
 				// PkgLength
 				ull pkgLength;
 				AMLAssertPassthrough(PkgLength::Parse(ctx));
-				AMLAssert(ctx.consumeReturnByValue(integerType, &pkgLength), unknownError);
+				AMLAssert(ctx.getReturnByValue(integerType, &pkgLength), unknownError);
 				ctx.debug_info(true) << pkgLength << ")\n";
 
 				return true;
@@ -1789,7 +1862,7 @@ namespace AML
 				// PkgLength
 				ull pkgLength;
 				AMLAssertPassthrough(PkgLength::Parse(ctx));
-				AMLAssert(ctx.consumeReturnByValue(integerType, &pkgLength), unknownError);
+				AMLAssert(ctx.getReturnByValue(integerType, &pkgLength), unknownError);
 
 				ctx.debug_info() << "ReservedField (" << pkgLength << ")\n";
 
@@ -1843,8 +1916,8 @@ namespace AML
 						delete package;
 						return false;
 					}
-					package->push_back(AML::PackageElement(ctx));
-					ctx.takeReturnReferenceOwnership();
+					package->push_back(AMLDataObject(ctx.returnValueObj));
+					ctx.takeReturnValueOwnership();
 				}
 
 				return ctx.returnValue(packageType, package);
@@ -1868,7 +1941,7 @@ namespace AML
 					AMLAssertPassthrough(NameString::Parse(ctx));
 				}
 
-				AMLAssert(ctx.expressionReturnType == integerType || ctx.expressionReturnType == stringType, unexpectedExpressionTypeError);
+				AMLAssert(ctx.returnValueObj.type == integerType || ctx.returnValueObj.type == stringType, unexpectedExpressionTypeError);
 				return true; // simply leave the return value unchanged
 			}
 		}
@@ -1890,7 +1963,6 @@ namespace AML
 				syncFlags = ctx.pop<byte>();
 
 				ctx.debug_info() << "Mutex(" << *name << ", " << syncFlags << "),\n";
-				ctx.consumeReturnByReference();
 				return true;
 			}
 		}
@@ -1909,9 +1981,36 @@ namespace AML
 
 		return result;
 	}
+	bool ExecuteMethod(const string& name)
+	{
+		ACPIMethod *method = (ACPIMethod*)ACPI::GetRootNamespace()->get(name, ACPI::ACPINamedObject::methodType);
+
+		if (method == nullptr)
+		{
+			cout << "Method not found.\n";
+			return false;
+		}
+
+		AMLContext ctx(method, vector<AMLDataObject>());
+
+		if (ctx.lastError == incorrectArgCountError)
+		{
+			cout << ctx.lastErrorAsString() << " in method" << (void*)method->methodStart << ".\n";
+			return false;
+		}
+
+		bool result = Grammar::TermList::Parse(ctx);
+		if (result == false)
+		{
+			cout << ctx.lastErrorAsString() << " in method " << (void*)method->methodStart << " at: \n";
+			DisplayMemoryBlock(ctx.byteStream, 32);
+		}
+
+		return result;
+	}
 	bool DisplayDefinitionBlock(const byte *definitionBlock, ull definitionBlockLen)
 	{
-		AMLContext ctx(definitionBlock, definitionBlockLen, false, true);
+		AMLContext ctx(definitionBlock, definitionBlockLen, true);
 
 		// cout << (void*)ctx.byteStreamPos << '\n';
 		// DisplayMemoryBlock(ctx.byteStreamPos, 0x100);

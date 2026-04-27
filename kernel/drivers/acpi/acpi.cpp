@@ -3,6 +3,8 @@
 #include "../../debug/verbose.h"
 #include <string.h>
 
+using namespace std;
+
 namespace ACPI
 {
 	static constexpr char RSDPsignature[] = "RSD PTR ";
@@ -53,10 +55,27 @@ namespace ACPI
 
 	RSDT* rsdt = nullptr;
 	XSDT* xsdt = nullptr;
+	
+	ACPINamedObject* rootScope;
 
-	void Initialize() // RSDP will come from EFI bootloader in the future
+	class PredefinedScope : public ACPINamedObject
 	{
-		// locate ACPI
+	public:
+		PredefinedScope() : ACPINamedObject(predefinedScopeType) { }
+
+		virtual void DisplayContents(string& indentation) override
+		{
+			cout << indentation << "Scope (" << GetSimpleName() << ") {\n";
+			indentation += "  ";
+			for (auto elem : children) elem->DisplayContents(indentation);
+			indentation.erase(indentation.length() - 2, 2);
+			cout << indentation << "}\n";
+		}
+	};
+
+	void LocateRootTable()
+	{
+		// locate RSDP
 		const char* ebda = (const char*)((ull)(*EBDAbaseAddressPtr) << 4);
 		if (rsdp == nullptr)
 		{
@@ -101,8 +120,8 @@ namespace ACPI
 			VERBOSE_LOG("ACPI RSDP not found. Skipping...\n");
 			return;
 		}
-
-		// ACPI located; do some validation
+		
+		// RSDP located; do some validation
 		bool valid = true;
 
 		// for now, only support version 0 directly
@@ -114,18 +133,10 @@ namespace ACPI
 
 		if (!valid)
 		{
+			rsdp = nullptr;
 			VERBOSE_LOG("ACPI RSDP validation failed. Skipping...\n");
 			return;
 		}
-
-		// ISR::std::cout << "RSDP:\n";
-		// ISR::std::cout << "\tchecksum = " << std::ostream::base::hex << rsdp->checksum << std::ostream::base::dec << '\n';
-		// ISR::std::cout << "\tOEMId = \"" << std::string(rsdp->OEMId, 6).data() << "\"\n";
-		// ISR::std::cout << "\trevision = " << rsdp->revision << '\n';
-		// ISR::std::cout << "\trsdtAddr = " << (void*)(ull)rsdp->rsdtAddr << '\n';
-		// ISR::std::cout << "\ttableLength = " << rsdp->tableLength << '\n';
-		// ISR::std::cout << "\txsdtAddr = " << (void*)(ull)rsdp->xsdtAddr << '\n';
-		// ISR::std::cout << "\textChecksum = " << std::ostream::base::hex << rsdp->extChecksum << std::ostream::base::dec << '\n';
 
 		GenericSDT *sdt;
 		if (rsdp->revision >= 2)
@@ -150,14 +161,41 @@ namespace ACPI
 		// validate root table
 		if (!valid || sdt->doChecksum() != 0)
 		{
+			xsdt = nullptr;
+			rsdt = nullptr;
 			VERBOSE_LOG("ACPI root table validation failed. Skipping...\n");
 			return;
 		}
+	}
+	void CreateACPINamespace()
+	{
+		rootScope = new PredefinedScope();
+		rootScope->add("_GPE", new PredefinedScope());
+		rootScope->add("_PR_", new PredefinedScope());
+		rootScope->add("_SB_", new PredefinedScope());
+		rootScope->add("_SI_", new PredefinedScope());
+		rootScope->add("_TZ_", new PredefinedScope());
+	}
 
-		InitializeFADT();
-		InitializeDSDT();
-		InitializeMADT();
-		InitializeSSDT();
+	void Initialize() // RSDP will come from EFI bootloader in the future
+	{
+		// locate root table pointer
+		LocateRootTable();
+
+		CreateACPINamespace();
+
+		if (rsdt != nullptr || xsdt != nullptr)
+		{
+			InitializeFADT();
+			InitializeDSDT();
+			InitializeMADT();
+			InitializeSSDT();
+		}
+	}
+	ACPINamedObject* GetRootNamespace() { return rootScope; }
+	void CleanUp()
+	{
+		delete rootScope;
 	}
 
 	void listRootEntries()
@@ -165,34 +203,34 @@ namespace ACPI
 		if (xsdt != nullptr)
 		{
 			// parse XSDT
-			std::cout << "XSDT content:\n";
+			cout << "XSDT content:\n";
 			ull count = xsdt->getEntryCount();
 			for (ull i = 0; i < count; i++)
 			{
 				GenericSDT* table = (GenericSDT*)(qword)xsdt->tableEntries[i];
 
-				std::cout << "\tLocated " << std::string(table->header.signature, 4);
-				if (table->doChecksum() != 0) std::cout << " (checksum failed)";
-				std::cout << '\n';
+				cout << "\tLocated " << string(table->header.signature, 4);
+				if (table->doChecksum() != 0) cout << " (checksum failed)";
+				cout << '\n';
 			}
 		}
 		else if (rsdt != nullptr)
 		{
 			// parse RSDT
-			std::cout << "RSDT content:\n";
+			cout << "RSDT content:\n";
 			ull count = rsdt->getEntryCount();
 			for (ull i = 0; i < count; i++)
 			{
 				GenericSDT* table = (GenericSDT*)(qword)rsdt->tableEntries[i];
 
-				std::cout << "\tLocated " << std::string(table->header.signature, 4);
-				if (table->doChecksum() != 0) std::cout << " (checksum failed)";
-				std::cout << '\n';
+				cout << "\tLocated " << string(table->header.signature, 4);
+				if (table->doChecksum() != 0) cout << " (checksum failed)";
+				cout << '\n';
 			}
 		}
 		else
 		{
-			std::cout << "No root ACPI table found or validation failed.\n";
+			cout << "No root ACPI table found or validation failed.\n";
 		}
 	}
 	GenericSDT* getTable(const char tableId[4])
@@ -233,5 +271,10 @@ namespace ACPI
 			retVal = nullptr;
 
 		return retVal;
+	}
+
+	void testPRT()
+	{
+		AML::ExecuteMethod("_SB_PCI0_PRT");
 	}
 }
