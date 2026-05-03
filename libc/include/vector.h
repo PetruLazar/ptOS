@@ -68,6 +68,10 @@ namespace std
 		{
 			return size;
 		}
+		inline ull getCapacity() const
+		{
+			return capacity;
+		}
 		inline const T *data() const
 		{
 			return values;
