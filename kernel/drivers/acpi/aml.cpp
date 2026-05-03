@@ -4,9 +4,38 @@
 #include "../../core/mem.h"
 #include "acpi.h"
 #include <iostream.h>
+#include <stringstream.h>
 
-#define AMLAssert(cond, errType) if (!(cond)) { return ctx.logError(errType); }
-#define AMLAssertPassthrough(cond) if(!(cond)) { return false; }
+#define STRINGIFY_HELPER(arg) #arg
+#define STRINGIFY(arg) STRINGIFY_HELPER(arg)
+
+#define AMLAssert(cond, errType, location) if (!(cond))		\
+{		\
+	ctx.stackTraceEntry(#location, STRINGIFY(__LINE__));		\
+	return ctx.logError(errType);		\
+}
+
+#define AMLAssertPassthrough(func_call, location) if(!(func_call))		\
+{		\
+	ctx.stackTraceEntry(#location, STRINGIFY(__LINE__));		\
+	return false;		\
+}
+
+#define AMLLoopAssertPassthrough(func_call, location) {		\
+	if(!(func_call))		\
+	{		\
+		ErrorType result = ctx.lastError;		\
+		if (result == ErrorType::breakLoopError)		\
+		{		\
+			ctx.stackTrace = "\n";		\
+			ctx.lastError = ErrorType::noError;		\
+			break;		\
+		}		\
+		ctx.stackTraceEntry(#location, STRINGIFY(__LINE__));		\
+		return false;		\
+	}		\
+}
+
 #define arraysize(arr) (sizeof(arr) / sizeof(arr[0]))
 
 using namespace std;
@@ -20,21 +49,34 @@ namespace AML
 		stringType,
 		bufferType,
 		packageType,
+
+		variableType,
 	};
 	enum ErrorType
 	{
+		// general errors
 		noError,
 		unhandledElementError,
 		endOfStreamError,
-
-		invalidCharacterInNameSegError,
 		unexpectedExpressionTypeError,
+
+		// format errors
+		invalidCharacterInNameSegError,
 		inconsistentBufferParametersError,
-		inconsistentPackageParametersError,
+		tooManyPackageInitializersError,
 
+		// runtime errors
 		inexistentNamespaceError,
-
 		incorrectArgCountError,
+		nonRuntimeLocalUsageError,
+		nonRuntimeArgUsageError,
+		argOutOfRangeError,
+		indexOutOfRangeError,
+		noReturnStatementError,
+
+		// non-errors
+		breakLoopError,
+		returnFromFunctionError,
 
 		unknownError
 	};
@@ -63,6 +105,8 @@ namespace AML
 			assign(type, valuePtr);
 		}
 		void deallocate();
+		AMLDataObject clone();
+		string to_string(const string& indentation = "");
 
 		template <typename T> T val() { return *(T*)valuePtr; }
 		template <typename T> T& deref() { return *(T*)valuePtr; }
@@ -93,12 +137,96 @@ namespace AML
 		case packageType:
 			delete (PackageObject*)valuePtr;
 			break;
+		case variableType: // fall through to not deleting
 		default:
 			// cannot delete untyped - leave the object to leak
 			break;
 		}
 
 		assign(voidType, nullptr);
+	}
+	AMLDataObject AMLDataObject::clone()
+	{
+		AMLDataObject retVal;
+		retVal.type = type;
+		switch (type)
+		{
+			case integerType:
+				retVal.valuePtr = new ull(this->val<ull>());
+				break;
+			case stringType:
+				retVal.valuePtr = new string(this->deref<string>());
+				break;
+			case bufferType:
+				retVal.valuePtr = new vector<byte>(this->deref<vector<byte>>());
+				break;
+			case packageType:
+			{
+				
+				PackageObject* clonedObject = new PackageObject();
+				for (auto& elem : this->deref<PackageObject>())
+				{
+					clonedObject->push_back(elem.clone());
+				}
+				retVal.valuePtr = clonedObject;
+				break;
+			}
+			case variableType:
+				retVal.valuePtr = this->valuePtr;
+				break;
+			default:
+				break;
+		}
+
+		return retVal;
+	}
+	string AMLDataObject::to_string(const string& indentation)
+	{
+		stringstream stream;
+		stream << ostream::base::hex;
+		switch (type)
+		{
+			case voidType:
+				stream << "void\n";
+				break;
+			case integerType:
+				stream << "0x" << val<ull>() << '\n';
+				break;
+			case stringType:
+				stream << '"' << deref<string>() << "\"\n";
+				break;
+			case bufferType:
+			{
+				vector<byte>& bufferPtr = deref<vector<byte>>();
+				stream << "buffer(" << bufferPtr.getSize() << ") {\n";
+				for (auto& elem : bufferPtr)
+				{
+					stream << indentation << "  0x" << elem << '\n';
+				}
+				stream << indentation << "}\n";
+				break;
+			}
+			case packageType:
+			{
+				PackageObject& pkgRef = deref<PackageObject>();
+				stream << "package(" << pkgRef.getSize() << ") {\n";
+				ull len = pkgRef.getSize();
+				for (ull i = 0; i < len; i++)
+				{
+					stream << indentation << "  [" << i << "] " << pkgRef[i].to_string(indentation + "  ");
+				}
+				stream << indentation << "}\n";
+				break;
+			}
+			case variableType:
+				stream << "ref to " << deref<AMLDataObject>().to_string(indentation + "  ");
+				break;
+			default:
+				cout << "unknown\n";
+				break;
+		}
+
+		return stream.getBuffer();
 	}
 
 	class ACPIDevice : public ACPI::ACPINamedObject
@@ -219,6 +347,12 @@ namespace AML
 			byteStream += diffLength;
 			length -= diffLength;
 		}
+		bool revertStream(ull count)
+		{
+			byteStream -= count;
+			length += count;
+			return true;
+		}
 		bool advanceStream(ull count)
 		{
 			if (length < count)
@@ -258,6 +392,11 @@ namespace AML
 
 		// error handling
 		ErrorType lastError = noError;
+		string stackTrace = "\n";
+		void stackTraceEntry(const char* func, const char* line)
+		{
+			stackTrace = stackTrace + "  at " + func + ", line " + line + "\n";
+		}
 		bool logError(ErrorType error)
 		{
 			lastError = error;
@@ -270,15 +409,22 @@ namespace AML
 				"No error",
 				"Unhandled grammar element",
 				"End of stream reached at unexpected time",
+				"Unexpected expression type",
 
 				"Invalid character while parsing NameSeg",
-				"Unexpected expression type",
 				"Inconsistent buffer parameters detected",
-				"Inconsistent package parameters detected",
+				"Too many package initializers",
 
 				"Inexistent namespace referenced",
-
 				"Method called with incorrect number or arguments",
+				"LocalObj used in non-runtime context",
+				"ArgObj used in non-runtime context",
+				"ArgObj out of range",
+				"Index out of range error",
+				"Function did not execute a return statement",
+
+				"Non-error", // breakLoopError
+				"Non-error", // returnFromFunctionError
 
 				"Unkown Error",
 			};
@@ -354,6 +500,7 @@ namespace AML
 		namespace DefContinue { bool Parse(AMLContext &ctx); static constexpr byte opCode = 0x9f; }
 		namespace DefFatal { bool Parse(AMLContext &ctx); static constexpr word extOpCode = 0x325b; }
 		namespace DefIfElse { bool Parse(AMLContext &ctx); static constexpr byte opCode = 0xa0; }
+		namespace DefElse { bool Parse(AMLContext &ctx); bool Skip(AMLContext &ctx); static constexpr byte opCode = 0xa1; }
 		namespace DefNoop { bool Parse(AMLContext &ctx); static constexpr byte opCode = 0xa3; }
 		namespace DefNotify { bool Parse(AMLContext &ctx); static constexpr byte opCode = 0x86; }
 		namespace DefRelease { bool Parse(AMLContext &ctx); static constexpr word extOpCode = 0x275b; }
@@ -389,7 +536,7 @@ namespace AML
 		namespace DefConcatRes { bool Parse(AMLContext &ctx); static constexpr byte opCode = 0x84; }
 		namespace DefMod { bool Parse(AMLContext &ctx); static constexpr byte opCode = 0x85; }
 		namespace DefSizeOf { bool Parse(AMLContext &ctx); static constexpr byte opCode = 0x87; }
-		namespace DefIndex { bool Parse(AMLContext &ctx); static constexpr byte opCode = 0x88; }
+		namespace DefIndex { bool Parse(AMLContext &ctx); bool ParseAsReference(AMLContext &ctx); static constexpr byte opCode = 0x88; }
 		namespace DefMatch { bool Parse(AMLContext &ctx); static constexpr byte opCode = 0x89; }
 		namespace DefObjectType { bool Parse(AMLContext &ctx); static constexpr byte opCode = 0x8E; }
 		namespace DefLand { bool Parse(AMLContext &ctx); static constexpr byte opCode = 0x90; }
@@ -435,9 +582,15 @@ namespace AML
 		namespace ExtendedAccessField { bool Parse(AMLContext &ctx); }
 		namespace ConnectField { bool Parse(AMLContext &ctx); }
 		namespace DataRefObject { bool Parse(AMLContext &ctx); }
-		namespace PackageElementList { bool Parse(AMLContext &ctx); }
 		namespace PackageElement { bool Parse(AMLContext &ctx); }
 		namespace DefMutex { bool Parse(AMLContext &ctx); static constexpr word extOpCode = 0x015b; }
+		namespace SuperName { bool Parse(AMLContext &ctx); }
+		namespace SimpleName { bool Parse(AMLContext &ctx); }
+		namespace Target { bool Parse(AMLContext &ctx); }
+		namespace DebugObj { bool Parse(AMLContext &ctx); static constexpr word extOpCode = 0x315b; }
+		namespace UserTermObj { bool Parse(AMLContext &ctx); }
+
+		namespace Operand { bool Evaluate(AMLContext &ctx, ull &result); }
 
 		namespace ImmediateConst
 		{
@@ -465,6 +618,7 @@ namespace AML
 			static constexpr byte opCodeBase = 0x60;
 			static constexpr byte opCodeCount = 8;
 			inline bool OpcodeMatches(byte opcode) { return opcode >= opCodeBase && opcode < opCodeBase + opCodeCount; }
+			bool ParseAsSimpleName(AMLContext &ctx);
 			bool Parse(AMLContext &ctx);
 		}
 		namespace ArgObj
@@ -472,8 +626,37 @@ namespace AML
 			static constexpr byte opCodeBase = 0x68;
 			static constexpr byte opCodeCount = 7;
 			inline bool OpcodeMatches(byte opcode) { return opcode >= opCodeBase && opcode < opCodeBase + opCodeCount; }
+			bool ParseAsSimpleName(AMLContext &ctx);
 			bool Parse(AMLContext &ctx);
 		}
+	}
+
+	bool AssignValToVarUtil(AMLContext &ctx, Operation handler, ull val)
+	{
+		AMLDataObject* varptr;
+		AMLAssertPassthrough(handler(ctx), AssignValToVarUtil);
+		AMLAssert(ctx.getReturnByReference(variableType, varptr), unknownError, AssignValToVarUtil);
+		varptr->assignAndDeallocate(integerType, new ull(val));
+
+		return true;
+	}
+	bool AssignToVarUtil(AMLContext &ctx, Operation handler, AMLDataObject obj)
+	{
+		AMLDataObject* varptr;
+		if (handler(ctx) == false)
+		{
+			obj.deallocate();
+			return false;
+		}
+		if (ctx.returnValueObj.type != variableType)
+		{
+			obj.deallocate();
+			return ctx.logError(unknownError);
+		}
+		varptr = (AMLDataObject*)ctx.returnValueObj.valuePtr;
+		varptr->assignAndDeallocate(obj.type, obj.valuePtr);
+
+		return true;
 	}
 
 	namespace Grammar
@@ -484,7 +667,7 @@ namespace AML
 			{
 				while (ctx.length > 0)
 				{
-					AMLAssertPassthrough(TermObj::Parse(ctx));
+					AMLAssertPassthrough(TermObj::Parse(ctx), TermList::Parse);
 				}
 
 				return true;
@@ -543,16 +726,6 @@ namespace AML
 
 			bool Parse(AMLContext &ctx)
 			{
-				// try basic opcodes
-				if (ctx.check(1))
-				{
-					byte opCode = ctx.peek<byte>();
-					for (auto& opcodeHandler : possibleOpCodes)
-					{
-						if (opcodeHandler.opCode == opCode) return opcodeHandler.handler(ctx);
-					}
-				}
-
 				// try extended op codes
 				if (ctx.check(2))
 				{
@@ -560,6 +733,16 @@ namespace AML
 					for (auto& OpCodeHandler : possibleExtOpCodes)
 					{
 						if (OpCodeHandler.opCode == extOpCode) return OpCodeHandler.handler(ctx);
+					}
+				}
+
+				// try basic opcodes
+				if (ctx.check(1))
+				{
+					byte opCode = ctx.peek<byte>();
+					for (auto& OpCodeHandler : possibleOpCodes)
+					{
+						if (OpCodeHandler.opCode == opCode) return OpCodeHandler.handler(ctx);
 					}
 				}
 
@@ -600,37 +783,37 @@ namespace AML
 			bool Parse(AMLContext &ctx)
 			{
 				// NameOp
-				AMLAssert(ctx.assertPop<byte>(opCode), unknownError);
+				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefName::Parse);
 
 				// NameString
 				string *tmpname, name;
-				AMLAssertPassthrough(NameString::Parse(ctx));
-				AMLAssert(ctx.getReturnByReference(stringType, tmpname), unknownError);
+				AMLAssertPassthrough(NameString::Parse(ctx), DefName::Parse);
+				AMLAssert(ctx.getReturnByReference(stringType, tmpname), unknownError, DefName::Parse);
 				name = *tmpname;
 
 				// DataRefObject
-				AMLAssertPassthrough(DataRefObject::Parse(ctx));
+				AMLAssertPassthrough(DataRefObject::Parse(ctx), DefName::Parse);
 
 				switch (ctx.returnValueObj.type)
 				{
 					case integerType:
 					{
 						ull data;
-						AMLAssert(ctx.getReturnByValue(integerType, &data), unknownError);
+						AMLAssert(ctx.getReturnByValue(integerType, &data), unknownError, DefName::Parse);
 						ctx.debug_info() << "Name (" << name << ", " << data << ")\n";
 						break;
 					}
 					case stringType:
 					{
 						string* val;
-						AMLAssert(ctx.getReturnByReference(stringType, val), unknownError);
+						AMLAssert(ctx.getReturnByReference(stringType, val), unknownError, DefName::Parse);
 						ctx.debug_info() << "Name (" << name << ", \"" << *val << "\")\n";
 						break;
 					}
 					case bufferType:
 					{
 						vector<byte> *buffer;
-						AMLAssert(ctx.getReturnByReference(bufferType, buffer), unknownError);
+						AMLAssert(ctx.getReturnByReference(bufferType, buffer), unknownError, DefName::Parse);
 						ctx.debug_info() << "Name (" << name << ") Buffer(" << buffer->getSize() << ") {\n";
 						ctx.indent();
 						for (byte b : *buffer)
@@ -644,7 +827,7 @@ namespace AML
 					case packageType:
 					{
 						PackageObject *package;
-						AMLAssert(ctx.getReturnByReference(packageType, package), unknownError);
+						AMLAssert(ctx.getReturnByReference(packageType, package), unknownError, DefName::Parse);
 						ctx.debug_info() << "Name (" << name << ") Package(" << package->getSize() << ") {\n";
 						ctx.indent();
 						for (auto& elem : *package)
@@ -679,30 +862,30 @@ namespace AML
 				ull pkgLength;
 
 				// consume opcode
-				AMLAssert(ctx.assertPop<byte>(DefScope::opCode), unknownError);
+				AMLAssert(ctx.assertPop<byte>(DefScope::opCode), unknownError, DefName::Parse);
 
 				// enter sub-context
 				ctx.createSubcontext();
 
 				// pkgLength
-				AMLAssertPassthrough(PkgLength::Parse(ctx));
-				AMLAssert(ctx.getReturnByValue(integerType, &pkgLength), unknownError);
+				AMLAssertPassthrough(PkgLength::Parse(ctx), DefName::Parse);
+				AMLAssert(ctx.getReturnByValue(integerType, &pkgLength), unknownError, DefName::Parse);
 				ctx.limitSubcontext(pkgLength);
 
 				// NameString
 				string* name;
-				AMLAssertPassthrough(NameString::Parse(ctx));
-				AMLAssert(ctx.getReturnByReference(stringType, name), unknownError);
+				AMLAssertPassthrough(NameString::Parse(ctx), DefName::Parse);
+				AMLAssert(ctx.getReturnByReference(stringType, name), unknownError, DefName::Parse);
 
 				ACPI::ACPINamedObject* oldScope = ctx.currentScope;
 				ctx.currentScope = ctx.currentScope->get(*name);
-				AMLAssert(ctx.currentScope != nullptr, inexistentNamespaceError);
+				AMLAssert(ctx.currentScope != nullptr, inexistentNamespaceError, DefName::Parse);
 
 				ctx.debug_info() << "Scope (" << *name << ") {\n";
 				ctx.indent();
 
 				// TermList
-				AMLAssertPassthrough(TermList::Parse(ctx));
+				AMLAssertPassthrough(TermList::Parse(ctx), DefName::Parse);
 
 				ctx.outdent();
 				ctx.debug_info() << "}\n";
@@ -788,24 +971,24 @@ namespace AML
 				ull regionLen;
 
 				// DefOpRegion := NameString RegionSpace RegionOffset RegionLen
-				AMLAssert(ctx.assertPop<word>(extOpCode), unknownError);
+				AMLAssert(ctx.assertPop<word>(extOpCode), unknownError, DefOpRegion::Parse);
 
 				// NameString
-				AMLAssertPassthrough(NameString::Parse(ctx));
-				AMLAssert(ctx.getReturnByReference(stringType, tmpname), unknownError);
+				AMLAssertPassthrough(NameString::Parse(ctx), DefOpRegion::Parse);
+				AMLAssert(ctx.getReturnByReference(stringType, tmpname), unknownError, DefOpRegion::Parse);
 				name = *tmpname;
 
 				// RegionSpace
-				AMLAssert(ctx.check(1), endOfStreamError);
+				AMLAssert(ctx.check(1), endOfStreamError, DefOpRegion::Parse);
 				regionSpace = ctx.pop<byte>();
 
 				// RegionOffset => Integer
-				AMLAssertPassthrough(TermArg::Parse(ctx));
-				AMLAssert(ctx.getReturnByValue(integerType, &regionOffset), unknownError);
+				AMLAssertPassthrough(TermArg::Parse(ctx), DefOpRegion::Parse);
+				AMLAssert(ctx.getReturnByValue(integerType, &regionOffset), unknownError, DefOpRegion::Parse);
 
 				// RegionLen => Integer
-				AMLAssertPassthrough(TermArg::Parse(ctx));
-				AMLAssert(ctx.getReturnByValue(integerType, &regionLen), unexpectedExpressionTypeError);
+				AMLAssertPassthrough(TermArg::Parse(ctx), DefOpRegion::Parse);
+				AMLAssert(ctx.getReturnByValue(integerType, &regionLen), unexpectedExpressionTypeError, DefOpRegion::Parse);
 
 				ctx.debug_info() << "OpRegion (" << name << ", " << (uint)regionSpace << ", " << regionOffset << ", " << regionLen << ")\n";
 
@@ -831,23 +1014,23 @@ namespace AML
 			bool Parse(AMLContext &ctx)
 			{
 				// MethodOp
-				AMLAssert(ctx.assertPop<byte>(opCode), unknownError);
+				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefMethod::Parse);
 
 				ctx.createSubcontext();
 
 				// PkgLength
 				ull pkgLength;
-				AMLAssertPassthrough(PkgLength::Parse(ctx));
-				AMLAssert(ctx.getReturnByValue(integerType, &pkgLength), unknownError);
+				AMLAssertPassthrough(PkgLength::Parse(ctx), DefMethod::Parse);
+				AMLAssert(ctx.getReturnByValue(integerType, &pkgLength), unknownError, DefMethod::Parse);
 				ctx.limitSubcontext(pkgLength);
 
 				// NameString
 				string *name;
-				AMLAssertPassthrough(NameString::Parse(ctx));
-				AMLAssert(ctx.getReturnByReference(stringType, name), unknownError);
+				AMLAssertPassthrough(NameString::Parse(ctx), DefMethod::Parse);
+				AMLAssert(ctx.getReturnByReference(stringType, name), unknownError, DefMethod::Parse);
 
 				// MethodFlags
-				AMLAssert(ctx.check(1), endOfStreamError);
+				AMLAssert(ctx.check(1), endOfStreamError, DefMethod::Parse);
 				byte methodFlags = ctx.pop<byte>();
 
 				ACPIMethod* method = new ACPIMethod();
@@ -880,31 +1063,31 @@ namespace AML
 			bool Parse(AMLContext &ctx)
 			{
 				// FieldOp
-				AMLAssert(ctx.assertPop<word>(extOpCode), unknownError);
+				AMLAssert(ctx.assertPop<word>(extOpCode), unknownError, DefField::Parse);
 
 				// enter sub-context
 				ctx.createSubcontext();
 
 				// PkgLength
 				ull pkgLength;
-				AMLAssertPassthrough(PkgLength::Parse(ctx));
-				AMLAssert(ctx.getReturnByValue(integerType, &pkgLength), unknownError);
+				AMLAssertPassthrough(PkgLength::Parse(ctx), DefField::Parse);
+				AMLAssert(ctx.getReturnByValue(integerType, &pkgLength), unknownError, DefField::Parse);
 				ctx.limitSubcontext(pkgLength);
 
 				// NameString
 				string *name;
-				AMLAssertPassthrough(NameString::Parse(ctx));
-				AMLAssert(ctx.getReturnByReference(stringType, name), unknownError);
+				AMLAssertPassthrough(NameString::Parse(ctx), DefField::Parse);
+				AMLAssert(ctx.getReturnByReference(stringType, name), unknownError, DefField::Parse);
 
 				// FieldFlags
-				AMLAssert(ctx.check(1), endOfStreamError);
+				AMLAssert(ctx.check(1), endOfStreamError, DefField::Parse);
 				byte fieldFlags = ctx.pop<byte>();
 
 				ctx.debug_info() << "Field (" << *name << ", " << (uint)fieldFlags << ") {\n";
 				ctx.indent();
 
 				// FieldList
-				AMLAssertPassthrough(FieldList::Parse(ctx));
+				AMLAssertPassthrough(FieldList::Parse(ctx), DefField::Parse);
 
 				ctx.outdent();
 				ctx.debug_info() << "}\n";
@@ -918,20 +1101,20 @@ namespace AML
 			bool Parse(AMLContext &ctx)
 			{
 				// DeviceOp
-				AMLAssert(ctx.assertPop<word>(extOpCode), unknownError);
+				AMLAssert(ctx.assertPop<word>(extOpCode), unknownError, DefDevice::Parse);
 
 				ctx.createSubcontext();
 
 				// PkgLength
 				ull pkgLength;
-				AMLAssertPassthrough(PkgLength::Parse(ctx));
-				AMLAssert(ctx.getReturnByValue(integerType, &pkgLength), unknownError);
+				AMLAssertPassthrough(PkgLength::Parse(ctx), DefDevice::Parse);
+				AMLAssert(ctx.getReturnByValue(integerType, &pkgLength), unknownError, DefDevice::Parse);
 				ctx.limitSubcontext(pkgLength);
 
 				// NameString
 				string *name;
-				AMLAssertPassthrough(NameString::Parse(ctx));
-				AMLAssert(ctx.getReturnByReference(stringType, name), unknownError);
+				AMLAssertPassthrough(NameString::Parse(ctx), DefDevice::Parse);
+				AMLAssert(ctx.getReturnByReference(stringType, name), unknownError, DefDevice::Parse);
 
 				ACPIDevice* device = new ACPIDevice();
 				if (!ctx.currentScope->add(*name, device))
@@ -946,7 +1129,7 @@ namespace AML
 				ctx.indent();
 
 				// TermList
-				AMLAssertPassthrough(TermList::Parse(ctx));
+				AMLAssertPassthrough(TermList::Parse(ctx), DefDevice::Parse);
 
 				ctx.outdent();
 				ctx.debug_info() << "}\n";
@@ -963,13 +1146,13 @@ namespace AML
 			{
 				// deprecated, parse as little data as possible and skip object
 				// ProcessorOp
-				AMLAssert(ctx.assertPop<word>(extOpCode), unknownError);
+				AMLAssert(ctx.assertPop<word>(extOpCode), unknownError, DefProcessor::Parse);
 
 				// PkgLength
 				ull pkgLength;
 				ctx.createSubcontext();
-				AMLAssertPassthrough(PkgLength::Parse(ctx));
-				AMLAssert(ctx.getReturnByValue(integerType, &pkgLength), unknownError);
+				AMLAssertPassthrough(PkgLength::Parse(ctx), DefProcessor::Parse);
+				AMLAssert(ctx.getReturnByValue(integerType, &pkgLength), unknownError, DefProcessor::Parse);
 				ctx.limitSubcontext(pkgLength);
 
 				ctx.debug_info() << "Processor {\n";
@@ -991,11 +1174,11 @@ namespace AML
 			bool Parse(AMLContext &ctx)
 			{
 				uint value = 0;
-				AMLAssert(ctx.check(1), endOfStreamError);
+				AMLAssert(ctx.check(1), endOfStreamError, PkgLength::Parse);
 				byte leadByte = ctx.pop<byte>();
 				uint additionalBytes = leadByte >> 6;
 
-				AMLAssert(ctx.check(additionalBytes), endOfStreamError);
+				AMLAssert(ctx.check(additionalBytes), endOfStreamError, PkgLength::Parse);
 				
 				if (additionalBytes)
 				{
@@ -1031,8 +1214,8 @@ namespace AML
 
 				for (uint i = 0; i < segCoung; i++)
 				{
-					AMLAssertPassthrough(NameSeg::Parse(ctx));
-					AMLAssert(ctx.getReturnByReference(stringType, nameSegVal), unknownError);
+					AMLAssertPassthrough(NameSeg::Parse(ctx), NameString::AppendNameSegs);
+					AMLAssert(ctx.getReturnByReference(stringType, nameSegVal), unknownError, NameString::AppendNameSegs);
 					result.append(*nameSegVal);
 				}
 				return true;
@@ -1054,14 +1237,14 @@ namespace AML
 				if (ctx.assertPop<byte>(dualNamePrefix))
 				{
 					// DualNamePath := DualNamePrefix NameSeg NameSeg
-					AMLAssertPassthrough(AppendNameSegs(ctx, retVal, 2));
+					AMLAssertPassthrough(AppendNameSegs(ctx, retVal, 2), NameString::Parse);
 				}
 				else if (ctx.assertPop<byte>(multiNamePrefix))
 				{
 					// MultiNamePath := MultiNamePrefix SegCount NameSeg(SegCount)
-					AMLAssert(ctx.check(1), endOfStreamError);
+					AMLAssert(ctx.check(1), endOfStreamError, NameString::Parse);
 					byte segCount = ctx.pop<byte>();
-					AMLAssertPassthrough(AppendNameSegs(ctx, retVal, segCount));
+					AMLAssertPassthrough(AppendNameSegs(ctx, retVal, segCount), NameString::Parse);
 				}
 				else if (ctx.assertPop<byte>(nullChar))
 				{
@@ -1071,7 +1254,7 @@ namespace AML
 				else
 				{
 					// NameSeg
-					AMLAssertPassthrough(AppendNameSegs(ctx, retVal, 1));
+					AMLAssertPassthrough(AppendNameSegs(ctx, retVal, 1), NameString::Parse);
 				}
 
 				return ctx.returnValue(stringType, new string(retVal));
@@ -1084,12 +1267,12 @@ namespace AML
 
 			bool Parse(AMLContext &ctx)
 			{
-				AMLAssert(ctx.check(4), endOfStreamError);
+				AMLAssert(ctx.check(4), endOfStreamError, NameSeg::Parse);
 
-				AMLAssert(IsLeadNameChar(ctx.byteStream[0]), invalidCharacterInNameSegError);
+				AMLAssert(IsLeadNameChar(ctx.byteStream[0]), invalidCharacterInNameSegError, NameSeg::Parse);
 				for (uint i = 1; i < 4; i++)
 				{
-					AMLAssert(IsNameChar(ctx.byteStream[i]), invalidCharacterInNameSegError);
+					AMLAssert(IsNameChar(ctx.byteStream[i]), invalidCharacterInNameSegError, NameSeg::Parse);
 				}
 
 				string *retVal = new string((char*)ctx.byteStream, 4);
@@ -1099,16 +1282,46 @@ namespace AML
 		}
 		namespace LocalObj
 		{
+			bool ParseAsSimpleName(AMLContext &ctx)
+			{
+				AMLAssert(ctx.check(1), unknownError, LocalObj::ParseAsSimpleName);
+				AMLAssert(ctx.runtime == true, nonRuntimeLocalUsageError, LocalObj::ParseAsSimpleName);
+
+				byte opCode = ctx.pop<byte>();
+				byte localIdx = opCode - opCodeBase;
+				AMLAssert(localIdx < ctx.locals.getSize(), unknownError, LocalObj::ParseAsSimpleName);
+
+				return ctx.returnValue(variableType, &ctx.locals[localIdx]);
+			}
 			bool Parse(AMLContext &ctx)
 			{
-				return ctx.logError(unhandledElementError);
+				AMLAssertPassthrough(ParseAsSimpleName(ctx), LocalObj::Parse);
+				AMLDataObject* obj;
+				AMLAssert(ctx.getReturnByReference(variableType, obj), unknownError, LocalObj::Parse);
+				AMLDataObject clonedObj = obj->clone();
+				return ctx.returnValue(clonedObj.type, clonedObj.valuePtr);
 			}
 		}
 		namespace ArgObj
 		{
+			bool ParseAsSimpleName(AMLContext &ctx)
+			{
+				AMLAssert(ctx.check(1), unknownError, ArgObj::ParseAsSimpleName);
+				AMLAssert(ctx.runtime == true, nonRuntimeArgUsageError, ArgObj::ParseAsSimpleName);
+
+				byte opCode = ctx.pop<byte>();
+				byte argIdx = opCode - opCodeBase;
+				AMLAssert(argIdx < ctx.args.getSize(), argOutOfRangeError, ArgObj::ParseAsSimpleName);
+
+				return ctx.returnValue(variableType, &ctx.args[argIdx]);
+			}
 			bool Parse(AMLContext &ctx)
 			{
-				return ctx.logError(unhandledElementError);
+				AMLAssertPassthrough(ParseAsSimpleName(ctx), ArgObj::Parse);
+				AMLDataObject* obj;
+				AMLAssert(ctx.getReturnByReference(variableType, obj), unknownError, ArgObj::Parse);
+				AMLDataObject clonedObj = obj->clone();
+				return ctx.returnValue(clonedObj.type, clonedObj.valuePtr);
 			}
 		}
 		namespace ExpressionOpcode
@@ -1170,6 +1383,26 @@ namespace AML
 			};
 			bool Parse(AMLContext &ctx)
 			{
+				// try extended op codes
+				if (ctx.check(2))
+				{
+					word extOpCode = ctx.peek<word>();
+					for (auto& OpCodeHandler : possibleExtOpCodes)
+					{
+						if (OpCodeHandler.opCode == extOpCode) return OpCodeHandler.handler(ctx);
+					}
+				}
+
+				// try basic opcodes
+				if (ctx.check(1))
+				{
+					byte opCode = ctx.peek<byte>();
+					for (auto& opcodeHandler : possibleOpCodes)
+					{
+						if (opcodeHandler.opCode == opCode) return opcodeHandler.handler(ctx);
+					}
+				}
+
 				// no opcode match => MethodInvocation
 				return ctx.logError(unhandledElementError);
 			}
@@ -1268,7 +1501,85 @@ namespace AML
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				return ctx.logError(unhandledElementError);
+				// IfOp
+				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefIfElse::Parse);
+
+				// PkgLength
+				ull pkgLength;
+				ctx.createSubcontext();
+				AMLAssertPassthrough(PkgLength::Parse(ctx), DefIfElse::Parse);
+				AMLAssert(ctx.getReturnByValue(integerType, &pkgLength), unknownError, DefIfElse::Parse);
+				ctx.limitSubcontext(pkgLength);
+
+				// Predicate
+				ull predicate;
+				Operand::Evaluate(ctx, predicate);
+
+				if (predicate != 0)
+				{
+					// TermList
+					AMLAssertPassthrough(TermList::Parse(ctx), DefIfElse::Parse);
+
+					ctx.popSubContext();
+
+					// DefElse
+					AMLAssertPassthrough(DefElse::Skip(ctx), DefIfElse::Parse);
+				}
+				else
+				{
+					// TermList
+					ctx.advanceStream(ctx.length);
+
+					ctx.popSubContext();
+
+					// DefElse
+					AMLAssertPassthrough(DefElse::Parse(ctx), DefIfElse::Parse);
+				}
+
+				return true;
+			}
+		}
+		namespace DefElse
+		{
+			bool Parse(AMLContext &ctx)
+			{
+				// Nothing | <ElseOp PkgLength TermList>
+				if (ctx.assertPop<byte>(opCode))
+				{
+					// PkgLength
+					ull pkgLength;
+					ctx.createSubcontext();
+					AMLAssertPassthrough(PkgLength::Parse(ctx), DefElse::Parse);
+					AMLAssert(ctx.getReturnByValue(integerType, &pkgLength), unknownError, DefElse::Parse);
+					ctx.limitSubcontext(pkgLength);
+
+					// TermList
+					AMLAssertPassthrough(TermList::Parse(ctx), DefElse::Parse);
+
+					ctx.popSubContext();
+				}
+
+				return true;
+			}
+			bool Skip(AMLContext &ctx)
+			{
+				// Nothing | <ElseOp PkgLength TermList>
+				if (ctx.assertPop<byte>(opCode))
+				{
+					// PkgLength
+					ull pkgLength;
+					ctx.createSubcontext();
+					AMLAssertPassthrough(PkgLength::Parse(ctx), DefElse::Parse);
+					AMLAssert(ctx.getReturnByValue(integerType, &pkgLength), unknownError, DefElse::Parse);
+					ctx.limitSubcontext(pkgLength);
+
+					// TermList
+					ctx.advanceStream(ctx.length);
+
+					ctx.popSubContext();
+				}
+
+				return true;
 			}
 		}
 		namespace DefNoop
@@ -1303,7 +1614,13 @@ namespace AML
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				return ctx.logError(unhandledElementError);
+				// ReturnOp
+				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefReturn::Parse);
+
+				// ArgObject
+				AMLAssertPassthrough(TermArg::Parse(ctx), DefReturn::Parse);
+
+				return ctx.logError(returnFromFunctionError);
 			}
 		}
 		namespace DefSignal
@@ -1331,7 +1648,38 @@ namespace AML
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				return ctx.logError(unhandledElementError);
+				// WhileOp
+				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefWhile::Parse);
+
+				// PkgLength
+				ull pkgLength;
+				ctx.createSubcontext();
+				AMLAssertPassthrough(PkgLength::Parse(ctx), DefWhile::Parse);
+				AMLAssert(ctx.getReturnByValue(integerType, &pkgLength), unknownError, DefWhile::Parse);
+				ctx.limitSubcontext(pkgLength);
+
+				const byte* loopPosition = ctx.byteStream;
+				while (true)
+				{
+					// Predicate
+					ull predicate;
+					AMLAssertPassthrough(TermArg::Parse(ctx), DefWhile::Parse);
+					AMLAssert(ctx.getReturnByValue(integerType, &predicate), unexpectedExpressionTypeError, DefWhile::Parse);
+					if (predicate == 0)
+					{
+						ctx.advanceStream(ctx.length);
+						break;
+					}
+
+					// TermList
+					AMLLoopAssertPassthrough(TermList::Parse(ctx), DefWhile::Parse);
+
+					// loop back to evaluating the predicate
+					ctx.revertStream(ctx.byteStream - loopPosition);
+				}
+
+				ctx.popSubContext();
+				return true;
 			}
 		}
 		namespace DefBuffer
@@ -1339,22 +1687,22 @@ namespace AML
 			bool Parse(AMLContext &ctx)
 			{
 				// BufferOp
-				AMLAssert(ctx.assertPop<byte>(opCode), unknownError);
+				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefBuffer::Parse);
 
 				// PkgLength
 				ull pkgLength;
 				ctx.createSubcontext();
-				AMLAssertPassthrough(PkgLength::Parse(ctx));
-				AMLAssert(ctx.getReturnByValue(integerType, &pkgLength), unknownError);
+				AMLAssertPassthrough(PkgLength::Parse(ctx), DefBuffer::Parse);
+				AMLAssert(ctx.getReturnByValue(integerType, &pkgLength), unknownError, DefBuffer::Parse);
 				ctx.limitSubcontext(pkgLength);
 
 				// BufferSize
 				ull bufferSize;
-				AMLAssertPassthrough(TermArg::Parse(ctx))
-				AMLAssert(ctx.getReturnByValue(integerType, &bufferSize), unexpectedExpressionTypeError);
+				AMLAssertPassthrough(TermArg::Parse(ctx), DefBuffer::Parse);
+				AMLAssert(ctx.getReturnByValue(integerType, &bufferSize), unexpectedExpressionTypeError, DefBuffer::Parse);
 
 				// ByteList
-				AMLAssert(ctx.length == bufferSize, inconsistentBufferParametersError);
+				AMLAssert(ctx.length == bufferSize, inconsistentBufferParametersError, DefBuffer::Parse);
 				vector<byte> *buffer = new vector<byte>(ctx.byteStream, bufferSize);
 				ctx.advanceStream(bufferSize);
 
@@ -1367,27 +1715,43 @@ namespace AML
 			bool Parse(AMLContext &ctx)
 			{
 				// PackageOp
-				AMLAssert(ctx.assertPop<byte>(opCode), unknownError);
+				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefPackage::Parse);
 
 				// PkgLength
 				ull pkgLength;
 				ctx.createSubcontext();
-				AMLAssertPassthrough(PkgLength::Parse(ctx));
-				AMLAssert(ctx.getReturnByValue(integerType, &pkgLength), unknownError);
+				AMLAssertPassthrough(PkgLength::Parse(ctx), DefPackage::Parse);
+				AMLAssert(ctx.getReturnByValue(integerType, &pkgLength), unknownError, DefPackage::Parse);
 				ctx.limitSubcontext(pkgLength);
 
 				// NumElements
 				byte numElements;
-				AMLAssert(ctx.check(1), endOfStreamError);
+				AMLAssert(ctx.check(1), endOfStreamError, DefPackage::Parse);
 				numElements = ctx.pop<byte>();
 
+				PackageObject *package = new PackageObject();
+				package->resize(numElements);
+
 				// PackageElementList
-				AMLAssertPassthrough(PackageElementList::Parse(ctx));
-				PackageObject *package;
-				AMLAssert(ctx.getReturnByReference(packageType, package), unknownError);
-				AMLAssert(package->getSize() == numElements && ctx.length == 0, inconsistentPackageParametersError);
+				ull idx = 0;
+				while (ctx.length > 0)
+				{
+					if (PackageElement::Parse(ctx) == false)
+					{
+						delete package;
+						return false;
+					}
+					if (idx >= numElements)
+					{
+						delete package;
+						return ctx.logError(tooManyPackageInitializersError);
+					}
+					package->at(idx++).assignAndDeallocate(ctx.returnValueObj.type, ctx.returnValueObj.valuePtr);
+					ctx.takeReturnValueOwnership();
+				}
+
 				ctx.popSubContext();
-				return true; // return the PackageObject
+				return ctx.returnValue(packageType, package);
 			}
 		}
 		namespace DefVarPackage
@@ -1401,21 +1765,39 @@ namespace AML
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				return ctx.logError(unhandledElementError);
-			}
-		}
-		namespace DefRefOf
-		{
-			bool Parse(AMLContext &ctx)
-			{
-				return ctx.logError(unhandledElementError);
+				// StoreOp
+				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefStore::Parse);
+
+				// TermArg
+				AMLDataObject obj;
+				AMLAssertPassthrough(TermArg::Parse(ctx), DefStore::Parse);
+				obj = ctx.returnValueObj;
+				ctx.takeReturnValueOwnership();
+
+				// SuperName
+				return AssignToVarUtil(ctx, SuperName::Parse, obj);
 			}
 		}
 		namespace DefAdd
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				return ctx.logError(unhandledElementError);
+				// AddOp
+				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefAdd::Parse);
+
+				ull op1, op2;
+
+				// Operand
+				AMLAssertPassthrough(Operand::Evaluate(ctx, op1), DefAdd::Parse);
+
+				// Operand
+				AMLAssertPassthrough(Operand::Evaluate(ctx, op2), DefAdd::Parse);
+
+				// Target
+				AMLAssertPassthrough(Target::Parse(ctx), DefAdd::Parse);
+				AMLAssert(ctx.returnValueObj.type == voidType, unknownError, DefAdd::Parse);
+
+				return ctx.returnValue(integerType, new ull(op1 + op2));
 			}
 		}
 		namespace DefConcat
@@ -1429,34 +1811,98 @@ namespace AML
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				return ctx.logError(unhandledElementError);
+				// SubtractOp
+				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefSubtract::Parse);
+
+				ull op1, op2;
+
+				// Operand
+				AMLAssertPassthrough(Operand::Evaluate(ctx, op1), DefSubtract::Parse);
+
+				// Operand
+				AMLAssertPassthrough(Operand::Evaluate(ctx, op2), DefSubtract::Parse);
+
+				// Target
+				AMLAssertPassthrough(Target::Parse(ctx), DefSubtract::Parse);
+				AMLAssert(ctx.returnValueObj.type == voidType, unknownError, DefSubtract::Parse);
+
+				return ctx.returnValue(integerType, new ull(op1 - op2));
 			}
 		}
 		namespace DefIncrement
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				return ctx.logError(unhandledElementError);
+				// IncrementOp
+				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefIncrement::Parse);
+
+				// SuperName
+				AMLDataObject* var;
+				AMLAssertPassthrough(SuperName::Parse(ctx), DefIncrement::Parse);
+				AMLAssert(ctx.getReturnByReference(variableType, var), unexpectedExpressionTypeError, DefIncrement::Parse);
+				AMLAssert(var->type == integerType, unexpectedExpressionTypeError, DefIncrement::Parse);
+
+				var->deref<ull>()++;
+				return true;
 			}
 		}
 		namespace DefDecrement
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				return ctx.logError(unhandledElementError);
+				// DecrementOp
+				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefDecrement::Parse);
+
+				// SuperName
+				AMLDataObject* var;
+				AMLAssertPassthrough(SuperName::Parse(ctx), DefDecrement::Parse);
+				AMLAssert(ctx.getReturnByReference(variableType, var), unexpectedExpressionTypeError, DefDecrement::Parse);
+				AMLAssert(var->type == integerType, unexpectedExpressionTypeError, DefDecrement::Parse);
+
+				var->deref<ull>()--;
+				return true;
 			}
 		}
 		namespace DefMultiply
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				return ctx.logError(unhandledElementError);
+				// MultiplyOp
+				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefMultiply::Parse);
+
+				ull op1, op2;
+
+				// Operand
+				AMLAssertPassthrough(Operand::Evaluate(ctx, op1), DefMultiply::Parse);
+
+				// Operand
+				AMLAssertPassthrough(Operand::Evaluate(ctx, op2), DefMultiply::Parse);
+
+				// Target
+				AMLAssertPassthrough(Target::Parse(ctx), DefMultiply::Parse);
+				AMLAssert(ctx.returnValueObj.type == voidType, unknownError, DefMultiply::Parse);
+
+				return ctx.returnValue(integerType, new ull(op1 * op2));
 			}
 		}
 		namespace DefDivide
 		{
 			bool Parse(AMLContext &ctx)
 			{
+				// DivideOp
+				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefDivide::Parse);
+
+				ull op1, op2;
+
+				// Dividend
+				AMLAssertPassthrough(Operand::Evaluate(ctx, op1), DefDivide::Parse);
+
+				// Divisor
+				AMLAssertPassthrough(Operand::Evaluate(ctx, op2), DefDivide::Parse);
+
+				// Remainder
+				// Quotient
+
 				return ctx.logError(unhandledElementError);
 			}
 		}
@@ -1464,56 +1910,173 @@ namespace AML
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				return ctx.logError(unhandledElementError);
+				// ShiftLeftOp
+				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefShiftLeft::Parse);
+
+				ull op, shiftCount;
+
+				// Operand
+				AMLAssertPassthrough(Operand::Evaluate(ctx, op), DefShiftLeft::Parse);
+
+				// ShiftCount
+				AMLAssertPassthrough(Operand::Evaluate(ctx, shiftCount), DefShiftLeft::Parse);
+
+				// Target
+				AMLAssertPassthrough(Target::Parse(ctx), DefShiftLeft::Parse);
+				AMLAssert(ctx.returnValueObj.type == voidType, unknownError, DefShiftLeft::Parse);
+
+				return ctx.returnValue(integerType, new ull(op << shiftCount));
 			}
 		}
 		namespace DefShiftRight
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				return ctx.logError(unhandledElementError);
+				// ShiftRightOp
+				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefShiftRight::Parse);
+
+				ull op, shiftCount;
+
+				// Operand
+				AMLAssertPassthrough(Operand::Evaluate(ctx, op), DefShiftRight::Parse);
+
+				// ShiftCount
+				AMLAssertPassthrough(Operand::Evaluate(ctx, shiftCount), DefShiftRight::Parse);
+
+				// Target
+				AMLAssertPassthrough(Target::Parse(ctx), DefShiftRight::Parse);
+				AMLAssert(ctx.returnValueObj.type == voidType, unknownError, DefShiftRight::Parse);
+
+				return ctx.returnValue(integerType, new ull(op >> shiftCount));
 			}
 		}
 		namespace DefAnd
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				return ctx.logError(unhandledElementError);
+				// AndOp
+				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefAnd::Parse);
+
+				ull op1, op2;
+
+				// Operand
+				AMLAssertPassthrough(Operand::Evaluate(ctx, op1), DefAnd::Parse);
+
+				// Operand
+				AMLAssertPassthrough(Operand::Evaluate(ctx, op2), DefAnd::Parse);
+
+				// Target
+				AMLAssertPassthrough(Target::Parse(ctx), DefAnd::Parse);
+				AMLAssert(ctx.returnValueObj.type == voidType, unknownError, DefAnd::Parse);
+
+				return ctx.returnValue(integerType, new ull(op1 & op2));
 			}
 		}
 		namespace DefNand
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				return ctx.logError(unhandledElementError);
+				// NandOp
+				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefNand::Parse);
+
+				ull op1, op2;
+
+				// Operand
+				AMLAssertPassthrough(Operand::Evaluate(ctx, op1), DefNand::Parse);
+
+				// Operand
+				AMLAssertPassthrough(Operand::Evaluate(ctx, op2), DefNand::Parse);
+
+				// Target
+				AMLAssertPassthrough(Target::Parse(ctx), DefNand::Parse);
+				AMLAssert(ctx.returnValueObj.type == voidType, unknownError, DefNand::Parse);
+
+				return ctx.returnValue(integerType, new ull(~(op1 & op2)));
 			}
 		}
 		namespace DefOr
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				return ctx.logError(unhandledElementError);
+				// OrOp
+				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefOr::Parse);
+
+				ull op1, op2;
+
+				// Operand
+				AMLAssertPassthrough(Operand::Evaluate(ctx, op1), DefOr::Parse);
+
+				// Operand
+				AMLAssertPassthrough(Operand::Evaluate(ctx, op2), DefOr::Parse);
+
+				// Target
+				AMLAssertPassthrough(Target::Parse(ctx), DefOr::Parse);
+				AMLAssert(ctx.returnValueObj.type == voidType, unknownError, DefOr::Parse);
+
+				return ctx.returnValue(integerType, new ull(op1 | op2));
 			}
 		}
 		namespace DefNor
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				return ctx.logError(unhandledElementError);
+				// NorOp
+				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefNor::Parse);
+
+				ull op1, op2;
+
+				// Operand
+				AMLAssertPassthrough(Operand::Evaluate(ctx, op1), DefNor::Parse);
+
+				// Operand
+				AMLAssertPassthrough(Operand::Evaluate(ctx, op2), DefNor::Parse);
+
+				// Target
+				AMLAssertPassthrough(Target::Parse(ctx), DefNor::Parse);
+				AMLAssert(ctx.returnValueObj.type == voidType, unknownError, DefNor::Parse);
+
+				return ctx.returnValue(integerType, new ull(~(op1 | op2)));
 			}
 		}
 		namespace DefXor
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				return ctx.logError(unhandledElementError);
+				// XorOp
+				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefXor::Parse);
+
+				ull op1, op2;
+
+				// Operand
+				AMLAssertPassthrough(Operand::Evaluate(ctx, op1), DefXor::Parse);
+
+				// Operand
+				AMLAssertPassthrough(Operand::Evaluate(ctx, op2), DefXor::Parse);
+
+				// Target
+				AMLAssertPassthrough(Target::Parse(ctx), DefXor::Parse);
+				AMLAssert(ctx.returnValueObj.type == voidType, unknownError, DefXor::Parse);
+
+				return ctx.returnValue(integerType, new ull(op1 ^ op2));
 			}
 		}
 		namespace DefNot
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				return ctx.logError(unhandledElementError);
+				// NotOp
+				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefNot::Parse);
+
+				ull op;
+
+				// Operand
+				AMLAssertPassthrough(Operand::Evaluate(ctx, op), DefXor::Parse);
+
+				// Target
+				AMLAssertPassthrough(Target::Parse(ctx), DefNot::Parse);
+				AMLAssert(ctx.returnValueObj.type == voidType, unknownError, DefNot::Parse);
+
+				return ctx.returnValue(integerType, new ull(~op));
 			}
 		}
 		namespace DefFindSetLeftBit
@@ -1524,13 +2087,6 @@ namespace AML
 			}
 		}
 		namespace DefFindSetRightBit
-		{
-			bool Parse(AMLContext &ctx)
-			{
-				return ctx.logError(unhandledElementError);
-			}
-		}
-		namespace DefDerefOf
 		{
 			bool Parse(AMLContext &ctx)
 			{
@@ -1558,13 +2114,6 @@ namespace AML
 				return ctx.logError(unhandledElementError);
 			}
 		}
-		namespace DefIndex
-		{
-			bool Parse(AMLContext &ctx)
-			{
-				return ctx.logError(unhandledElementError);
-			}
-		}
 		namespace DefMatch
 		{
 			bool Parse(AMLContext &ctx)
@@ -1583,42 +2132,105 @@ namespace AML
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				return ctx.logError(unhandledElementError);
+				// LandOp
+				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefLand::Parse);
+
+				ull op1, op2;
+
+				// Operand
+				AMLAssertPassthrough(Operand::Evaluate(ctx, op1), DefLand::Parse);
+
+				// Operand
+				AMLAssertPassthrough(Operand::Evaluate(ctx, op2), DefLand::Parse);
+
+				return ctx.returnValue(integerType, new ull((op1 != 0 && op2 != 0) ? 1 : 0));
 			}
 		}
 		namespace DefLor
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				return ctx.logError(unhandledElementError);
+				// LorOp
+				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefLor::Parse);
+
+				ull op1, op2;
+
+				// Operand
+				AMLAssertPassthrough(Operand::Evaluate(ctx, op1), DefLor::Parse);
+
+				// Operand
+				AMLAssertPassthrough(Operand::Evaluate(ctx, op2), DefLor::Parse);
+
+				return ctx.returnValue(integerType, new ull((op1 != 0 || op2 != 0) ? 1 : 0));
 			}
 		}
 		namespace DefLnot
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				return ctx.logError(unhandledElementError);
+				// LnotOp
+				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefLnot::Parse);
+
+				ull op;
+
+				// Operand
+				AMLAssertPassthrough(Operand::Evaluate(ctx, op), DefLnot::Parse);
+
+				return ctx.returnValue(integerType, new ull(op == 0 ? 1 : 0));
 			}
 		}
 		namespace DefLequal
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				return ctx.logError(unhandledElementError);
+				// LequalOp
+				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefLequal::Parse);
+
+				ull op1, op2;
+
+				// Operand
+				AMLAssertPassthrough(Operand::Evaluate(ctx, op1), DefLequal::Parse);
+
+				// Operand
+				AMLAssertPassthrough(Operand::Evaluate(ctx, op2), DefLequal::Parse);
+
+				return ctx.returnValue(integerType, new ull(op1 == op2 ? 1 : 0));
 			}
 		}
 		namespace DefLgreater
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				return ctx.logError(unhandledElementError);
+				// LgreaterOp
+				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefLgreater::Parse);
+
+				ull op1, op2;
+
+				// Operand
+				AMLAssertPassthrough(Operand::Evaluate(ctx, op1), DefLgreater::Parse);
+
+				// Operand
+				AMLAssertPassthrough(Operand::Evaluate(ctx, op2), DefLgreater::Parse);
+
+				return ctx.returnValue(integerType, new ull(op1 > op2 ? 1 : 0));
 			}
 		}
 		namespace DefLless
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				return ctx.logError(unhandledElementError);
+				// LlessOp
+				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefLless::Parse);
+
+				ull op1, op2;
+
+				// Operand
+				AMLAssertPassthrough(Operand::Evaluate(ctx, op1), DefLless::Parse);
+
+				// Operand
+				AMLAssertPassthrough(Operand::Evaluate(ctx, op2), DefLless::Parse);
+
+				return ctx.returnValue(integerType, new ull(op1 < op2 ? 1 : 0));
 			}
 		}
 		namespace DefToBuffer
@@ -1725,22 +2337,22 @@ namespace AML
 			{
 				if (ctx.assertPop<byte>(bytePrefix))
 				{
-					AMLAssert(ctx.check(1), endOfStreamError);
+					AMLAssert(ctx.check(1), endOfStreamError, ImmediateConst::Parse);
 					return ctx.returnValue(integerType, new ull(ctx.pop<byte>()));
 				}
 				if (ctx.assertPop<byte>(wordPrefix))
 				{
-					AMLAssert(ctx.check(2), endOfStreamError);
+					AMLAssert(ctx.check(2), endOfStreamError, ImmediateConst::Parse);
 					return ctx.returnValue(integerType, new ull(ctx.pop<word>()));
 				}
 				if (ctx.assertPop<byte>(dwordPrefix))
 				{
-					AMLAssert(ctx.check(4), endOfStreamError);
+					AMLAssert(ctx.check(4), endOfStreamError, ImmediateConst::Parse);
 					return ctx.returnValue(integerType, new ull(ctx.pop<dword>()));
 				}
 				if (ctx.assertPop<byte>(qwordPrefix))
 				{
-					AMLAssert(ctx.check(8), endOfStreamError);
+					AMLAssert(ctx.check(8), endOfStreamError, ImmediateConst::Parse);
 					return ctx.returnValue(integerType, new ull(ctx.pop<qword>()));
 				}
 
@@ -1753,7 +2365,7 @@ namespace AML
 			bool Parse(AMLContext &ctx)
 			{
 				// StringPrefix
-				AMLAssert(ctx.assertPop<byte>(opCode), unknownError);
+				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, StringObj::Parse);
 
 				// AsciiCharList
 				string *str = new string;
@@ -1764,7 +2376,7 @@ namespace AML
 
 				// NullChar
 				ctx.returnValue(stringType, str);
-				AMLAssert(ctx.assertPop(NameString::nullChar), endOfStreamError);
+				AMLAssert(ctx.assertPop(NameString::nullChar), endOfStreamError, StringObj::Parse);
 				
 				return true;
 			}
@@ -1806,7 +2418,7 @@ namespace AML
 			{
 				while (ctx.length > 0)
 				{
-					AMLAssertPassthrough(FieldElement::Parse(ctx));
+					AMLAssertPassthrough(FieldElement::Parse(ctx), FieldList::Parse);
 				}
 
 				return true;
@@ -1839,14 +2451,14 @@ namespace AML
 			{
 				// NameSeg
 				string* name;
-				AMLAssertPassthrough(NameSeg::Parse(ctx));
-				AMLAssert(ctx.getReturnByReference(stringType, name), unknownError);
+				AMLAssertPassthrough(NameSeg::Parse(ctx), NamedField::Parse);
+				AMLAssert(ctx.getReturnByReference(stringType, name), unknownError, NamedField::Parse);
 				ctx.debug_info() << "NamedField (" << *name << ", ";
 
 				// PkgLength
 				ull pkgLength;
-				AMLAssertPassthrough(PkgLength::Parse(ctx));
-				AMLAssert(ctx.getReturnByValue(integerType, &pkgLength), unknownError);
+				AMLAssertPassthrough(PkgLength::Parse(ctx), NamedField::Parse);
+				AMLAssert(ctx.getReturnByValue(integerType, &pkgLength), unknownError, NamedField::Parse);
 				ctx.debug_info(true) << pkgLength << ")\n";
 
 				return true;
@@ -1857,12 +2469,12 @@ namespace AML
 			bool Parse(AMLContext &ctx)
 			{
 				// 0x00
-				AMLAssert(ctx.assertPop<byte>(0x00), unknownError);
+				AMLAssert(ctx.assertPop<byte>(0x00), unknownError, ReservedField::Parse);
 
 				// PkgLength
 				ull pkgLength;
-				AMLAssertPassthrough(PkgLength::Parse(ctx));
-				AMLAssert(ctx.getReturnByValue(integerType, &pkgLength), unknownError);
+				AMLAssertPassthrough(PkgLength::Parse(ctx), ReservedField::Parse);
+				AMLAssert(ctx.getReturnByValue(integerType, &pkgLength), unknownError, ReservedField::Parse);
 
 				ctx.debug_info() << "ReservedField (" << pkgLength << ")\n";
 
@@ -1903,26 +2515,6 @@ namespace AML
 				return ctx.logError(unhandledElementError);
 			}
 		}
-		namespace PackageElementList
-		{
-			bool Parse(AMLContext &ctx)
-			{
-				PackageObject *package = new PackageObject();
-
-				while (ctx.length > 0)
-				{
-					if (PackageElement::Parse(ctx) == false)
-					{
-						delete package;
-						return false;
-					}
-					package->push_back(AMLDataObject(ctx.returnValueObj));
-					ctx.takeReturnValueOwnership();
-				}
-
-				return ctx.returnValue(packageType, package);
-			}
-		}
 		namespace PackageElement
 		{
 			bool Parse(AMLContext &ctx)
@@ -1934,14 +2526,14 @@ namespace AML
 
 				if (isDataObject)
 				{
-					AMLAssertPassthrough(DataObject::Parse(ctx));
+					AMLAssertPassthrough(DataObject::Parse(ctx), PackageElement::Parse);
 				}
 				else
 				{
-					AMLAssertPassthrough(NameString::Parse(ctx));
+					AMLAssertPassthrough(NameString::Parse(ctx), PackageElement::Parse);
 				}
 
-				AMLAssert(ctx.returnValueObj.type == integerType || ctx.returnValueObj.type == stringType, unexpectedExpressionTypeError);
+				AMLAssert(ctx.returnValueObj.type == integerType || ctx.returnValueObj.type == stringType, unexpectedExpressionTypeError, PackageElement::Parse);
 				return true; // simply leave the return value unchanged
 			}
 		}
@@ -1950,19 +2542,169 @@ namespace AML
 			bool Parse(AMLContext &ctx)
 			{
 				// MutexOp
-				AMLAssert(ctx.assertPop<word>(extOpCode), unknownError);
+				AMLAssert(ctx.assertPop<word>(extOpCode), unknownError, DefMutex::Parse);
 
 				// NameString
 				string* name;
-				AMLAssertPassthrough(NameString::Parse(ctx));
-				AMLAssert(ctx.getReturnByReference(stringType, name), unknownError);
+				AMLAssertPassthrough(NameString::Parse(ctx), DefMutex::Parse);
+				AMLAssert(ctx.getReturnByReference(stringType, name), unknownError, DefMutex::Parse);
 
 				// SyncFlags
 				byte syncFlags;
-				AMLAssert(ctx.check(1), endOfStreamError);
+				AMLAssert(ctx.check(1), endOfStreamError, DefMutex::Parse);
 				syncFlags = ctx.pop<byte>();
 
 				ctx.debug_info() << "Mutex(" << *name << ", " << syncFlags << "),\n";
+				return true;
+			}
+		}
+		namespace SuperName
+		{
+			static constexpr OpCodeHandler possibleOpCodes[] =
+			{
+				{ DefRefOf::opCode, DefRefOf::Parse },
+				{ DefDerefOf::opCode, DefDerefOf::Parse },
+				{ DefIndex::opCode, DefIndex::ParseAsReference },
+				// UserTermObj ???
+			};
+			static constexpr OpCodeHandler possibleExtOpCodes[] =
+			{
+				{ DebugObj::extOpCode, DebugObj::Parse },
+			};
+			bool Parse(AMLContext &ctx)
+			{
+				// try extended op codes
+				if (ctx.check(2))
+				{
+					word extOpCode = ctx.peek<word>();
+					for (auto& OpCodeHandler : possibleExtOpCodes)
+					{
+						if (OpCodeHandler.opCode == extOpCode) return OpCodeHandler.handler(ctx);
+					}
+				}
+
+				// try basic opcodes
+				if (ctx.check(1))
+				{
+					byte opCode = ctx.peek<byte>();
+					for (auto& opcodeHandler : possibleOpCodes)
+					{
+						if (opcodeHandler.opCode == opCode) return opcodeHandler.handler(ctx);
+					}
+				}
+
+				//no opcode match: SimpleName or UserTermObj
+				return SimpleName::Parse(ctx);
+			}
+		}
+		namespace SimpleName
+		{
+			bool Parse(AMLContext &ctx)
+			{
+				// NameString | ArgObj | LocalObj
+
+				if (ctx.check(1) && ArgObj::OpcodeMatches(ctx.peek<byte>()))
+				{
+					return ArgObj::ParseAsSimpleName(ctx);
+				}
+				if (ctx.check(1) && LocalObj::OpcodeMatches(ctx.peek<byte>()))
+				{
+					return LocalObj::ParseAsSimpleName(ctx);
+				}
+
+				return ctx.logError(unhandledElementError); // DefIndex::ParseAsReference relies on only ArgObj or LocalObj; change when implementing the name string stuff
+				return NameString::Parse(ctx);
+			}
+		}
+		namespace Target
+		{
+			bool Parse(AMLContext &ctx)
+			{
+				if (ctx.assertPop<byte>(0x00))
+				{
+					return ctx.returnValue<void>(voidType, nullptr);
+				}
+
+				return SuperName::Parse(ctx);
+			}
+		}
+		namespace DebugObj
+		{
+			bool Parse(AMLContext &ctx)
+			{
+				return ctx.logError(unhandledElementError);
+			}
+		}
+		namespace DefRefOf
+		{
+			bool Parse(AMLContext &ctx)
+			{
+				return ctx.logError(unhandledElementError);
+			}
+		}
+		namespace DefDerefOf
+		{
+			bool Parse(AMLContext &ctx)
+			{
+				return ctx.logError(unhandledElementError);
+			}
+		}
+		namespace DefIndex
+		{
+			bool ParseAsReference(AMLContext &ctx)
+			{
+				// IndexOp
+				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefIndex::ParseAsReference);
+
+				// BuffPkgStrObj
+				AMLDataObject* ref;
+				AMLAssertPassthrough(SimpleName::Parse(ctx), DefIndex::ParseAsReference);
+				AMLAssert(ctx.getReturnByReference(variableType, ref), unexpectedExpressionTypeError, DefIndex::ParseAsReference);
+				AMLAssert(ref->type == packageType, unexpectedExpressionTypeError, DefIndex::ParseAsReference);
+
+				// IndexValue
+				ull idx;
+				AMLAssertPassthrough(Operand::Evaluate(ctx, idx), DefIndex::ParseAsReference);
+
+				// Target
+				AMLAssertPassthrough(Target::Parse(ctx), DefIndex::ParseAsReference);
+				AMLAssert(ctx.returnValueObj.type == voidType, unknownError, DefIndex::ParseAsReference);
+
+				PackageObject* pkg = &ref->deref<PackageObject>();
+				AMLAssert(idx < pkg->getSize(), indexOutOfRangeError, DefIndex::ParseAsReference);
+
+				return ctx.returnValue(variableType, &pkg->at(idx));
+			}
+			bool Parse(AMLContext &ctx)
+			{
+				return ctx.logError(unhandledElementError);
+
+				// IndexOp
+				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefIndex::Parse);
+
+				// BuffPkgStrObj
+
+				// IndexValue
+
+				// Target
+
+				return ctx.logError(unhandledElementError);
+			}
+		}
+		namespace UserTermObj
+		{
+			bool Parse(AMLContext &ctx)
+			{
+				return ctx.logError(unhandledElementError);
+			}
+		}
+
+		namespace Operand
+		{
+			bool Evaluate(AMLContext &ctx, ull &result)
+			{
+				AMLAssertPassthrough(TermArg::Parse(ctx), Operand::Evaluate);
+				AMLAssert(ctx.getReturnByValue(integerType, &result), unexpectedExpressionTypeError, Operand::Evaluate);
 				return true;
 			}
 		}
@@ -1975,7 +2717,7 @@ namespace AML
 		bool result = Grammar::TermList::Parse(ctx);
 		if (result == false)
 		{
-			cout << ctx.lastErrorAsString() << " in table " << (void*)definitionBlock << " at: \n";
+			cout << ctx.lastErrorAsString() << " in table " << (void*)definitionBlock << ctx.stackTrace << "executing:\n";
 			DisplayMemoryBlock(ctx.byteStream, 32);
 		}
 
@@ -1995,15 +2737,59 @@ namespace AML
 
 		if (ctx.lastError == incorrectArgCountError)
 		{
-			cout << ctx.lastErrorAsString() << " in method" << (void*)method->methodStart << ".\n";
+			cout << ctx.lastErrorAsString() << " in method " << (void*)method->methodStart << ".\n";
 			return false;
 		}
 
 		bool result = Grammar::TermList::Parse(ctx);
+
+		// cout << "Final values:\n" << ostream::base::hex;
+		// string indentation;
+		// for (ull i = 0; i < ctx.args.getSize(); i++)
+		// {
+		// 	cout << "Arg" << i << " = ";
+		// 	ctx.args[i].display(indentation);
+		// }
+		// for (ull i = 0; i < ctx.locals.getSize(); i++)
+		// {
+		// 	cout << "Local" << i << " = ";
+		// 	ctx.locals[i].display(indentation);
+		// }
+		// cout << ostream::base::dec;
+
+		if (result == false && ctx.lastError == returnFromFunctionError)
+		{
+			result = true;
+			ctx.lastError = noError;
+			ctx.stackTrace = "\n";
+		}
+		else
+		{
+			result = false;
+			if (ctx.lastError == noError)
+				ctx.lastError = noReturnStatementError;
+		}
+
 		if (result == false)
 		{
-			cout << ctx.lastErrorAsString() << " in method " << (void*)method->methodStart << " at: \n";
+			// there was an error in the function execution
+			cout << ctx.lastErrorAsString() << " in method " << (void*)method->methodStart << ctx.stackTrace << "executing:\n";
 			DisplayMemoryBlock(ctx.byteStream, 32);
+		}
+		else
+		{
+			// no error
+			string retVal = ctx.returnValueObj.to_string();
+			Filesystem::result res = Filesystem::WriteFile(u"e:/ptos/info/tmp.bin", (byte*)retVal.data(), retVal.length());
+			if (res != Filesystem::result::success)
+			{
+				cout << "File write failed: " << Filesystem::resultAsString(res) << '\n';
+			}
+			else
+			{
+				cout << "File write finished.\n";
+			}
+			// cout << "Returned value: " << retVal;
 		}
 
 		return result;
@@ -2021,7 +2807,7 @@ namespace AML
 
 		if (result == false)
 		{
-			cout << ctx.lastErrorAsString() << " in table " << (void*)definitionBlock << " at: \n";
+			cout << ctx.lastErrorAsString() << " in table " << (void*)definitionBlock << ctx.stackTrace << "executing:\n";
 			DisplayMemoryBlock(ctx.byteStream, 32);
 			return false;
 		}
