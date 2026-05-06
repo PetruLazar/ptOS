@@ -1,6 +1,6 @@
 #include "dsdt.h"
 #include "fadt.h"
-#include "aml.h"
+#include "../aml/aml.h"
 #include <iostream.h>
 
 namespace ACPI
@@ -8,7 +8,7 @@ namespace ACPI
 	class DSDT : public GenericSDT
 	{
 	public:
-		byte definitionBlock[1];
+		byte definitionBlock[0];
 
 		inline ull GetDefinitionBlockLen()
 		{

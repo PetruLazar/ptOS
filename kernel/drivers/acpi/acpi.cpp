@@ -233,7 +233,7 @@ namespace ACPI
 			cout << "No root ACPI table found or validation failed.\n";
 		}
 	}
-	GenericSDT* getTable(const char tableId[4])
+	GenericSDT* getTable(const char tableId[4], int idx)
 	{
 		GenericSDT* retVal = nullptr;
 		if (xsdt != nullptr)
@@ -244,7 +244,7 @@ namespace ACPI
 			{
 				GenericSDT* table = (GenericSDT*)(qword)xsdt->tableEntries[i];
 
-				if (table->checkSignature(tableId))
+				if (table->checkSignature(tableId) && idx-- == 0)
 				{
 					retVal = table;
 					break;
@@ -259,7 +259,7 @@ namespace ACPI
 			{
 				GenericSDT* table = (GenericSDT*)(qword)rsdt->tableEntries[i];
 
-				if (table->checkSignature(tableId))
+				if (table->checkSignature(tableId) && idx-- == 0)
 				{
 					retVal = table;
 					break;

@@ -1,5 +1,5 @@
 #include "madt.h"
-#include "acpi.h"
+#include "../acpi.h"
 #include <iostream.h>
 using namespace std;
 

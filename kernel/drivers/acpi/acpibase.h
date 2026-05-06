@@ -18,6 +18,7 @@ namespace ACPI
 
 		static constexpr char MADT[] = "APIC";
 		static constexpr char FADT[] = "FACP";
+		static constexpr char SSDT[] = "SSDT";
 	}
 
 	class SDTHeader

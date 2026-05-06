@@ -1,10 +1,10 @@
 #pragma once
 #include "acpibase.h"
-#include "fadt.h"
-#include "dsdt.h"
-#include "madt.h"
-#include "ssdt.h"
-#include "aml.h"
+#include "tables/fadt.h"
+#include "tables/dsdt.h"
+#include "tables/madt.h"
+#include "tables/ssdt.h"
+#include "aml/aml.h"
 #include <string.h>
 
 namespace ACPI
@@ -13,7 +13,7 @@ namespace ACPI
 	void CleanUp();
 
 	void listRootEntries();
-	GenericSDT* getTable(const char tableId[4]);
+	GenericSDT* getTable(const char tableId[4], int idx = 0);
 
 	class ACPINamedObject;
 

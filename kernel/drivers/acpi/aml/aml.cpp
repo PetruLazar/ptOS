@@ -1,8 +1,8 @@
 #include "aml.h"
 
-#include "../../core/filesystem/filesystem.h" // temporarily
-#include "../../core/mem.h"
-#include "acpi.h"
+#include "../../../core/filesystem/filesystem.h" // temporarily
+#include "../../../core/mem.h"
+#include "../acpi.h"
 #include <iostream.h>
 #include <stringstream.h>
 
@@ -2780,7 +2780,7 @@ namespace AML
 		{
 			// no error
 			string retVal = ctx.returnValueObj.to_string();
-			Filesystem::result res = Filesystem::WriteFile(u"e:/ptos/info/tmp.bin", (byte*)retVal.data(), retVal.length());
+			Filesystem::result res = Filesystem::WriteFile(u"e:/ptos/info/tmp.txt", (byte*)retVal.data(), retVal.length());
 			if (res != Filesystem::result::success)
 			{
 				cout << "File write failed: " << Filesystem::resultAsString(res) << '\n';
@@ -2789,7 +2789,6 @@ namespace AML
 			{
 				cout << "File write finished.\n";
 			}
-			// cout << "Returned value: " << retVal;
 		}
 
 		return result;
