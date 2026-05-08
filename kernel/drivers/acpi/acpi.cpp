@@ -55,7 +55,7 @@ namespace ACPI
 
 	RSDT* rsdt = nullptr;
 	XSDT* xsdt = nullptr;
-	
+
 	ACPINamedObject* rootScope;
 
 	class PredefinedScope : public ACPINamedObject

@@ -22,7 +22,6 @@
 #include "unittests/unittests.h"
 #include "debug/verbose.h"
 #include "drivers/acpi/acpi.h"
-#include "drivers/acpi/aml.h"
 #define OMIT_FUNCS
 #include <syscall.h>
 using namespace std;
