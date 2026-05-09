@@ -152,7 +152,9 @@ namespace AML
 			return false;
 		}
 
+		qword start = Time::time();
 		bool result = Grammar::TermList::Parse(ctx);
+		qword end = Time::time();
 
 		// cout << "Final values:\n" << ostream::base::hex;
 		// string indentation;
@@ -202,6 +204,8 @@ namespace AML
 				cout << "File write finished.\n";
 			}
 		}
+
+		cout << "Method execution laster " << end - start << "ms.\n";
 
 		return result;
 	}

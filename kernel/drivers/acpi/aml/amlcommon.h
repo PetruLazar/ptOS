@@ -6,6 +6,63 @@
 #define STRINGIFY_HELPER(arg) #arg
 #define STRINGIFY(arg) STRINGIFY_HELPER(arg)
 
+#define AMLSwitchBasicOpcode(opCodeList)		\
+{		\
+	if (ctx.check(1))		\
+	{		\
+		ull opCode = ctx.peek<byte>();		\
+		for (auto& OpCodeHandler : opCodeList)		\
+		{		\
+			if (opCode == OpCodeHandler.opCode)		\
+			{		\
+				ctx.pop<byte>();		\
+				return OpCodeHandler.handler(ctx);		\
+			}		\
+		}		\
+	}		\
+}
+#define AMLSwitchExtOpcode(extOpCodeList)		\
+{		\
+	if (ctx.check(2))		\
+	{		\
+		ull extOpCode = ctx.peek<word>();		\
+		for (auto& OpCodeHandler : extOpCodeList)		\
+		{		\
+			if (extOpCode == OpCodeHandler.opCode)		\
+			{		\
+				ctx.pop<word>();		\
+				return OpCodeHandler.handler(ctx);		\
+			}		\
+		}		\
+	}		\
+}
+#define AMLSwitchOpcode(opCodeList, extOpCodeList)		\
+{		\
+	AMLSwitchExtOpcode(extOpCodeList);		\
+	AMLSwitchBasicOpcode(opCodeList);		\
+}
+#define AMLSwitchBasicOpcodeOrFallback(opCodeList, fallbackOperation)		\
+{		\
+	AMLSwitchBasicOpcode(opCodeList);		\
+		\
+	/* no opCode match => fallbackOperation */		\
+	return ((Operation)fallbackOperation)(ctx);		\
+}
+#define AMLSwitchExtOpcodeOrFallback(extOpCodeList, fallbackOperation)		\
+{		\
+	AMLSwitchExtOpcode(extOpCodeList);		\
+		\
+	/* no opCode match => fallbackOperation */		\
+	return ((Operation)fallbackOperation)(ctx);		\
+}
+#define AMLSwitchOpcodeOrFallback(opCodeList, extOpCodeList, fallbackOperation)		\
+{		\
+	AMLSwitchOpcode(opCodeList, extOpCodeList);		\
+		\
+	/* no opCode match => fallbackOperation */		\
+	return ((Operation)fallbackOperation)(ctx);		\
+}
+
 #define AMLAssert(cond, errType, location) if (!(cond))		\
 {		\
 	ctx.stackTraceEntry(#location, STRINGIFY(__LINE__));		\

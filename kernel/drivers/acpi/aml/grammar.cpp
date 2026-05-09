@@ -71,28 +71,7 @@ namespace AML
 
 			bool Parse(AMLContext &ctx)
 			{
-				// try extended op codes
-				if (ctx.check(2))
-				{
-					word extOpCode = ctx.peek<word>();
-					for (auto& OpCodeHandler : possibleExtOpCodes)
-					{
-						if (OpCodeHandler.opCode == extOpCode) return OpCodeHandler.handler(ctx);
-					}
-				}
-
-				// try basic opcodes
-				if (ctx.check(1))
-				{
-					byte opCode = ctx.peek<byte>();
-					for (auto& OpCodeHandler : possibleOpCodes)
-					{
-						if (OpCodeHandler.opCode == opCode) return OpCodeHandler.handler(ctx);
-					}
-				}
-
-				// no opCode match => ExpressionOpcode
-				return ExpressionOpcode::Parse(ctx);
+				AMLSwitchOpcodeOrFallback(possibleOpCodes, possibleExtOpCodes, ExpressionOpcode::Parse);
 			}
 		}
 		namespace TermArg
@@ -127,9 +106,6 @@ namespace AML
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				// NameOp
-				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefName::Parse);
-
 				// NameString
 				string *tmpname, name;
 				AMLAssertPassthrough(NameString::Parse(ctx), DefName::Parse);
@@ -205,9 +181,6 @@ namespace AML
 			bool Parse(AMLContext &ctx)
 			{
 				ull pkgLength;
-
-				// consume opcode
-				AMLAssert(ctx.assertPop<byte>(DefScope::opCode), unknownError, DefName::Parse);
 
 				// enter sub-context
 				ctx.createSubcontext();
@@ -315,9 +288,6 @@ namespace AML
 				ull regionOffset;
 				ull regionLen;
 
-				// DefOpRegion := NameString RegionSpace RegionOffset RegionLen
-				AMLAssert(ctx.assertPop<word>(extOpCode), unknownError, DefOpRegion::Parse);
-
 				// NameString
 				AMLAssertPassthrough(NameString::Parse(ctx), DefOpRegion::Parse);
 				AMLAssert(ctx.getReturnByReference(stringType, tmpname), unknownError, DefOpRegion::Parse);
@@ -358,9 +328,6 @@ namespace AML
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				// MethodOp
-				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefMethod::Parse);
-
 				ctx.createSubcontext();
 
 				// PkgLength
@@ -407,9 +374,6 @@ namespace AML
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				// FieldOp
-				AMLAssert(ctx.assertPop<word>(extOpCode), unknownError, DefField::Parse);
-
 				// enter sub-context
 				ctx.createSubcontext();
 
@@ -445,9 +409,6 @@ namespace AML
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				// DeviceOp
-				AMLAssert(ctx.assertPop<word>(extOpCode), unknownError, DefDevice::Parse);
-
 				ctx.createSubcontext();
 
 				// PkgLength
@@ -490,8 +451,6 @@ namespace AML
 			bool Parse(AMLContext &ctx)
 			{
 				// deprecated, parse as little data as possible and skip object
-				// ProcessorOp
-				AMLAssert(ctx.assertPop<word>(extOpCode), unknownError, DefProcessor::Parse);
 
 				// PkgLength
 				ull pkgLength;
@@ -728,25 +687,7 @@ namespace AML
 			};
 			bool Parse(AMLContext &ctx)
 			{
-				// try extended op codes
-				if (ctx.check(2))
-				{
-					word extOpCode = ctx.peek<word>();
-					for (auto& OpCodeHandler : possibleExtOpCodes)
-					{
-						if (OpCodeHandler.opCode == extOpCode) return OpCodeHandler.handler(ctx);
-					}
-				}
-
-				// try basic opcodes
-				if (ctx.check(1))
-				{
-					byte opCode = ctx.peek<byte>();
-					for (auto& opcodeHandler : possibleOpCodes)
-					{
-						if (opcodeHandler.opCode == opCode) return opcodeHandler.handler(ctx);
-					}
-				}
+				AMLSwitchOpcode(possibleOpCodes, possibleExtOpCodes);
 
 				// no opcode match => MethodInvocation
 				return ctx.logError(unhandledElementError);
@@ -758,14 +699,14 @@ namespace AML
 			{
 				{ DefPackage::opCode, DefPackage::Parse },
 				{ DefVarPackage::opCode, DefVarPackage::Parse },
-				{ ImmediateConst::bytePrefix, ImmediateConst::Parse },
-				{ ImmediateConst::wordPrefix, ImmediateConst::Parse },
-				{ ImmediateConst::dwordPrefix, ImmediateConst::Parse },
-				{ ImmediateConst::qwordPrefix, ImmediateConst::Parse },
+				{ ImmediateConst::bytePrefix, ImmediateConst::Parse<byte> },
+				{ ImmediateConst::wordPrefix, ImmediateConst::Parse<word> },
+				{ ImmediateConst::dwordPrefix, ImmediateConst::Parse<dword> },
+				{ ImmediateConst::qwordPrefix, ImmediateConst::Parse<qword> },
 				{ StringObj::opCode, StringObj::Parse },
-				{ ConstObj::zeroOp, ConstObj::Parse },
-				{ ConstObj::oneOp, ConstObj::Parse },
-				{ ConstObj::onesOp, ConstObj::Parse },
+				{ ConstObj::zeroOp, ConstObj::Parse<0> },
+				{ ConstObj::oneOp, ConstObj::Parse<1> },
+				{ ConstObj::onesOp, ConstObj::Parse<0xff> },
 				{ DefBuffer::opCode, DefBuffer::Parse },
 			};
 			static constexpr OpCodeHandler possibleExtOpCodes[] =
@@ -791,25 +732,7 @@ namespace AML
 			}
 			bool Parse(AMLContext &ctx)
 			{
-				// try basic opcodes
-				if (ctx.check(1))
-				{
-					byte opCode = ctx.peek<byte>();
-					for (auto& opcodeHandler : possibleOpCodes)
-					{
-						if (opcodeHandler.opCode == opCode) return opcodeHandler.handler(ctx);
-					}
-				}
-
-				// try extended op codes
-				if (ctx.check(2))
-				{
-					word extOpCode = ctx.peek<word>();
-					for (auto& OpCodeHandler : possibleExtOpCodes)
-					{
-						if (OpCodeHandler.opCode == extOpCode) return OpCodeHandler.handler(ctx);
-					}
-				}
+				AMLSwitchOpcode(possibleOpCodes, possibleExtOpCodes);
 
 				return ctx.logError(unhandledElementError);
 			}
@@ -846,9 +769,6 @@ namespace AML
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				// IfOp
-				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefIfElse::Parse);
-
 				// PkgLength
 				ull pkgLength;
 				ctx.createSubcontext();
@@ -872,7 +792,7 @@ namespace AML
 				}
 				else
 				{
-					// TermList
+					// skip TermList
 					ctx.advanceStream(ctx.length);
 
 					ctx.popSubContext();
@@ -959,9 +879,6 @@ namespace AML
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				// ReturnOp
-				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefReturn::Parse);
-
 				// ArgObject
 				AMLAssertPassthrough(TermArg::Parse(ctx), DefReturn::Parse);
 
@@ -993,9 +910,6 @@ namespace AML
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				// WhileOp
-				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefWhile::Parse);
-
 				// PkgLength
 				ull pkgLength;
 				ctx.createSubcontext();
@@ -1031,9 +945,6 @@ namespace AML
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				// BufferOp
-				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefBuffer::Parse);
-
 				// PkgLength
 				ull pkgLength;
 				ctx.createSubcontext();
@@ -1059,9 +970,6 @@ namespace AML
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				// PackageOp
-				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefPackage::Parse);
-
 				// PkgLength
 				ull pkgLength;
 				ctx.createSubcontext();
@@ -1110,9 +1018,6 @@ namespace AML
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				// StoreOp
-				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefStore::Parse);
-
 				// TermArg
 				AMLDataObject obj;
 				AMLAssertPassthrough(TermArg::Parse(ctx), DefStore::Parse);
@@ -1127,9 +1032,6 @@ namespace AML
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				// AddOp
-				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefAdd::Parse);
-
 				ull op1, op2;
 
 				// Operand
@@ -1156,9 +1058,6 @@ namespace AML
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				// SubtractOp
-				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefSubtract::Parse);
-
 				ull op1, op2;
 
 				// Operand
@@ -1178,9 +1077,6 @@ namespace AML
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				// IncrementOp
-				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefIncrement::Parse);
-
 				// SuperName
 				AMLDataObject* var;
 				AMLAssertPassthrough(SuperName::Parse(ctx), DefIncrement::Parse);
@@ -1195,9 +1091,6 @@ namespace AML
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				// DecrementOp
-				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefDecrement::Parse);
-
 				// SuperName
 				AMLDataObject* var;
 				AMLAssertPassthrough(SuperName::Parse(ctx), DefDecrement::Parse);
@@ -1212,9 +1105,6 @@ namespace AML
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				// MultiplyOp
-				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefMultiply::Parse);
-
 				ull op1, op2;
 
 				// Operand
@@ -1234,9 +1124,6 @@ namespace AML
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				// DivideOp
-				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefDivide::Parse);
-
 				ull op1, op2;
 
 				// Dividend
@@ -1255,9 +1142,6 @@ namespace AML
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				// ShiftLeftOp
-				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefShiftLeft::Parse);
-
 				ull op, shiftCount;
 
 				// Operand
@@ -1277,9 +1161,6 @@ namespace AML
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				// ShiftRightOp
-				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefShiftRight::Parse);
-
 				ull op, shiftCount;
 
 				// Operand
@@ -1299,9 +1180,6 @@ namespace AML
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				// AndOp
-				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefAnd::Parse);
-
 				ull op1, op2;
 
 				// Operand
@@ -1321,9 +1199,6 @@ namespace AML
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				// NandOp
-				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefNand::Parse);
-
 				ull op1, op2;
 
 				// Operand
@@ -1343,9 +1218,6 @@ namespace AML
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				// OrOp
-				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefOr::Parse);
-
 				ull op1, op2;
 
 				// Operand
@@ -1365,9 +1237,6 @@ namespace AML
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				// NorOp
-				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefNor::Parse);
-
 				ull op1, op2;
 
 				// Operand
@@ -1387,9 +1256,6 @@ namespace AML
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				// XorOp
-				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefXor::Parse);
-
 				ull op1, op2;
 
 				// Operand
@@ -1409,9 +1275,6 @@ namespace AML
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				// NotOp
-				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefNot::Parse);
-
 				ull op;
 
 				// Operand
@@ -1477,9 +1340,6 @@ namespace AML
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				// LandOp
-				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefLand::Parse);
-
 				ull op1, op2;
 
 				// Operand
@@ -1495,9 +1355,6 @@ namespace AML
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				// LorOp
-				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefLor::Parse);
-
 				ull op1, op2;
 
 				// Operand
@@ -1513,9 +1370,6 @@ namespace AML
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				// LnotOp
-				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefLnot::Parse);
-
 				ull op;
 
 				// Operand
@@ -1528,9 +1382,6 @@ namespace AML
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				// LequalOp
-				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefLequal::Parse);
-
 				ull op1, op2;
 
 				// Operand
@@ -1546,9 +1397,6 @@ namespace AML
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				// LgreaterOp
-				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefLgreater::Parse);
-
 				ull op1, op2;
 
 				// Operand
@@ -1564,9 +1412,6 @@ namespace AML
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				// LlessOp
-				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefLless::Parse);
-
 				ull op1, op2;
 
 				// Operand
@@ -1678,30 +1523,11 @@ namespace AML
 		}
 		namespace ImmediateConst
 		{
+			template <typename tn>
 			bool Parse(AMLContext &ctx)
 			{
-				if (ctx.assertPop<byte>(bytePrefix))
-				{
-					AMLAssert(ctx.check(1), endOfStreamError, ImmediateConst::Parse);
-					return ctx.returnValue(integerType, new ull(ctx.pop<byte>()));
-				}
-				if (ctx.assertPop<byte>(wordPrefix))
-				{
-					AMLAssert(ctx.check(2), endOfStreamError, ImmediateConst::Parse);
-					return ctx.returnValue(integerType, new ull(ctx.pop<word>()));
-				}
-				if (ctx.assertPop<byte>(dwordPrefix))
-				{
-					AMLAssert(ctx.check(4), endOfStreamError, ImmediateConst::Parse);
-					return ctx.returnValue(integerType, new ull(ctx.pop<dword>()));
-				}
-				if (ctx.assertPop<byte>(qwordPrefix))
-				{
-					AMLAssert(ctx.check(8), endOfStreamError, ImmediateConst::Parse);
-					return ctx.returnValue(integerType, new ull(ctx.pop<qword>()));
-				}
-
-				return ctx.logError(unknownError);
+				AMLAssert(ctx.check(sizeof(tn)), endOfStreamError, ImmediateConst::Parse);
+				return ctx.returnValue(integerType, new ull(ctx.pop<tn>()));
 			}
 		}
 		namespace StringObj
@@ -1709,9 +1535,6 @@ namespace AML
 			inline bool isAsciiChar(byte v) { return v >= 0x01 && v <= 0x7f; }
 			bool Parse(AMLContext &ctx)
 			{
-				// StringPrefix
-				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, StringObj::Parse);
-
 				// AsciiCharList
 				string *str = new string;
 				while (ctx.check(1) && isAsciiChar(ctx.peek<byte>()))
@@ -1728,26 +1551,10 @@ namespace AML
 		}
 		namespace ConstObj
 		{
+			template <ull val>
 			bool Parse(AMLContext &ctx)
 			{
-				byte retVal;
-				if (ctx.assertPop<byte>(zeroOp))
-				{
-					retVal = zeroOp;
-				}
-				else if (ctx.assertPop<byte>(oneOp))
-				{
-					retVal = oneOp;
-				}
-				else if (ctx.assertPop<byte>(onesOp))
-				{
-					retVal = onesOp;
-				}
-				else
-				{
-					return ctx.logError(unknownError);
-				}
-				return ctx.returnValue(integerType, new ull(retVal));
+				return ctx.returnValue(integerType, new ull(val));
 			}
 		}
 		namespace RevisionOp
@@ -1771,23 +1578,16 @@ namespace AML
 		}
 		namespace FieldElement
 		{
-			static constexpr Operation possibleOpCodes[] =
+			static constexpr OpCodeHandler possibleOpCodes[] =
 			{
-				/* 00 */ ReservedField::Parse,
-				/* 01 */ AccessField::Parse,
-				/* 02 */ ConnectField::Parse,
-				/* 03 */ ExtendedAccessField::Parse,
+				{ 0x00, ReservedField::Parse, },
+				{ 0x01, AccessField::Parse, },
+				{ 0x02, ConnectField::Parse, },
+				{ 0x03, ExtendedAccessField::Parse, },
 			};
 			bool Parse(AMLContext &ctx)
 			{
-				if (ctx.check(1))
-				{
-					byte opCode = ctx.peek<byte>();
-					if (opCode < arraysize(possibleOpCodes))
-						return possibleOpCodes[opCode](ctx);
-				}
-
-				return NamedField::Parse(ctx);
+				AMLSwitchBasicOpcodeOrFallback(possibleOpCodes, NamedField::Parse);
 			}
 		}
 		namespace NamedField
@@ -1813,9 +1613,6 @@ namespace AML
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				// 0x00
-				AMLAssert(ctx.assertPop<byte>(0x00), unknownError, ReservedField::Parse);
-
 				// PkgLength
 				ull pkgLength;
 				AMLAssertPassthrough(PkgLength::Parse(ctx), ReservedField::Parse);
@@ -1886,9 +1683,6 @@ namespace AML
 		{
 			bool Parse(AMLContext &ctx)
 			{
-				// MutexOp
-				AMLAssert(ctx.assertPop<word>(extOpCode), unknownError, DefMutex::Parse);
-
 				// NameString
 				string* name;
 				AMLAssertPassthrough(NameString::Parse(ctx), DefMutex::Parse);
@@ -1918,28 +1712,7 @@ namespace AML
 			};
 			bool Parse(AMLContext &ctx)
 			{
-				// try extended op codes
-				if (ctx.check(2))
-				{
-					word extOpCode = ctx.peek<word>();
-					for (auto& OpCodeHandler : possibleExtOpCodes)
-					{
-						if (OpCodeHandler.opCode == extOpCode) return OpCodeHandler.handler(ctx);
-					}
-				}
-
-				// try basic opcodes
-				if (ctx.check(1))
-				{
-					byte opCode = ctx.peek<byte>();
-					for (auto& opcodeHandler : possibleOpCodes)
-					{
-						if (opcodeHandler.opCode == opCode) return opcodeHandler.handler(ctx);
-					}
-				}
-
-				//no opcode match: SimpleName or UserTermObj
-				return SimpleName::Parse(ctx);
+				AMLSwitchOpcodeOrFallback(possibleOpCodes, possibleExtOpCodes, SimpleName::Parse);
 			}
 		}
 		namespace SimpleName
@@ -1998,9 +1771,6 @@ namespace AML
 		{
 			bool ParseAsReference(AMLContext &ctx)
 			{
-				// IndexOp
-				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefIndex::ParseAsReference);
-
 				// BuffPkgStrObj
 				AMLDataObject* ref;
 				AMLAssertPassthrough(SimpleName::Parse(ctx), DefIndex::ParseAsReference);
@@ -2022,11 +1792,6 @@ namespace AML
 			}
 			bool Parse(AMLContext &ctx)
 			{
-				return ctx.logError(unhandledElementError);
-
-				// IndexOp
-				AMLAssert(ctx.assertPop<byte>(opCode), unknownError, DefIndex::Parse);
-
 				// BuffPkgStrObj
 
 				// IndexValue

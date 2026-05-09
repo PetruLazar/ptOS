@@ -135,6 +135,7 @@ namespace AML
 			static constexpr byte wordPrefix = 0x0b;
 			static constexpr byte dwordPrefix = 0x0c;
 			static constexpr byte qwordPrefix = 0x0e;
+			template <typename tn>
 			bool Parse(AMLContext &ctx);
 		}
 		namespace ConstObj
@@ -142,6 +143,7 @@ namespace AML
 			static constexpr byte zeroOp = 0x00;
 			static constexpr byte oneOp = 0x01;
 			static constexpr byte onesOp = 0xff;
+			template <ull val>
 			bool Parse(AMLContext &ctx);
 		}
 		namespace DataObject
